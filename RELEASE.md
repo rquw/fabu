@@ -59,7 +59,24 @@ The installers are **not code-signed** (certificates cost money):
 
 The download page can mention these one-time steps so people aren't scared off.
 
-## 6. Crossplay
+## 6. The in-browser version
+
+fabu also runs as a web app (no install) at **https://rquw.github.io/fabu/web/**.
+It is a copy of the app under `docs/web/`, built with:
+
+```bash
+npm run build:web   # re-copies the app into docs/web
+```
+
+Run that whenever you change the app and want the online version updated, then
+commit. The landing page links to it ("Play in your browser"), and on iPhone /
+Android / Linux / anything without an installer it becomes the main button.
+
+Browser limits: file save/open use normal download/upload, projects autosave to
+the browser instead of a file, and there is no auto-update (they always get the
+latest on refresh).
+
+## 7. Crossplay
 
 Already works — the multiplayer relay is plain WebSocket, so a Mac and a Windows
 player can be in the same room with no extra work.

@@ -9,6 +9,7 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
+    "build:web": "rm -rf docs/web && mkdir -p docs/web && cp index.html styles.css docs/web/ && cp -R js languages docs/web/",
     "dist": "electron-builder",
     "dist:mac": "electron-builder --mac",
     "dist:win": "electron-builder --win",
