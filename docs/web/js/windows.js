@@ -369,6 +369,22 @@ const Windows = {
       note.style.cssText = 'color:var(--faint);font-size:10.5px;margin-top:10px;line-height:1.5';
       note.textContent = tr('set_note', 'Projects save as .fab files, sounds included. Export makes a WAV audio file.');
       w.body.appendChild(note);
+
+      // Account
+      const acct = document.createElement('div');
+      acct.className = 'frow';
+      acct.style.cssText = 'margin-top:12px;border-top:1px solid var(--line);padding-top:12px';
+      const label = document.createElement('label');
+      label.style.cssText = 'flex:1;width:auto';
+      label.textContent = Auth.isLoggedIn()
+        ? tr('set_signed_in', 'Signed in as {name}', { name: Auth.user })
+        : tr('set_no_account', 'Not signed in');
+      const btn = document.createElement('button');
+      btn.className = 'fbtn';
+      btn.textContent = Auth.isLoggedIn() ? tr('set_manage_acct', 'Account') : tr('auth_login', 'Log in');
+      btn.addEventListener('click', () => { Auth.openAccount(); });
+      acct.append(label, btn);
+      w.body.appendChild(acct);
     };
     w.refresh();
     App.syncWindowButtons();
