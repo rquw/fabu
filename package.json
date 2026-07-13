@@ -1,0 +1,92 @@
+{
+  "name": "fabu",
+  "productName": "fabu",
+  "version": "1.0.0",
+  "description": "The simplest music creation program out there.",
+  "author": "Fabio Schwaiger",
+  "homepage": "https://rquw.github.io/fabu/",
+  "license": "MIT",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder",
+    "dist:mac": "electron-builder --mac",
+    "dist:win": "electron-builder --win",
+    "release": "electron-builder --publish always"
+  },
+  "devDependencies": {
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8"
+  },
+  "dependencies": {
+    "electron-updater": "^6.3.9"
+  },
+  "build": {
+    "appId": "at.fabio.fabu",
+    "productName": "fabu",
+    "artifactName": "fabu-${version}-${os}-${arch}.${ext}",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "publish": [
+      { "provider": "github", "owner": "rquw", "repo": "fabu" }
+    ],
+    "files": [
+      "main.js",
+      "preload.js",
+      "index.html",
+      "styles.css",
+      "js/**",
+      "languages/**"
+    ],
+    "extraResources": [
+      { "from": "languages", "to": "languages" }
+    ],
+    "fileAssociations": [
+      {
+        "ext": "fab",
+        "name": "fabu Project",
+        "role": "Editor",
+        "icon": "build/icon"
+      }
+    ],
+    "mac": {
+      "target": [
+        { "target": "dmg", "arch": ["universal"] },
+        { "target": "zip", "arch": ["universal"] }
+      ],
+      "icon": "build/icon.icns",
+      "category": "public.app-category.music",
+      "identity": null,
+      "darkModeSupport": true
+    },
+    "dmg": {
+      "title": "Install fabu",
+      "icon": "build/icon.icns",
+      "iconSize": 120,
+      "window": { "width": 540, "height": 380 },
+      "contents": [
+        { "x": 150, "y": 200, "type": "file" },
+        { "x": 390, "y": 200, "type": "link", "path": "/Applications" }
+      ]
+    },
+    "win": {
+      "target": [
+        { "target": "nsis", "arch": ["x64"] }
+      ],
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "fabu",
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "installerHeaderIcon": "build/icon.ico"
+    }
+  }
+}
