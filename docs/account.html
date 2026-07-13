@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>fabu — account</title>
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<link rel="icon" type="image/png" href="favicon.png">
+<style>
+  :root{
+    --bg:#191714; --panel:#26221d; --panel2:#2f2a24; --line:#35302a;
+    --text:#efe8dd; --dim:#a89c8b; --faint:#6f6557; --accent:#e07a3f; --green:#78b56a; --red:#d8594f;
+    --ease:cubic-bezier(0.22,0.61,0.36,1);
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{
+    background:
+      radial-gradient(900px 520px at 78% -8%, rgba(224,122,63,.10), transparent),
+      radial-gradient(700px 500px at 12% 108%, rgba(86,182,166,.06), transparent),
+      var(--bg);
+    color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,sans-serif;
+    min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;
+    -webkit-font-smoothing:antialiased;
+  }
+  .card{width:100%;max-width:420px;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:28px}
+  .brand{font-size:30px;font-weight:800;letter-spacing:-1px;line-height:1;margin-bottom:2px}
+  .brand .u{color:var(--accent)}
+  .head{font-size:14px;color:var(--dim);margin-bottom:20px}
+  label{display:block;font-size:12px;color:var(--dim);margin:12px 0 5px}
+  input{
+    width:100%;background:var(--panel2);border:1px solid var(--line);border-radius:9px;
+    color:var(--text);padding:10px 12px;outline:none;font-size:14px;
+  }
+  input:focus{border-color:var(--accent)}
+  button{
+    width:100%;margin-top:14px;padding:11px;border-radius:9px;border:1px solid var(--accent);
+    background:var(--accent);color:#fff;font-size:14px;font-weight:700;cursor:pointer;
+    transition:background .14s var(--ease),opacity .14s;
+  }
+  button:hover{background:#eb8b52}
+  button[disabled]{opacity:.5;cursor:default}
+  button.ghost{background:transparent;color:var(--text);border-color:var(--line)}
+  button.ghost:hover{border-color:var(--dim);background:var(--panel2)}
+  button.danger{background:transparent;color:var(--red);border-color:var(--line)}
+  button.danger:hover{border-color:var(--red)}
+  .section{margin-top:22px;padding-top:20px;border-top:1px solid var(--line)}
+  .section h3{font-size:13px;font-weight:700;margin-bottom:4px}
+  .note{font-size:11.5px;color:var(--faint);line-height:1.5;margin-bottom:8px}
+  .msg{font-size:12px;min-height:16px;margin-top:8px;color:var(--red)}
+  .msg.ok{color:var(--green)}
+  .row{display:flex;gap:10px}
+  .row button{flex:1}
+  .back{display:inline-block;margin-top:18px;font-size:12.5px;color:var(--dim);text-decoration:none}
+  .back:hover{color:var(--text)}
+  .signed{font-size:13px;color:var(--dim);margin-bottom:2px}
+  .signed b{color:var(--text)}
+  .hidden{display:none}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="brand">fab<span class="u">u</span></div>
+
+  <!-- LOGIN -->
+  <div id="loginView">
+    <div class="head">Sign in to manage your account.</div>
+    <label for="lUser">Username</label>
+    <input id="lUser" type="text" spellcheck="false" autocomplete="username">
+    <label for="lPass">Password</label>
+    <input id="lPass" type="password" autocomplete="current-password">
+    <div id="lMsg" class="msg"></div>
+    <button id="lGo">Log in</button>
+    <a class="back" href="./">&larr; Back to fabu</a>
+  </div>
+
+  <!-- ACCOUNT -->
+  <div id="acctView" class="hidden">
+    <div class="signed">Signed in as <b id="who"></b></div>
+
+    <div class="section">
+      <h3>Change password</h3>
+      <label for="cOld">Current password</label>
+      <input id="cOld" type="password" autocomplete="current-password">
+      <label for="cNew">New password</label>
+      <input id="cNew" type="password" autocomplete="new-password">
+      <div id="cMsg" class="msg"></div>
+      <button id="cGo">Update password</button>
+    </div>
+
+    <div class="section">
+      <h3 style="color:var(--red)">Delete account</h3>
+      <div class="note">This permanently removes your account. It cannot be undone.</div>
+      <label for="dPass">Confirm with your password</label>
+      <input id="dPass" type="password" autocomplete="current-password">
+      <div id="dMsg" class="msg"></div>
+      <button id="dGo" class="danger">Delete my account</button>
+    </div>
+
+    <div class="row">
+      <button id="logout" class="ghost">Log out</button>
+    </div>
+    <a class="back" href="./">&larr; Back to fabu</a>
+  </div>
+</div>
+
+<script>
+  // Public (anon) Supabase key — lightly scrambled, same as the app.
+  function dk(enc){var mask='fabu-mach-musik',raw=atob(enc),out='';for(var i=0;i<raw.length;i++)out+=String.fromCharCode(raw.charCodeAt(i)^mask.charCodeAt(i%mask.length));return out;}
+  var ANON = dk('AxgoHU8qAgonRCc8JhMiVy8LPF4kDzFdTi48RSAAFjk0NmdUTwYRZx0WQCQCKQgoD0k1IwsxQCsPKToiFSgMP0E3CCpeZAMjQww8DlQDGHsVBA0iVTQYRhMOCxkTF3o/DioBWgQWHlAYPDIrQ2QAJxYKH1kcPyohFjg6JEQiCyZbYik4QSQvMxYvD2QeKA4+GQ42Ol8mDCBXOnkoVS48bBc4HVlFBwIaGks4WRMMX1gePTAsFAMhJX8fTFYwdQMfSiwcISMHD2MkVFZaSi45EA==');
+  var RPC = 'https://utyhyjeqzrqbnszljmdh.supabase.co/rest/v1/rpc';
+
+  function rpc(fn, body){
+    return fetch(RPC + '/' + fn, {
+      method:'POST',
+      headers:{apikey:ANON, Authorization:'Bearer '+ANON, 'Content-Type':'application/json'},
+      body:JSON.stringify(body)
+    }).then(function(r){ if(!r.ok) throw new Error('net'); return r.json(); });
+  }
+
+  var $ = function(id){ return document.getElementById(id); };
+  var user = null;
+
+  function showAccount(name){
+    user = name;
+    $('who').textContent = name;
+    $('loginView').classList.add('hidden');
+    $('acctView').classList.remove('hidden');
+  }
+
+  // Login
+  var lGo = $('lGo');
+  function doLogin(){
+    var u = $('lUser').value.trim(), p = $('lPass').value, m = $('lMsg');
+    if(!u || !p){ m.textContent = 'Enter a username and password.'; return; }
+    lGo.disabled = true; m.className='msg'; m.textContent = 'Working…';
+    rpc('fabu_login', {u:u, p:p}).then(function(ok){
+      if(ok === true){ m.textContent=''; showAccount(u.toLowerCase()); }
+      else { m.textContent = 'Wrong username or password.'; }
+      lGo.disabled = false;
+    }).catch(function(){ m.textContent = 'Cannot reach the server.'; lGo.disabled = false; });
+  }
+  lGo.addEventListener('click', doLogin);
+  $('lPass').addEventListener('keydown', function(e){ if(e.key==='Enter') doLogin(); });
+
+  // Change password
+  var cGo = $('cGo');
+  cGo.addEventListener('click', function(){
+    var oldp = $('cOld').value, newp = $('cNew').value, m = $('cMsg');
+    if(!oldp || !newp){ m.className='msg'; m.textContent='Fill in both fields.'; return; }
+    cGo.disabled = true; m.className='msg'; m.textContent='Working…';
+    rpc('fabu_change_password', {u:user, oldp:oldp, newp:newp}).then(function(r){
+      if(r === 'ok'){ m.className='msg ok'; m.textContent='Password updated.'; $('cOld').value=''; $('cNew').value=''; }
+      else if(r === 'weakpass') m.textContent='Password too short (4+).';
+      else if(r === 'bad') m.textContent='Current password is wrong.';
+      else m.textContent='Something went wrong.';
+      cGo.disabled = false;
+    }).catch(function(){ m.textContent='Cannot reach the server.'; cGo.disabled=false; });
+  });
+
+  // Delete account (two-step confirm)
+  var dGo = $('dGo'), armed = false;
+  dGo.addEventListener('click', function(){
+    var p = $('dPass').value, m = $('dMsg');
+    if(!p){ m.textContent='Confirm with your password.'; return; }
+    if(!armed){ armed = true; dGo.textContent='Click again to confirm'; return; }
+    dGo.disabled = true; m.textContent='Working…';
+    rpc('fabu_delete_account', {u:user, p:p}).then(function(ok){
+      if(ok === true){ document.querySelector('.card').innerHTML = '<div class="brand">fab<span class="u">u</span></div><div class="head" style="margin-top:14px">Your account has been deleted. <a class="back" href="./">Back to fabu</a></div>'; }
+      else { m.textContent='Current password is wrong.'; armed=false; dGo.textContent='Delete my account'; dGo.disabled=false; }
+    }).catch(function(){ m.textContent='Cannot reach the server.'; dGo.disabled=false; });
+  });
+
+  // Log out
+  $('logout').addEventListener('click', function(){
+    user = null;
+    $('acctView').classList.add('hidden');
+    $('loginView').classList.remove('hidden');
+    $('lUser').value=''; $('lPass').value=''; $('lMsg').textContent='';
+  });
+</script>
+</body>
+</html>

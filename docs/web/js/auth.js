@@ -52,7 +52,7 @@ const Auth = {
           <button class="auth-tab on" data-tab="login">${tr('auth_login', 'Log in')}</button>
           <button class="auth-tab" data-tab="register">${tr('auth_register', 'Register')}</button>
         </div>
-        <input id="authUser" placeholder="${tr('auth_username', 'Username')}" spellcheck="false" autocomplete="off">
+        <input id="authUser" type="text" placeholder="${tr('auth_username', 'Username')}" spellcheck="false" autocomplete="off">
         <input id="authPass" type="password" placeholder="${tr('auth_password', 'Password')}">
         <div id="authErr" class="auth-err"></div>
         <div class="modal-btns">
@@ -107,5 +107,86 @@ const Auth = {
   },
 
   register(u, p) { return this.rpc('fabu_register', { u, p }); },
-  async login(u, p) { return this.rpc('fabu_login', { u, p }); }
+  async login(u, p) { return this.rpc('fabu_login', { u, p }); },
+  changePassword(u, oldp, newp) { return this.rpc('fabu_change_password', { u, oldp, newp }); },
+  deleteAccount(u, p) { return this.rpc('fabu_delete_account', { u, p }); },
+
+  // Account management: change password, log out, or delete the account.
+  openAccount() {
+    if (!this.isLoggedIn()) { this.open(() => this.openAccount()); return; }
+    if (document.getElementById('acctModal')) return;
+    const wrap = document.createElement('div');
+    wrap.id = 'acctModal';
+    wrap.className = 'modal-back';
+    wrap.innerHTML = `
+      <div class="modal-card">
+        <div class="modal-title">${tr('acct_title', 'Your account')}</div>
+        <div class="modal-sub">${tr('acct_signed_in', 'Signed in as {name}', { name: this.user })}</div>
+
+        <div class="acct-section">
+          <div class="acct-head">${tr('acct_change_pw', 'Change password')}</div>
+          <input id="acctOld" type="password" placeholder="${tr('acct_current_pw', 'Current password')}">
+          <input id="acctNew" type="password" placeholder="${tr('acct_new_pw', 'New password')}">
+          <div id="acctPwMsg" class="auth-err"></div>
+          <button id="acctPwGo" class="fbtn accent">${tr('acct_update_pw', 'Update password')}</button>
+        </div>
+
+        <div class="acct-section acct-danger">
+          <div class="acct-head">${tr('acct_delete', 'Delete account')}</div>
+          <div class="acct-note">${tr('acct_delete_note', 'This permanently removes your account. It cannot be undone.')}</div>
+          <input id="acctDelPw" type="password" placeholder="${tr('acct_confirm_pw', 'Confirm with your password')}">
+          <div id="acctDelMsg" class="auth-err"></div>
+          <button id="acctDelGo" class="fbtn danger">${tr('acct_delete_btn', 'Delete my account')}</button>
+        </div>
+
+        <div class="modal-btns">
+          <button id="acctLogout" class="fbtn">${tr('acct_logout', 'Log out')}</button>
+          <button id="acctClose" class="fbtn accent">${tr('acct_done', 'Done')}</button>
+        </div>
+      </div>`;
+    document.body.appendChild(wrap);
+    const close = () => wrap.remove();
+    const $q = (s) => wrap.querySelector(s);
+
+    wrap.addEventListener('mousedown', (e) => { if (e.target === wrap) close(); });
+    $q('#acctClose').addEventListener('click', close);
+
+    $q('#acctLogout').addEventListener('click', () => {
+      this.logout();
+      toast(tr('acct_logged_out', 'Logged out.'));
+      close();
+    });
+
+    const pwBtn = $q('#acctPwGo');
+    pwBtn.addEventListener('click', async () => {
+      const oldp = $q('#acctOld').value, newp = $q('#acctNew').value;
+      const msg = $q('#acctPwMsg');
+      if (!oldp || !newp) { msg.textContent = tr('acct_fill_pw', 'Fill in both password fields.'); return; }
+      pwBtn.disabled = true; msg.style.color = ''; msg.textContent = tr('auth_working', 'Working…');
+      try {
+        const r = await this.changePassword(this.user, oldp, newp);
+        if (r === 'ok') { msg.style.color = 'var(--green)'; msg.textContent = tr('acct_pw_ok', 'Password updated.'); $q('#acctOld').value = ''; $q('#acctNew').value = ''; }
+        else if (r === 'weakpass') msg.textContent = tr('auth_weak', 'Password too short.');
+        else if (r === 'bad') msg.textContent = tr('acct_pw_bad', 'Current password is wrong.');
+        else msg.textContent = tr('auth_error', 'Something went wrong.');
+      } catch (e) { msg.textContent = tr('auth_offline', 'Cannot reach the server.'); }
+      pwBtn.disabled = false;
+    });
+
+    const delBtn = $q('#acctDelGo');
+    let armed = false;
+    delBtn.addEventListener('click', async () => {
+      const msg = $q('#acctDelMsg');
+      const p = $q('#acctDelPw').value;
+      if (!p) { msg.textContent = tr('acct_confirm_pw', 'Confirm with your password'); return; }
+      if (!armed) { armed = true; delBtn.textContent = tr('acct_delete_sure', 'Click again to confirm'); return; }
+      delBtn.disabled = true; msg.textContent = tr('auth_working', 'Working…');
+      try {
+        const ok = await this.deleteAccount(this.user, p);
+        if (ok === true) { toast(tr('acct_deleted', 'Account deleted.')); this.logout(); close(); }
+        else { msg.textContent = tr('acct_pw_bad', 'Current password is wrong.'); armed = false; delBtn.textContent = tr('acct_delete_btn', 'Delete my account'); }
+      } catch (e) { msg.textContent = tr('auth_offline', 'Cannot reach the server.'); }
+      delBtn.disabled = false;
+    });
+  }
 };

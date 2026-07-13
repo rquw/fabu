@@ -48,14 +48,13 @@
   .dl-alt a{color:var(--teal);text-decoration:none}
   .dl-alt a:hover{text-decoration:underline}
 
-  .badges{display:flex;flex-wrap:wrap;gap:10px;margin:18px 0 6px}
+  .badges{display:flex;flex-wrap:wrap;gap:10px;margin:22px 0 6px}
   .badge{
-    padding:7px 14px;border-radius:999px;border:1px solid var(--line);background:var(--panel);
-    font-size:12.5px;font-weight:800;letter-spacing:.3px;color:var(--text);
+    display:inline-flex;align-items:center;gap:7px;
+    padding:8px 15px;border-radius:10px;border:1px solid var(--line);background:var(--panel);
+    font-size:12.5px;font-weight:700;letter-spacing:.2px;color:var(--text);
   }
-  .badge.a{border-color:var(--accent);color:var(--accent)}
-  .badge.g{border-color:var(--green);color:var(--green)}
-  .badge.t{border-color:var(--teal);color:var(--teal)}
+  .badge svg{width:14px;height:14px;flex-shrink:0;color:var(--green)}
 
   .cards{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:44px 0}
   @media (max-width:640px){.cards{grid-template-columns:1fr}.logo{font-size:64px}.hero{font-size:24px}}
@@ -90,9 +89,9 @@
   </div>
 
   <div class="badges">
-    <span class="badge a">FREE DOWNLOAD!</span>
-    <span class="badge g">NO PURCHASES!</span>
-    <span class="badge t">COMPLETELY OPEN-SOURCE!</span>
+    <span class="badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>Free forever</span>
+    <span class="badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>No purchases</span>
+    <span class="badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>Open source</span>
   </div>
 
   <div class="cards">
@@ -120,7 +119,7 @@
   </div>
 
   <footer>
-    <div>fabu — free &amp; open-source. <a href="https://github.com/rquw/fabu">Source on GitHub</a> &nbsp;·&nbsp; <a href="https://ko-fi.com/fabioss">Support on Ko-fi ☕</a></div>
+    <div>fabu is free and <a href="https://github.com/rquw/fabu">open source</a>. &nbsp;·&nbsp; <a href="account.html">Account</a> &nbsp;·&nbsp; <a href="https://ko-fi.com/fabioss">Support on Ko-fi ☕</a></div>
     <div>Made with the help of Claude (emphasis on the "help of" part. i didn't generate the entire thing)</div>
   </footer>
 </div>
@@ -145,40 +144,38 @@
       if (href) b.setAttribute('href', href);
       if (target) b.setAttribute('target', target); else b.removeAttribute('target');
       document.getElementById('dlText' + s).textContent = big;
-      document.getElementById('dlSub' + s).textContent = sub;
+      var subEl = document.getElementById('dlSub' + s);
+      subEl.textContent = sub || '';
+      subEl.style.display = sub ? 'block' : 'none';
       if (iconPath) document.getElementById('dlIcon' + s).innerHTML = iconPath;
     });
   }
 
+  var ALL_DL = '<a href="' + RELEASES + '">All downloads →</a>';
+
   // baseline (before the API answers)
   if (isWin) {
-    setBtns(RELEASES, 'Download for Windows', 'Windows installer (.exe)', ICON_WIN);
-    document.getElementById('dlAlt').innerHTML = '<a href="' + WEB + '">Play in your browser →</a> &nbsp;·&nbsp; <a href="' + RELEASES + '">All downloads →</a>';
+    setBtns(RELEASES, 'Download for Windows', '', ICON_WIN);
+    document.getElementById('dlAlt').innerHTML = ALL_DL;
   } else if (isMac) {
-    setBtns(RELEASES, 'Download for Mac', 'Apple Silicon & Intel (.dmg)', ICON_APPLE);
-    document.getElementById('dlAlt').innerHTML = '<a href="' + WEB + '">Play in your browser →</a> &nbsp;·&nbsp; <a href="' + RELEASES + '">All downloads →</a>';
+    setBtns(RELEASES, 'Download for Mac', '', ICON_APPLE);
+    document.getElementById('dlAlt').innerHTML = ALL_DL;
   } else {
     // iPhone / iPad / Android / Linux / anything else: no installer, use the web app
-    setBtns(WEB, 'Open fabu in your browser', 'no download needed', ICON_WEB);
+    setBtns(WEB, 'Use Web-Version', "(you're on an unsupported platform)", ICON_WEB);
     document.getElementById('dlAlt').innerHTML = '<a href="' + RELEASES + '">Desktop app (Mac &amp; Windows) →</a>';
   }
 
-  // fill in the exact installer link + version from the latest release
+  // fill in the exact installer link from the latest release
   if (canDownload) {
     fetch('https://api.github.com/repos/' + REPO + '/releases/latest')
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (rel) {
         if (!rel || !rel.assets) return;
-        var v = rel.tag_name ? ' (' + rel.tag_name + ')' : '';
         var find = function (re) { return (rel.assets.find(function (a) { return re.test(a.name); }) || {}).browser_download_url; };
         var dmg = find(/\.dmg$/i), exe = find(/\.exe$/i);
-        var altParts = ['<a href="' + WEB + '">Play in your browser →</a>'];
-        if (isWin && dmg) altParts.push('<a href="' + dmg + '">Mac version</a>');
-        if (isMac && exe) altParts.push('<a href="' + exe + '">Windows version</a>');
-        altParts.push('<a href="' + RELEASES + '">All downloads →</a>');
-        document.getElementById('dlAlt').innerHTML = altParts.join(' &nbsp;·&nbsp; ');
-        if (isWin && exe) setBtns(exe, 'Download for Windows' + v, 'Windows installer (.exe)', ICON_WIN);
-        else if (isMac && dmg) setBtns(dmg, 'Download for Mac' + v, 'Apple Silicon & Intel (.dmg)', ICON_APPLE);
+        if (isWin && exe) setBtns(exe, 'Download for Windows', '', ICON_WIN);
+        else if (isMac && dmg) setBtns(dmg, 'Download for Mac', '', ICON_APPLE);
       })
       .catch(function () { /* keep the releases-page fallback */ });
   }
