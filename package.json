@@ -49,7 +49,7 @@
         "ext": "fab",
         "name": "fabu Project",
         "role": "Editor",
-        "icon": "build/icon"
+        "icon": "build/fabdoc"
       }
     ],
     "mac": {
