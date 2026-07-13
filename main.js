@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, session } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, session, shell } = require('electron');
 const fs = require('fs');
 const path = require('path');
 
@@ -42,6 +42,12 @@ function createWindow() {
     }
   });
   win.loadFile('index.html');
+
+  // open external links (Ko-fi, GitHub, etc.) in the real browser, not a blank window
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:\/\//i.test(url)) { shell.openExternal(url); return { action: 'deny' }; }
+    return { action: 'deny' };
+  });
 
   // ask the renderer before really closing (unsaved changes dialog)
   win.on('close', (e) => {

@@ -432,5 +432,6 @@
   "size_wait": "Let them wait",
   "update_ready": "Update ready",
   "update_restart": "Restart",
-  "update_later": "Later"
+  "update_later": "Later",
+  "support_kofi": "support fabu"
 }
