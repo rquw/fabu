@@ -1,6 +1,6 @@
 name: Release fabu
 
-# Build the installers and publish them to a GitHub Release.
+# Build the installers and publish them to a single GitHub Release.
 # Trigger it by pushing a version tag, e.g.:  git tag v1.0.0 && git push origin v1.0.0
 # (or run it by hand from the Actions tab).
 on:
@@ -13,8 +13,27 @@ permissions:
   contents: write   # needed to create the release and upload the installers
 
 jobs:
+  # Create the draft release up front so the mac and windows jobs both upload
+  # into the SAME release instead of racing to each create their own.
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Ensure a single draft release exists
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VER="v$(node -p "require('./package.json').version")"
+          if ! gh release view "$VER" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$VER" -R "$GITHUB_REPOSITORY" --draft \
+              --title "fabu $VER" \
+              --notes "fabu $VER — download the installer for your platform below."
+          fi
+
   build:
+    needs: prepare
     strategy:
+      fail-fast: false   # a hiccup on one OS must not cancel the other
       matrix:
         include:
           - os: macos-latest
@@ -27,7 +46,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
       - name: Install dependencies
         run: npm ci || npm install
