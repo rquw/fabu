@@ -1,7 +1,7 @@
 # fabu
 
 **The simplest music creation program out there.** Free, open-source, and you
-can jam live with friends. Built with Electron + the Web Audio API.
+can jam live with friends.
 
 → **Download:** https://rquw.github.io/fabu/
 
@@ -9,14 +9,12 @@ can jam live with friends. Built with Electron + the Web Audio API.
 
 ## Features
 
-- A clean timeline workspace — your song is the background, everything else is a small window.
-- Piano-roll MIDI editor, synth instruments + a drum kit, and your own **sampler instruments** from any audio file.
+- Piano-roll MIDI editor, synth instruments + a drum kit, and your own **sampler instruments** from any audio file!!!
 - Per-clip effects: gain, real pitch-shift, speed, drive, bitcrush, low-pass filter, fades.
 - 3-band EQ mixer, pan, mute/solo, and **automation** keyframes.
 - Record the mic or record notes live from your keyboard (exact timing, count-in).
 - **Live multiplayer** — make music in the same project together, with cursors, a player list, host controls and locks.
 - Save/load `.fab` projects and export **WAV / MP3 / OGG**.
-- English & German, light nudges, undo on everything.
 
 ## Run from source
 
@@ -44,4 +42,4 @@ on any free Node host (Render works well).
 
 ## License
 
-[MIT](LICENSE) © Fabio Schwaiger. Made with the help of Claude.
+[MIT](LICENSE) © Fabio
