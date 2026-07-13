@@ -189,6 +189,7 @@ ipcMain.handle('get-languages', async () => {
     try { files = fs.readdirSync(dir); } catch (e) { continue; }
     for (const f of files.sort()) {
       if (!f.toLowerCase().endsWith('.json')) continue;
+      if (f === 'index.json') continue; // the web manifest, not a language
       if (seen.has(f)) continue;
       try {
         const data = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'));
