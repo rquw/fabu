@@ -7,8 +7,11 @@ exactly what to click.
 
 - The repo is public (needed for free GitHub Pages + it's open-source anyway).
 - **Enable the website:** repo → Settings → Pages → Source: `Deploy from a
-  branch`, Branch: `main`, folder: `/docs` → Save. In a minute the site is live
-  at **https://rquw.github.io/fabu/**.
+  branch`, Branch: `main`, folder: **`/docs`** → Save. This is already set. The
+  folder **must** be `/docs`, not `/(root)` — with root, `https://rquw.github.io/fabu/`
+  serves the app instead of the landing page and `/web` 404s. In a minute the
+  site is live at **https://rquw.github.io/fabu/** (landing) and
+  **https://rquw.github.io/fabu/web/** (the in-browser app).
 - **Fix the relay** (multiplayer): the old Render service stopped forwarding
   messages. Redeploy `relay/server.js` (see `relay/README.md`). Until then,
   everything except live multiplayer works.
@@ -26,11 +29,18 @@ git push origin main --tags
 ```
 
 Pushing the `v*` tag runs `.github/workflows/release.yml`, which:
+- creates one **draft** release, then
 - builds the **macOS universal .dmg** (Apple Silicon + Intel) on a Mac runner,
 - builds the **Windows .exe installer** on a Windows runner,
-- uploads both (plus the `latest*.yml` update files) to a GitHub Release.
+- uploads both (plus the `latest*.yml` update files) into that same release.
 
 You can also run it by hand: repo → Actions → "Release fabu" → Run workflow.
+
+**Then publish it:** the release lands as a **draft** so nothing goes public
+until you're ready. Go to repo → Releases, open the new `vX.Y.Z` draft (it
+should have both `.dmg` and `.exe`), and click **Publish release**. The website
+and auto-updater only see published releases. You can delete the old
+`[MACOS] fabu v1.0` release once the combined one is live.
 
 ## 3. How downloads work
 
