@@ -1019,16 +1019,23 @@ const App = {
         return;
       }
 
-      if (typing) return;
-
-      // --- transport & panels ---
-      if (e.code === 'Space') {
+      // Space always plays/pauses — even with a floating window, slider, checkbox
+      // or menu focused — unless the user is actually typing into a text field.
+      const ae = document.activeElement;
+      const textField = ae && (ae.tagName === 'TEXTAREA' || ae.isContentEditable ||
+        (ae.tagName === 'INPUT' && /^(text|password|email|search|url|tel|number|)$/i.test(ae.type || 'text')));
+      if (e.code === 'Space' && !textField) {
         e.preventDefault();
         if (Sampler.isOpen()) { Sampler.preview(); return; } // preview the sample, not the song
         if (UI.recording) { Engine.stopRecord(); Engine.pause(); return; }
+        if (ae && ae.blur && ae !== document.body) ae.blur(); // don't also toggle the focused control
         this.togglePlay();
         return;
       }
+
+      if (typing) return;
+
+      // --- transport & panels ---
       if (e.code === 'Enter') { e.preventDefault(); this.stop(); return; }
       if (e.code === 'F1') { e.preventDefault(); Windows.toggleHelp(); return; }
       if (e.code === 'Escape') {

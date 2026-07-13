@@ -27,6 +27,7 @@ const Sync = {
   locks: new Map(),   // key -> { id, name, ts }
   myLocks: new Set(),
   cursors: new Map(), // id -> { beat, y, ts, name, color }
+  remotePH: new Map(), // id -> { beat, ts, name, color, playing } (other players' playheads)
 
   sharedSamples: new Set(),
   lastSent: '',
@@ -60,6 +61,10 @@ const Sync = {
     this.room = room;
     this.isHost = asHost;
     this.admitted = asHost;
+    // the host is the source of truth from the start; a joiner must NOT broadcast
+    // its own (possibly empty) project until it has received the room's state once,
+    // otherwise it wipes everyone's work the moment it connects.
+    this.synced = asHost;
     this.started = false;
     if (settings) this.settings = Object.assign({ allowLate: true, approve: false, maxPlayers: 100 }, settings);
     this.settings.maxPlayers = clamp(this.settings.maxPlayers || 100, 2, 100);
@@ -132,14 +137,15 @@ const Sync = {
 
   teardown(silent = false) {
     const was = this.connected;
-    this.connected = false; this.admitted = false; this.isHost = false;
+    this.connected = false; this.admitted = false; this.isHost = false; this.synced = false;
     clearInterval(this.periodTimer); clearInterval(this.presenceTimer);
-    this.peers.clear(); this.locks.clear(); this.cursors.clear(); this.pendingReqs = [];
+    this.peers.clear(); this.locks.clear(); this.cursors.clear(); this.remotePH.clear(); this.pendingReqs = [];
     this.myLocks.clear();
     this.room = null;
     this.setStatus('offline');
     this.renderPanel();
     this.renderCursors();
+    this.renderRemotePlayheads();
     this.updateLockVisuals();
     if (was && !silent) { toast(tr('mp_left', 'Left the room')); Timeline.render(); }
   },
@@ -166,6 +172,18 @@ const Sync = {
         if (m.host && m.settings) {
           this.settings = m.settings;
           this.started = !!m.started;
+        }
+        // two hosts can briefly coexist after a false host-loss; the earliest
+        // joiner keeps the crown and everyone else steps down, so we self-heal
+        // instead of getting stuck with two hosts.
+        if (m.host && this.isHost && m.id !== this.me.id) {
+          const iLose = (m.joinTs < this.me.joinTs) || (m.joinTs === this.me.joinTs && m.id < this.me.id);
+          if (iLose) {
+            this.isHost = false;
+            this.sendPresence();
+            toast(tr('mp_host_is', '{name} is the host', { name: m.name }));
+            this.renderPanel();
+          }
         }
         if (isNew) {
           this.sharedSamples.clear();   // re-send our samples so the newcomer hears everything
@@ -209,6 +227,13 @@ const Sync = {
         }
         break;
 
+      case 'ph':
+        if (m.id !== this.me.id) {
+          this.remotePH.set(m.id, { beat: m.beat, ts: Date.now(), name: m.name, color: m.color, playing: !!m.playing });
+          this.renderRemotePlayheads();
+        }
+        break;
+
       case 'lock':
         if (m.on) this.locks.set(m.key, { id: m.id, name: m.name, ts: Date.now() });
         else this.locks.delete(m.key);
@@ -227,10 +252,12 @@ const Sync = {
         const p = this.peers.get(m.id);
         this.peers.delete(m.id);
         this.cursors.delete(m.id);
+        this.remotePH.delete(m.id);
         if (p) toast(tr('mp_left_room', '{name} left', { name: p.name }));
         if (m.host || (p && p.host)) this.hostLost();
         this.renderPanel();
         this.renderCursors();
+        this.renderRemotePlayheads();
         break;
       }
     }
@@ -258,6 +285,7 @@ const Sync = {
     this.send({ type: 'admit', to: id, settings: this.settings, started: this.started });
     this.sharedSamples.clear();  // next broadcast carries every sample for the newcomer
     this.lastSent = '';
+    this.broadcast(true);        // push the full project right away so they sync before they can edit
     this.renderPanel();
     this.renderRequests();
   },
@@ -282,7 +310,9 @@ const Sync = {
     const now = Date.now();
     let lostHost = false, changed = false;
     for (const [id, p] of this.peers) {
-      if (now - p.lastSeen > 7000) {
+      // presence beats every 2s; only declare someone gone after ~6 missed beats
+      // so a laggy connection doesn't trigger a phantom "host left".
+      if (now - p.lastSeen > 12000) {
         this.peers.delete(id);
         this.cursors.delete(id);
         if (p.host) lostHost = true;
@@ -429,6 +459,9 @@ const Sync = {
     });
   },
 
+  // Reuse one element per cursor so the CSS transition can glide it between
+  // updates instead of teleporting (recreating the node every frame killed the
+  // tween and made it choppy).
   renderCursors() {
     let layer = document.getElementById('cursorLayer');
     if (!layer) {
@@ -436,18 +469,81 @@ const Sync = {
       layer.id = 'cursorLayer';
       Timeline.lanes.appendChild(layer);
     }
+    if (!this._cursorEls) this._cursorEls = new Map();
+    if (!this.admitted) {
+      for (const [, el] of this._cursorEls) el.remove();
+      this._cursorEls.clear();
+      return;
+    }
     const now = Date.now();
-    layer.innerHTML = '';
-    if (!this.admitted) return;
+    const seen = new Set();
     for (const [id, c] of this.cursors) {
       if (now - c.ts > 5000) continue;
-      const el = document.createElement('div');
-      el.className = 'mp-cursor';
+      seen.add(id);
+      let el = this._cursorEls.get(id);
+      if (!el) {
+        el = document.createElement('div');
+        el.className = 'mp-cursor';
+        el.innerHTML = '<div class="mp-cursor-dot"></div><div class="mp-cursor-name"></div>';
+        layer.appendChild(el);
+        this._cursorEls.set(id, el);
+      }
       el.style.left = (c.beat * UI.zoom) + 'px';
       el.style.top = c.y + 'px';
-      el.innerHTML = `<div class="mp-cursor-dot" style="background:${c.color}"></div>` +
-        `<div class="mp-cursor-name" style="background:${c.color}">${c.name}</div>`;
-      layer.appendChild(el);
+      el.querySelector('.mp-cursor-dot').style.background = c.color;
+      const nm = el.querySelector('.mp-cursor-name');
+      nm.style.background = c.color;
+      if (nm.textContent !== c.name) nm.textContent = c.name;
+    }
+    for (const [id, el] of this._cursorEls) {
+      if (!seen.has(id)) { el.remove(); this._cursorEls.delete(id); }
+    }
+  },
+
+  // Everyone's playhead, in their own colour, semi-transparent, while they play.
+  sendPlayhead(beat, playing) {
+    if (!this.admitted) return;
+    const now = performance.now();
+    if (playing && this._lastPh && now - this._lastPh < 80) return;
+    this._lastPh = now;
+    this.send({ type: 'ph', id: this.me.id, name: this.me.name, color: this.me.color, beat, playing });
+  },
+
+  renderRemotePlayheads() {
+    let layer = document.getElementById('remotePhLayer');
+    if (!layer) {
+      layer = document.createElement('div');
+      layer.id = 'remotePhLayer';
+      Timeline.lanes.appendChild(layer);
+    }
+    if (!this._phEls) this._phEls = new Map();
+    if (!this.admitted) {
+      for (const [, el] of this._phEls) el.remove();
+      this._phEls.clear();
+      return;
+    }
+    const now = Date.now();
+    const h = (S.tracks.length * 84 + 30);
+    const seen = new Set();
+    for (const [id, ph] of this.remotePH) {
+      if (!ph.playing || now - ph.ts > 3000) continue;
+      seen.add(id);
+      let el = this._phEls.get(id);
+      if (!el) {
+        el = document.createElement('div');
+        el.className = 'mp-playhead';
+        el.innerHTML = '<div class="mp-ph-flag"></div>';
+        layer.appendChild(el);
+        this._phEls.set(id, el);
+      }
+      el.style.height = h + 'px';
+      el.style.setProperty('--pc', ph.color);
+      el.style.left = (ph.beat * UI.zoom) + 'px';
+      const flag = el.querySelector('.mp-ph-flag');
+      if (flag.textContent !== ph.name) flag.textContent = ph.name;
+    }
+    for (const [id, el] of this._phEls) {
+      if (!seen.has(id)) { el.remove(); this._phEls.delete(id); }
     }
   },
 
@@ -463,7 +559,7 @@ const Sync = {
   SIZE_LIMIT: 55 * 1024 * 1024,   // relay chokes past ~62 MB, leave a margin
 
   broadcast(force = false) {
-    if (!this.admitted || this.applyingRemote) return;
+    if (!this.admitted || this.applyingRemote || !this.synced) return;
     const stateJson = JSON.stringify(S);
     const samples = {};
     const added = [];
@@ -525,6 +621,11 @@ const Sync = {
   applyRemote(stateObj, samples) {
     const incoming = JSON.stringify(stateObj);
     const identical = incoming === JSON.stringify(S);
+    // we now hold the room's state, so we're allowed to broadcast; and record it
+    // as "last sent" so we never bounce this exact state back (that echo, times
+    // every peer, was the source of the lag and the disappearing edits).
+    this.synced = true;
+    this.lastSent = incoming;
     this.applyingRemote = true;
     this.loadSamples(samples).then((got) => { if (got) { Timeline.render(); Windows.refreshAll(); } });
     if (!identical) {

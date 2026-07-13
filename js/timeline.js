@@ -19,6 +19,12 @@ const Timeline = {
       this.drawRuler();
     });
 
+    // scrolling while the pointer is over the track-headers column (which is
+    // itself clipped) should still scroll the timeline vertically.
+    $('#headsCol').addEventListener('wheel', (e) => {
+      this.scroller.scrollTop += e.deltaY;
+    }, { passive: true });
+
     // trackpad pinch (ctrl+wheel) zooms the timeline around the cursor
     this.scroller.addEventListener('wheel', (e) => {
       if (!e.ctrlKey) return; // let normal two-finger scrolling through
@@ -93,9 +99,9 @@ const Timeline = {
     this.lanes.style.width = width + 'px';
     this.ruler.style.width = width + 'px';
 
-    // remove stale lanes/clips (keep playhead, dropGhost and live cursors)
+    // remove stale lanes/clips (keep playhead, dropGhost and the live overlays)
     for (const el of [...this.lanes.children]) {
-      if (el.id !== 'playhead' && el.id !== 'dropGhost' && el.id !== 'cursorLayer') el.remove();
+      if (el.id !== 'playhead' && el.id !== 'dropGhost' && el.id !== 'cursorLayer' && el.id !== 'remotePhLayer') el.remove();
     }
 
     const beat = UI.zoom;
@@ -116,7 +122,7 @@ const Timeline = {
     this.renderHeads();
     this.drawRuler();
     this.updatePlayhead();
-    if (typeof Sync !== 'undefined') { Sync.renderCursors(); Sync.updateLockVisuals(); }
+    if (typeof Sync !== 'undefined') { Sync.renderCursors(); Sync.renderRemotePlayheads(); Sync.updateLockVisuals(); }
   },
 
   drawRuler() {
@@ -615,6 +621,13 @@ const Timeline = {
     const beat = Engine.ctx && UI.playing ? Engine.currentBeat() : UI.playhead;
     const x = beat * UI.zoom;
     $('#playhead').style.left = x + 'px';
+
+    // let the others see where our playhead is (in our colour) while we play
+    if (typeof Sync !== 'undefined' && Sync.admitted) {
+      if (UI.playing) Sync.sendPlayhead(beat, true);
+      else if (Sync._phWasPlaying) Sync.sendPlayhead(beat, false);
+      Sync._phWasPlaying = UI.playing;
+    }
 
     const bars = Math.floor(beat / 4) + 1;
     const beats = Math.floor(beat % 4) + 1;

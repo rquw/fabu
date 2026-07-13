@@ -282,8 +282,13 @@ const Windows = {
       slider(tr('insp_fade_out', 'Fade out'), 0, 5, 0.05, clip.fadeOut ?? 0, v => v.toFixed(2) + ' s',
         tr('tip_fade_out', 'Fade out to silence'), v => { clip.fadeOut = v; }, 'Fade out');
     } else {
+      // instrument (MIDI) clips get their own volume + transpose
+      slider(tr('insp_gain', 'Gain'), 0, 3, 0.01, clip.gain ?? 1, v => Math.round(v * 100) + '%',
+        tr('tip_clip_gain', 'Clip volume'), v => { clip.gain = v; }, 'Clip gain');
+      slider(tr('insp_transpose', 'Transpose'), -24, 24, 1, clip.pitch ?? 0, v => (v > 0 ? '+' : '') + v + ' st',
+        tr('tip_transpose', 'Shift every note up or down'), v => { clip.pitch = v; }, 'Transpose');
       const info = document.createElement('div');
-      info.style.cssText = 'color:var(--dim);font-size:11.5px;margin-bottom:10px';
+      info.style.cssText = 'color:var(--dim);font-size:11.5px;margin:10px 0';
       info.textContent = tr('insp_info', '{notes} notes, {beats} beats, {instr}',
         { notes: clip.notes.length, beats: clip.length, instr: instrLabel(track.instrument) });
       body.appendChild(info);

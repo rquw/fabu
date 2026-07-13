@@ -454,5 +454,8 @@
   "acct_deleted": "Account deleted.",
   "set_signed_in": "Signed in as {name}",
   "set_no_account": "Not signed in",
-  "set_manage_acct": "Account"
+  "set_manage_acct": "Account",
+  "mp_host_is": "{name} is the host",
+  "insp_transpose": "Transpose",
+  "tip_transpose": "Shift every note up or down"
 }

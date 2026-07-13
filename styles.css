@@ -758,6 +758,17 @@ kbd {
   font-weight: 800;
   letter-spacing: -2px;
   line-height: 1;
+  display: inline-block;
+  cursor: default;
+}
+/* little easter egg: the wordmark hops when you hover it */
+.home-logo:hover { animation: logoJump 0.5s var(--ease); }
+@keyframes logoJump {
+  0% { transform: translateY(0) rotate(0); }
+  30% { transform: translateY(-16px) rotate(-3deg); }
+  55% { transform: translateY(0) rotate(0); }
+  72% { transform: translateY(-7px) rotate(2deg); }
+  100% { transform: translateY(0) rotate(0); }
 }
 .home-tag { font-size: 14px; color: var(--dim); font-weight: 500; margin-left: 3px; }
 
@@ -1109,7 +1120,23 @@ kbd {
 
 /* live cursors */
 #cursorLayer { position: absolute; inset: 0; pointer-events: none; z-index: 7; }
-.mp-cursor { position: absolute; transform: translate(-2px, -2px); transition: left 0.07s linear, top 0.07s linear; }
+.mp-cursor { position: absolute; transform: translate(-2px, -2px); transition: left 0.11s linear, top 0.11s linear; }
+
+/* other players' playheads: a thin coloured line in their colour, see-through */
+#remotePhLayer { position: absolute; inset: 0; pointer-events: none; z-index: 6; }
+.mp-playhead {
+  position: absolute; top: 0; width: 2px;
+  background: var(--pc, var(--accent));
+  opacity: 0.55;
+  transition: left 0.11s linear;
+}
+.mp-ph-flag {
+  position: absolute; top: 2px; left: 2px;
+  padding: 1px 5px; border-radius: 4px;
+  background: var(--pc, var(--accent)); color: #fff;
+  font-size: 9px; font-weight: 700; white-space: nowrap;
+  opacity: 0.9;
+}
 .mp-cursor-dot { width: 10px; height: 10px; border-radius: 50% 50% 50% 0; transform: rotate(-90deg); border: 1.5px solid rgba(0,0,0,0.35); }
 .mp-cursor-name {
   margin-top: 3px;

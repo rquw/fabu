@@ -626,7 +626,7 @@ const Engine = {
             ev.push({
               beat: b,
               fn: (time) => {
-                const v = this.makeVoice(this.ctx, this.trackInput(t.id), t.instrument, n.pitch, time, n.vel ?? 0.9);
+                const v = this.makeVoice(this.ctx, this.trackInput(t.id), t.instrument, n.pitch + (c.pitch || 0), time, (n.vel ?? 0.9) * (c.gain ?? 1));
                 v.stop(time + durB * this.spb());
                 this.live.add(v);
               }
@@ -969,7 +969,7 @@ const Engine = {
             if (n.start >= c.length) continue;
             const time = lead + (c.start + n.start) * spb;
             const durB = Math.min(n.length, c.length - n.start);
-            const v = this.makeVoice(oc, chain.input, t.instrument, n.pitch, time, n.vel ?? 0.9);
+            const v = this.makeVoice(oc, chain.input, t.instrument, n.pitch + (c.pitch || 0), time, (n.vel ?? 0.9) * (c.gain ?? 1));
             v.stop(time + durB * spb);
           }
         } else {
