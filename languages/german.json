@@ -454,5 +454,8 @@
   "acct_deleted": "Konto gelöscht.",
   "set_signed_in": "Angemeldet als {name}",
   "set_no_account": "Nicht angemeldet",
-  "set_manage_acct": "Konto"
+  "set_manage_acct": "Konto",
+  "mp_host_is": "{name} ist der Host",
+  "insp_transpose": "Transponieren",
+  "tip_transpose": "Alle Noten hoch oder runter verschieben"
 }
