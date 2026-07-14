@@ -52,6 +52,22 @@ const App = {
         if (btn) { btn.disabled = false; btn.textContent = tr('update_now', 'Update'); }
         toast(tr('update_failed', 'Could not update by itself. The download page is open, grab the new version there.'), 'red');
       });
+      if (window.electronAPI.onUpdateRestarting) {
+        window.electronAPI.onUpdateRestarting(() => {
+          const btn = document.getElementById('updNow');
+          if (btn) btn.textContent = tr('update_restarting', 'Restarting…');
+          this.autosaveTick(); // last save before the swap
+        });
+      }
+    }
+    // greet the user once after an update went through
+    if (window.electronAPI && window.electronAPI.getVersion) {
+      window.electronAPI.getVersion().then((v) => {
+        if (!v) return;
+        const last = localStorage.getItem('fabu.lastVersion');
+        localStorage.setItem('fabu.lastVersion', v);
+        if (last && last !== v) setTimeout(() => toast(tr('updated_to', 'Updated to fabu v{v}', { v }), 'green'), 900);
+      }).catch(() => {});
     }
   },
 

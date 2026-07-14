@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.8
+- Multiplayer: if your connection drops, fabu reconnects by itself and slips you back into the room, no re-approval, no "left/joined" spam.
+- Multiplayer: late-arriving old states can no longer roll back newer edits.
+- Multiplayer: incoming changes wait while you're typing a name so your text doesn't get wiped.
+- Multiplayer: a note when the server is waking up, and one bad message can no longer crash the session.
+- Updates: after an update, fabu greets you with "Updated to fabu vX.Y.Z". It also saves your project right before restarting, retries a failed download once, and cleans up old update files.
+
 ## 1.0.7
 - One-click updates. When a new version is out, click Update and fabu downloads it, verifies it, and restarts itself on the new version. No browser, no installer files to manage.
 

@@ -461,5 +461,11 @@
   "update_available": "Update available",
   "update_download": "Download",
   "update_now": "Update",
-  "update_failed": "Could not update by itself. The download page is open, grab the new version there."
+  "update_failed": "Could not update by itself. The download page is open, grab the new version there.",
+  "update_restarting": "Restarting…",
+  "updated_to": "Updated to fabu v{v}",
+  "mp_reconnecting": "Connection lost, reconnecting…",
+  "mp_reconnected": "Reconnected",
+  "mp_reconnect_failed": "Could not reconnect",
+  "mp_waking": "Waking up the server… this can take a minute"
 }

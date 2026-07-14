@@ -65,6 +65,18 @@ function downloadAsset(meta, destPath) {
   });
 }
 
+// old installers and swapped-out bundles from previous updates; best-effort
+function cleanUpdateLeftovers() {
+  try {
+    const tmp = app.getPath('temp');
+    for (const f of fs.readdirSync(tmp)) {
+      if (f.startsWith('fabu-update-') || f.startsWith('fabu-old-')) {
+        fs.rmSync(path.join(tmp, f), { recursive: true, force: true });
+      }
+    }
+  } catch (e) { /* ignore */ }
+}
+
 async function applyUpdate() {
   const files = (updateInfo && updateInfo.files) || [];
   const wantExt = process.platform === 'darwin' ? '.zip' : '.exe';
@@ -72,7 +84,18 @@ async function applyUpdate() {
   if (!meta) throw new Error('no installer in this release');
   const tmp = app.getPath('temp');
   const dest = path.join(tmp, 'fabu-update-' + updateInfo.version + wantExt);
-  await downloadAsset(meta, dest);
+  try {
+    await downloadAsset(meta, dest);
+  } catch (e) {
+    // flaky network: one quiet retry before giving up
+    await new Promise((r) => setTimeout(r, 1500));
+    if (win) win.webContents.send('update-progress', 0);
+    await downloadAsset(meta, dest);
+  }
+
+  // give the renderer a moment to autosave before we go down
+  if (win) win.webContents.send('update-restarting');
+  await new Promise((r) => setTimeout(r, 700));
 
   if (process.platform === 'darwin') {
     // unpack the new fabu.app and swap it in place, then relaunch
@@ -154,6 +177,8 @@ ipcMain.on('close-confirmed', () => {
   app.quit();
 });
 
+ipcMain.handle('get-version', () => app.getVersion());
+
 app.whenReady().then(() => {
   // Allow microphone access for voice recording
   session.defaultSession.setPermissionRequestHandler((wc, permission, cb) => {
@@ -161,6 +186,7 @@ app.whenReady().then(() => {
   });
   createWindow();
   setupAutoUpdate();
+  cleanUpdateLeftovers();
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
