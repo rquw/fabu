@@ -38,6 +38,14 @@ const Sync = {
 
   busy: false,
   pending: null,
+  rev: 0,             // state revision: rejects late/stale states that would undo newer edits
+
+  // don't yank the project out from under someone typing a name into a field
+  typingBusy() {
+    const a = document.activeElement;
+    return !!(a && (a.tagName === 'TEXTAREA' ||
+      (a.tagName === 'INPUT' && a.type !== 'range' && a.type !== 'checkbox' && a.type !== 'number')));
+  },
 
   // ---------- connection ----------
 
@@ -72,12 +80,21 @@ const Sync = {
     this.me.color = hashColor(this.me.name);
     this.peers.clear(); this.locks.clear(); this.cursors.clear();
     this.pendingReqs = []; this.sharedSamples.clear(); this.lastSent = '';
+    this.rev = 0; this.pending = null;
     this.setStatus('connecting');
 
+    this._manualClose = false;
     try { this.ws = new WebSocket(this.relayUrl); } catch (e) { this.setStatus('offline'); return; }
-    this.ws.binaryType = 'arraybuffer';
+    this.wireSocket();
+
+    // the free relay sleeps when idle; warn if the first connect is slow
+    clearTimeout(this._slowTimer);
+    this._slowTimer = setTimeout(() => {
+      if (!this.connected) toast(tr('mp_waking', 'Waking up the server… this can take a minute'));
+    }, 4000);
 
     this.ws.onopen = () => {
+      clearTimeout(this._slowTimer);
       this.connected = true;
       this.send({ type: 'join', room });
       if (asHost) {
@@ -97,7 +114,11 @@ const Sync = {
       }
       this.renderPanel();
     };
+  },
 
+  // shared wiring for first connect and reconnects
+  wireSocket() {
+    this.ws.binaryType = 'arraybuffer';
     this.ws.onmessage = async (ev) => {
       let text;
       if (typeof ev.data === 'string') text = ev.data;
@@ -108,9 +129,56 @@ const Sync = {
       try { msg = JSON.parse(text); } catch (e) { return; }
       this.onMessage(msg);
     };
-
-    this.ws.onclose = () => { this.teardown(); };
+    this.ws.onclose = () => {
+      // an unexpected drop (relay hiccup, sleep, wifi blip) tries to get back in
+      // quietly instead of dumping the user out of the room
+      if (!this._manualClose && this.admitted) this.tryReconnect();
+      else this.teardown();
+    };
     this.ws.onerror = () => { this.setStatus('offline'); };
+  },
+
+  tryReconnect() {
+    const room = this.room, wasHost = this.isHost, me = this.me;
+    const settings = this.settings, started = this.started, rev = this.rev;
+    this.connected = false;
+    this.setStatus('connecting');
+    toast(tr('mp_reconnecting', 'Connection lost, reconnecting…'));
+    clearInterval(this.periodTimer); clearInterval(this.presenceTimer);
+    let tries = 0;
+    const attempt = () => {
+      if (this._manualClose) return;
+      if (tries++ >= 5) {
+        this.teardown();
+        toast(tr('mp_reconnect_failed', 'Could not reconnect'), 'red');
+        return;
+      }
+      try { this.ws = new WebSocket(this.relayUrl); } catch (e) { setTimeout(attempt, 1500 * tries); return; }
+      this.wireSocket();
+      this.ws.onclose = () => { setTimeout(attempt, 1500 * tries); };
+      this.ws.onopen = () => {
+        // keep the same identity so the others never see us leave
+        this.connected = true;
+        this.room = room; this.me = me; this.isHost = wasHost;
+        this.settings = settings; this.started = started; this.rev = rev;
+        this.ws.onclose = () => {
+          if (!this._manualClose && this.admitted) this.tryReconnect();
+          else this.teardown();
+        };
+        this.send({ type: 'join', room });
+        if (wasHost) {
+          this.afterAdmit();
+          toast(tr('mp_reconnected', 'Reconnected'), 'green');
+        } else {
+          this.admitted = false;
+          this.send({ type: 'knock', id: me.id, name: me.name });
+          this.knockTimer = setTimeout(() => {
+            if (!this.admitted) { this.teardown(); toast(tr('mp_reconnect_failed', 'Could not reconnect'), 'red'); }
+          }, 15000);
+        }
+      };
+    };
+    setTimeout(attempt, 800);
   },
 
   afterAdmit() {
@@ -118,7 +186,14 @@ const Sync = {
     clearTimeout(this.knockTimer);
     clearInterval(this.periodTimer);
     clearInterval(this.presenceTimer);
-    this.periodTimer = setInterval(() => this.broadcast(), 150);
+    this.periodTimer = setInterval(() => {
+      // apply a deferred remote state once the user stops dragging/typing
+      if (this.pending && !this.busy && !this.typingBusy()) {
+        const m = this.pending; this.pending = null;
+        this.applyRemote(m.state, m.samples);
+      }
+      this.broadcast();
+    }, 150);
     this.presenceTimer = setInterval(() => { this.sendPresence(); this.sweep(); }, 2000);
     this.sendPresence();
     if (this.isHost) this.broadcast(true);
@@ -128,8 +203,10 @@ const Sync = {
   },
 
   disconnect(silent = false) {
+    this._manualClose = true;
     if (this.connected && this.me) this.send({ type: 'bye', id: this.me.id, host: this.isHost });
     clearTimeout(this.knockTimer);
+    clearTimeout(this._slowTimer);
     if (this.ws) { this.ws.onclose = null; try { this.ws.close(); } catch (e) {} }
     this.ws = null;
     this.teardown(silent);
@@ -162,7 +239,11 @@ const Sync = {
     switch (m.type) {
       case 'state':
         if (!this.admitted) return;
-        if (this.busy) { this.pending = m; return; }
+        // a state that raced through the relay slower than a newer one must not
+        // roll the project back (this was "you place something and it disappears")
+        if (m.rev && m.rev < this.rev) return;
+        if (m.rev) this.rev = m.rev;
+        if (this.busy || this.typingBusy()) { this.pending = m; return; }
         this.applyRemote(m.state, m.samples);
         break;
 
@@ -264,6 +345,9 @@ const Sync = {
   },
 
   handleKnock(m) {
+    // someone we already know is just reconnecting: let them straight back in,
+    // no approval round-trip, no "X joined" spam
+    if (this.peers.has(m.id)) { this.admit(m.id); return; }
     const ban = this.bans[m.name];
     if (ban && ban > Date.now()) { this.send({ type: 'deny', to: m.id, reason: 'banned', until: ban }); return; }
     if (this.peers.size + 1 >= this.settings.maxPlayers) { this.send({ type: 'deny', to: m.id, reason: 'full' }); return; }
@@ -570,7 +654,7 @@ const Sync = {
     }
     const hasSamples = added.length > 0;
     if (!force && stateJson === this.lastSent && !hasSamples) return;
-    const msg = { type: 'state', room: this.room, state: JSON.parse(stateJson) };
+    const msg = { type: 'state', room: this.room, rev: this.rev + 1, state: JSON.parse(stateJson) };
     if (hasSamples) msg.samples = samples;
     const json = JSON.stringify(msg);
     if (json.length > this.SIZE_LIMIT) {
@@ -579,6 +663,7 @@ const Sync = {
       return;
     }
     this._sizeWarned = false;
+    this.rev += 1;
     this.lastSent = stateJson;
     try { this.ws.send(json); } catch (e) {}
   },
@@ -628,6 +713,16 @@ const Sync = {
     this.lastSent = incoming;
     this.applyingRemote = true;
     this.loadSamples(samples).then((got) => { if (got) { Timeline.render(); Windows.refreshAll(); } });
+    try {
+      this.applyRemoteState(stateObj, identical);
+    } catch (e) {
+      // one bad state from a peer must never take the whole client down
+      console.warn('applyRemote failed', e);
+    }
+    this.applyingRemote = false;
+  },
+
+  applyRemoteState(stateObj, identical) {
     if (!identical) {
       const sameStructure = S.tracks.length === stateObj.tracks.length &&
         S.tracks.every((t, i) => stateObj.tracks[i] && stateObj.tracks[i].id === t.id && stateObj.tracks[i].instrument === t.instrument);
@@ -649,7 +744,6 @@ const Sync = {
       updateUndoButtons();
       this.updateLockVisuals();
     }
-    this.applyingRemote = false;
   },
 
   // ---------- players panel ----------
@@ -972,7 +1066,11 @@ function _wrapUndo(name) {
 document.addEventListener('mousedown', () => { Sync.busy = true; }, true);
 document.addEventListener('mouseup', () => {
   Sync.busy = false;
-  if (Sync.pending) { const m = Sync.pending; Sync.pending = null; Sync.applyRemote(m.state, m.samples); }
+  // if they clicked into a text field, hold the update until they're done typing
+  if (Sync.pending && !Sync.typingBusy()) {
+    const m = Sync.pending; Sync.pending = null;
+    Sync.applyRemote(m.state, m.samples);
+  }
 }, true);
 
 // slider locks: any range input carrying data-lk announces while dragged

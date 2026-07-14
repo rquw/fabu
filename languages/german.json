@@ -461,5 +461,11 @@
   "update_available": "Update verfügbar",
   "update_download": "Herunterladen",
   "update_now": "Aktualisieren",
-  "update_failed": "Update hat nicht automatisch geklappt. Die Download-Seite ist offen, hol dir dort die neue Version."
+  "update_failed": "Update hat nicht automatisch geklappt. Die Download-Seite ist offen, hol dir dort die neue Version.",
+  "update_restarting": "Neustart…",
+  "updated_to": "Auf fabu v{v} aktualisiert",
+  "mp_reconnecting": "Verbindung verloren, verbinde neu…",
+  "mp_reconnected": "Wieder verbunden",
+  "mp_reconnect_failed": "Neuverbinden hat nicht geklappt",
+  "mp_waking": "Server wird geweckt… das kann eine Minute dauern"
 }
