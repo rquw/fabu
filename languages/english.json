@@ -459,5 +459,7 @@
   "insp_transpose": "Transpose",
   "tip_transpose": "Shift every note up or down",
   "update_available": "Update available",
-  "update_download": "Download"
+  "update_download": "Download",
+  "update_now": "Update",
+  "update_failed": "Could not update by itself. The download page is open, grab the new version there."
 }

@@ -12,5 +12,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onConfirmClose: (cb) => ipcRenderer.on('confirm-close', cb),
   confirmClose: () => ipcRenderer.send('close-confirmed'),
   onUpdateReady: (cb) => ipcRenderer.on('update-ready', (e, version) => cb(version)),
+  onUpdateProgress: (cb) => ipcRenderer.on('update-progress', (e, pct) => cb(pct)),
+  onUpdateError: (cb) => ipcRenderer.on('update-error', (e, msg) => cb(msg)),
   installUpdate: () => ipcRenderer.send('install-update')
 });

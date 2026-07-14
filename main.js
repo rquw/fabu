@@ -4,21 +4,23 @@ const path = require('path');
 
 let win;
 
-// ---- Auto update (from GitHub Releases) ----
-// Checks quietly on launch; if a newer version is published, downloads it in
-// the background and installs on next quit. Only runs in the packaged app.
+// ---- Updates ----
+// The app is unsigned, so electron-updater's own background installer is off
+// (its differential download kept failing halfway and could even remove the
+// app). We only use it to CHECK for new versions. When the user clicks Update,
+// we download the FULL installer ourselves, verify its sha512 against the
+// release manifest, and only then hand over — the installed app is never
+// touched until a complete, verified new version is on disk.
+let updateInfo = null;
+
 function setupAutoUpdate() {
   if (!app.isPackaged) return;
   let autoUpdater;
   try { ({ autoUpdater } = require('electron-updater')); } catch (e) { return; }
-  // Only CHECK for updates and tell the user — never silently download or install.
-  // The app is unsigned, so a background self-update is unreliable: Windows Defender
-  // quarantines the unsigned installer mid-download (it can even delete the app), and
-  // macOS refuses to self-install an unsigned build (the button just did nothing).
-  // Instead we notify, and the user grabs the new installer from the site and runs it.
   autoUpdater.autoDownload = false;
   autoUpdater.autoInstallOnAppQuit = false;
   autoUpdater.on('update-available', (info) => {
+    updateInfo = info;
     if (win) win.webContents.send('update-ready', info && info.version);
   });
   autoUpdater.on('error', () => { /* offline or no release: ignore silently */ });
@@ -27,10 +29,92 @@ function setupAutoUpdate() {
   setInterval(() => autoUpdater.checkForUpdates().catch(() => {}), 3 * 3600 * 1000);
 }
 
-// "Update" now just opens the download page — the user downloads the new installer
-// and runs it once (reliable for an unsigned app, unlike a background self-update).
+function downloadAsset(meta, destPath) {
+  return new Promise((resolve, reject) => {
+    const { net } = require('electron');
+    const crypto = require('crypto');
+    const url = 'https://github.com/rquw/fabu/releases/download/v' + updateInfo.version + '/' + meta.url;
+    const req = net.request(url);
+    req.on('response', (res) => {
+      if (res.statusCode !== 200) { reject(new Error('http ' + res.statusCode)); return; }
+      const cl = res.headers['content-length'];
+      const total = parseInt(Array.isArray(cl) ? cl[0] : cl) || meta.size || 0;
+      const hash = crypto.createHash('sha512');
+      const out = fs.createWriteStream(destPath);
+      let got = 0, lastPct = -1;
+      res.on('data', (chunk) => {
+        hash.update(chunk);
+        out.write(chunk);
+        got += chunk.length;
+        if (total && win) {
+          const pct = Math.floor((got / total) * 100);
+          if (pct !== lastPct) { lastPct = pct; win.webContents.send('update-progress', pct); }
+        }
+      });
+      res.on('end', () => {
+        out.end(() => {
+          const sum = hash.digest('base64');
+          if (meta.sha512 && sum !== meta.sha512) reject(new Error('checksum mismatch'));
+          else resolve();
+        });
+      });
+      res.on('error', reject);
+    });
+    req.on('error', reject);
+    req.end();
+  });
+}
+
+async function applyUpdate() {
+  const files = (updateInfo && updateInfo.files) || [];
+  const wantExt = process.platform === 'darwin' ? '.zip' : '.exe';
+  const meta = files.find((f) => f.url && f.url.endsWith(wantExt));
+  if (!meta) throw new Error('no installer in this release');
+  const tmp = app.getPath('temp');
+  const dest = path.join(tmp, 'fabu-update-' + updateInfo.version + wantExt);
+  await downloadAsset(meta, dest);
+
+  if (process.platform === 'darwin') {
+    // unpack the new fabu.app and swap it in place, then relaunch
+    const { execFile } = require('child_process');
+    const run = (cmd, args) => new Promise((res, rej) => execFile(cmd, args, (e) => (e ? rej(e) : res())));
+    const dir = path.join(tmp, 'fabu-update-' + updateInfo.version);
+    fs.rmSync(dir, { recursive: true, force: true });
+    fs.mkdirSync(dir, { recursive: true });
+    await run('/usr/bin/ditto', ['-x', '-k', dest, dir]);
+    const newApp = path.join(dir, 'fabu.app');
+    if (!fs.existsSync(newApp)) throw new Error('no app in the update');
+    const curApp = path.resolve(process.execPath, '..', '..', '..');
+    if (!curApp.endsWith('.app')) throw new Error('not running from an .app');
+    try { await run('/usr/bin/xattr', ['-dr', 'com.apple.quarantine', newApp]); } catch (e) { /* none set */ }
+    const oldApp = path.join(tmp, 'fabu-old-' + Date.now() + '.app');
+    await run('/bin/mv', [curApp, oldApp]);
+    try {
+      await run('/bin/mv', [newApp, curApp]);
+    } catch (e) {
+      await run('/bin/mv', [oldApp, curApp]); // put the old one back
+      throw e;
+    }
+    quitOk = true;
+    app.relaunch();
+    app.quit();
+  } else {
+    // windows: run the verified one-click installer silently; it swaps the app
+    // and starts the new version
+    const { spawn } = require('child_process');
+    spawn(dest, ['/S', '--force-run'], { detached: true, stdio: 'ignore' }).unref();
+    quitOk = true;
+    app.quit();
+  }
+}
+
 ipcMain.on('install-update', () => {
-  shell.openExternal('https://rquw.github.io/fabu/').catch(() => {});
+  if (!updateInfo) { shell.openExternal('https://rquw.github.io/fabu/').catch(() => {}); return; }
+  applyUpdate().catch((e) => {
+    if (win) win.webContents.send('update-error', String((e && e.message) || e));
+    // fallback: the site always works
+    shell.openExternal('https://rquw.github.io/fabu/').catch(() => {});
+  });
 });
 
 function createWindow() {

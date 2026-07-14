@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.0.7
+- One-click updates. When a new version is out, click Update and fabu downloads it, verifies it, and restarts itself on the new version. No browser, no installer files to manage.
+
 ## 1.0.6
 - Fixed metronome sound bug.
 
