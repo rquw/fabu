@@ -50,8 +50,8 @@ const App = {
     if (document.getElementById('updateBanner')) return;
     const b = document.createElement('div');
     b.id = 'updateBanner';
-    b.innerHTML = `<span>${tr('update_ready', 'Update ready')}${version ? ' · v' + version : ''}</span>
-      <button class="fbtn accent" id="updNow">${tr('update_restart', 'Restart')}</button>
+    b.innerHTML = `<span>${tr('update_available', 'Update available')}${version ? ' · v' + version : ''}</span>
+      <button class="fbtn accent" id="updNow">${tr('update_download', 'Download')}</button>
       <button class="upd-x" id="updLater"><svg class="ic"><use href="#i-x"/></svg></button>`;
     document.body.appendChild(b);
     b.querySelector('#updNow').addEventListener('click', () => window.electronAPI.installUpdate());

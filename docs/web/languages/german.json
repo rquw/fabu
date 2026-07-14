@@ -457,5 +457,7 @@
   "set_manage_acct": "Konto",
   "mp_host_is": "{name} ist der Host",
   "insp_transpose": "Transponieren",
-  "tip_transpose": "Alle Noten hoch oder runter verschieben"
+  "tip_transpose": "Alle Noten hoch oder runter verschieben",
+  "update_available": "Update verfügbar",
+  "update_download": "Herunterladen"
 }

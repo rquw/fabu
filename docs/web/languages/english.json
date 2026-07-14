@@ -457,5 +457,7 @@
   "set_manage_acct": "Account",
   "mp_host_is": "{name} is the host",
   "insp_transpose": "Transpose",
-  "tip_transpose": "Shift every note up or down"
+  "tip_transpose": "Shift every note up or down",
+  "update_available": "Update available",
+  "update_download": "Download"
 }
