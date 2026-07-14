@@ -459,5 +459,7 @@
   "insp_transpose": "Transponieren",
   "tip_transpose": "Alle Noten hoch oder runter verschieben",
   "update_available": "Update verfügbar",
-  "update_download": "Herunterladen"
+  "update_download": "Herunterladen",
+  "update_now": "Aktualisieren",
+  "update_failed": "Update hat nicht automatisch geklappt. Die Download-Seite ist offen, hol dir dort die neue Version."
 }

@@ -49,12 +49,21 @@ and auto-updater only see published releases. You can delete the old
   Windows), with the other OS as a secondary link.
 - No servers of your own — GitHub hosts the files.
 
-## 4. How auto-update works
+## 4. How updates work (from 1.0.7)
 
 - On launch (packaged app only), fabu checks the GitHub Release for a newer
-  version, downloads it in the background, and shows a "Restart" banner.
-- **To ship an update:** just cut a new release with a higher version number.
-  Everyone gets it automatically the next time they open the app.
+  version and shows an "Update available" banner.
+- Clicking **Update** makes fabu download the full installer itself (with a
+  percent counter), verify its sha512 against the release manifest, and only
+  then apply it: Windows runs the one-click installer silently and relaunches;
+  macOS swaps the .app bundle in place and relaunches. The installed app is
+  never touched until a complete verified copy is on disk, so a failed
+  download can't break anything (worst case it falls back to opening the
+  download page).
+- Background/silent auto-install stays OFF on purpose — the app is unsigned,
+  and electron-updater's differential background updates kept failing halfway
+  (and once removed the app).
+- **To ship an update:** cut a new release with a higher version number.
 
 ## 5. Code signing (the "not a virus" part)
 

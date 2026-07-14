@@ -40,9 +40,18 @@ const App = {
         this.confirmExit('close');
       });
     }
-    // an auto-downloaded update offers a restart
+    // one-click update: fabu downloads the new version itself and swaps over
     if (window.electronAPI && window.electronAPI.onUpdateReady) {
       window.electronAPI.onUpdateReady((version) => this.showUpdateBanner(version));
+      window.electronAPI.onUpdateProgress((pct) => {
+        const btn = document.getElementById('updNow');
+        if (btn) btn.textContent = pct + '%';
+      });
+      window.electronAPI.onUpdateError(() => {
+        const btn = document.getElementById('updNow');
+        if (btn) { btn.disabled = false; btn.textContent = tr('update_now', 'Update'); }
+        toast(tr('update_failed', 'Could not update by itself. The download page is open, grab the new version there.'), 'red');
+      });
     }
   },
 
@@ -51,10 +60,15 @@ const App = {
     const b = document.createElement('div');
     b.id = 'updateBanner';
     b.innerHTML = `<span>${tr('update_available', 'Update available')}${version ? ' · v' + version : ''}</span>
-      <button class="fbtn accent" id="updNow">${tr('update_download', 'Download')}</button>
+      <button class="fbtn accent" id="updNow">${tr('update_now', 'Update')}</button>
       <button class="upd-x" id="updLater"><svg class="ic"><use href="#i-x"/></svg></button>`;
     document.body.appendChild(b);
-    b.querySelector('#updNow').addEventListener('click', () => window.electronAPI.installUpdate());
+    const btn = b.querySelector('#updNow');
+    btn.addEventListener('click', () => {
+      btn.disabled = true;
+      btn.textContent = '0%';
+      window.electronAPI.installUpdate();
+    });
     b.querySelector('#updLater').addEventListener('click', () => b.remove());
   },
 
