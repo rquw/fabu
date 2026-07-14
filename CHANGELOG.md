@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.0.6
+- Fixed metronome sound bug.
+
 ## 1.0.5
 - Updating is reliable now. When there's a new version, fabu shows an "Update available" notice and opens the download page — you grab the installer and run it. No more failed background updates that could remove the app (this affected both Windows and Mac).
 
