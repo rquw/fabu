@@ -11,9 +11,14 @@ function setupAutoUpdate() {
   if (!app.isPackaged) return;
   let autoUpdater;
   try { ({ autoUpdater } = require('electron-updater')); } catch (e) { return; }
-  autoUpdater.autoDownload = true;
-  autoUpdater.autoInstallOnAppQuit = true;
-  autoUpdater.on('update-downloaded', (info) => {
+  // Only CHECK for updates and tell the user — never silently download or install.
+  // The app is unsigned, so a background self-update is unreliable: Windows Defender
+  // quarantines the unsigned installer mid-download (it can even delete the app), and
+  // macOS refuses to self-install an unsigned build (the button just did nothing).
+  // Instead we notify, and the user grabs the new installer from the site and runs it.
+  autoUpdater.autoDownload = false;
+  autoUpdater.autoInstallOnAppQuit = false;
+  autoUpdater.on('update-available', (info) => {
     if (win) win.webContents.send('update-ready', info && info.version);
   });
   autoUpdater.on('error', () => { /* offline or no release: ignore silently */ });
@@ -22,8 +27,10 @@ function setupAutoUpdate() {
   setInterval(() => autoUpdater.checkForUpdates().catch(() => {}), 3 * 3600 * 1000);
 }
 
+// "Update" now just opens the download page — the user downloads the new installer
+// and runs it once (reliable for an unsigned app, unlike a background self-update).
 ipcMain.on('install-update', () => {
-  try { require('electron-updater').autoUpdater.quitAndInstall(); } catch (e) {}
+  shell.openExternal('https://rquw.github.io/fabu/').catch(() => {});
 });
 
 function createWindow() {
