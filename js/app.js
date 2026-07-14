@@ -64,11 +64,25 @@ const App = {
     if (window.electronAPI && window.electronAPI.getVersion) {
       window.electronAPI.getVersion().then((v) => {
         if (!v) return;
+        this.version = v;
+        const hv = document.getElementById('homeVer');
+        if (hv) hv.textContent = 'v' + v;
         const last = localStorage.getItem('fabu.lastVersion');
         localStorage.setItem('fabu.lastVersion', v);
         if (last && last !== v) setTimeout(() => toast(tr('updated_to', 'Updated to fabu v{v}', { v }), 'green'), 900);
       }).catch(() => {});
     }
+  },
+
+  // manual update check from the settings window
+  async checkForUpdates() {
+    if (!(window.electronAPI && window.electronAPI.checkUpdates)) return 'unsupported';
+    try {
+      const r = await window.electronAPI.checkUpdates();
+      if (r && r.status === 'update') { this.showUpdateBanner(r.version); return 'update'; }
+      if (r && (r.status === 'latest' || r.status === 'dev')) return 'latest';
+      return 'error';
+    } catch (e) { return 'error'; }
   },
 
   showUpdateBanner(version) {

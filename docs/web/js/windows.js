@@ -390,6 +390,34 @@ const Windows = {
       btn.addEventListener('click', () => { Auth.openAccount(); });
       acct.append(label, btn);
       w.body.appendChild(acct);
+
+      // version + manual update check
+      const ver = document.createElement('div');
+      ver.className = 'frow';
+      ver.style.marginTop = '10px';
+      const vLabel = document.createElement('label');
+      vLabel.style.cssText = 'flex:1;width:auto;color:var(--faint)';
+      if (window.electronAPI && window.electronAPI.checkUpdates) {
+        vLabel.textContent = 'fabu v' + (App.version || '…');
+        const vBtn = document.createElement('button');
+        vBtn.className = 'fbtn';
+        vBtn.textContent = tr('set_check_updates', 'Check for updates');
+        vBtn.addEventListener('click', async () => {
+          vBtn.disabled = true;
+          vBtn.textContent = tr('set_checking', 'Checking…');
+          const r = await App.checkForUpdates();
+          vBtn.disabled = false;
+          vBtn.textContent = tr('set_check_updates', 'Check for updates');
+          if (r === 'latest') toast(tr('set_up_to_date', "You're on the latest version."), 'green');
+          else if (r === 'error') toast(tr('set_check_failed', 'Could not check. Are you online?'), 'red');
+          // 'update' shows the update banner by itself
+        });
+        ver.append(vLabel, vBtn);
+      } else {
+        vLabel.textContent = tr('set_web_version', 'fabu web, always the latest version');
+        ver.appendChild(vLabel);
+      }
+      w.body.appendChild(ver);
     };
     w.refresh();
     App.syncWindowButtons();

@@ -467,5 +467,10 @@
   "mp_reconnecting": "Connection lost, reconnecting…",
   "mp_reconnected": "Reconnected",
   "mp_reconnect_failed": "Could not reconnect",
-  "mp_waking": "Waking up the server… this can take a minute"
+  "mp_waking": "Waking up the server… this can take a minute",
+  "set_check_updates": "Check for updates",
+  "set_checking": "Checking…",
+  "set_up_to_date": "You're on the latest version.",
+  "set_check_failed": "Could not check. Are you online?",
+  "set_web_version": "fabu web, always the latest version"
 }

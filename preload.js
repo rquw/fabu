@@ -16,5 +16,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onUpdateError: (cb) => ipcRenderer.on('update-error', (e, msg) => cb(msg)),
   onUpdateRestarting: (cb) => ipcRenderer.on('update-restarting', () => cb()),
   getVersion: () => ipcRenderer.invoke('get-version'),
+  checkUpdates: () => ipcRenderer.invoke('check-updates'),
   installUpdate: () => ipcRenderer.send('install-update')
 });

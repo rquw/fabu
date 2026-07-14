@@ -12,22 +12,44 @@ let win;
 // release manifest, and only then hand over — the installed app is never
 // touched until a complete, verified new version is on disk.
 let updateInfo = null;
+let updater = null;
 
 function setupAutoUpdate() {
   if (!app.isPackaged) return;
-  let autoUpdater;
-  try { ({ autoUpdater } = require('electron-updater')); } catch (e) { return; }
-  autoUpdater.autoDownload = false;
-  autoUpdater.autoInstallOnAppQuit = false;
-  autoUpdater.on('update-available', (info) => {
+  try { ({ autoUpdater: updater } = require('electron-updater')); } catch (e) { return; }
+  updater.autoDownload = false;
+  updater.autoInstallOnAppQuit = false;
+  updater.on('update-available', (info) => {
     updateInfo = info;
     if (win) win.webContents.send('update-ready', info && info.version);
   });
-  autoUpdater.on('error', () => { /* offline or no release: ignore silently */ });
-  autoUpdater.checkForUpdates().catch(() => {});
+  updater.on('error', () => { /* offline or no release: ignore silently */ });
+  updater.checkForUpdates().catch(() => {});
   // check again every 3 hours for long sessions
-  setInterval(() => autoUpdater.checkForUpdates().catch(() => {}), 3 * 3600 * 1000);
+  setInterval(() => updater.checkForUpdates().catch(() => {}), 3 * 3600 * 1000);
 }
+
+function versionNewer(a, b) { // a > b, "1.0.10" style
+  const pa = String(a).split('.').map(Number), pb = String(b).split('.').map(Number);
+  for (let i = 0; i < 3; i++) { const d = (pa[i] || 0) - (pb[i] || 0); if (d) return d > 0; }
+  return false;
+}
+
+// manual "check for updates" from the settings window
+ipcMain.handle('check-updates', async () => {
+  if (!app.isPackaged || !updater) return { status: 'dev', version: app.getVersion() };
+  try {
+    const res = await updater.checkForUpdates();
+    const info = res && res.updateInfo;
+    if (info && versionNewer(info.version, app.getVersion())) {
+      updateInfo = info;
+      return { status: 'update', version: info.version };
+    }
+    return { status: 'latest', version: app.getVersion() };
+  } catch (e) {
+    return { status: 'error', version: app.getVersion() };
+  }
+});
 
 function downloadAsset(meta, destPath) {
   return new Promise((resolve, reject) => {

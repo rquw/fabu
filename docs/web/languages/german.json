@@ -467,5 +467,10 @@
   "mp_reconnecting": "Verbindung verloren, verbinde neu…",
   "mp_reconnected": "Wieder verbunden",
   "mp_reconnect_failed": "Neuverbinden hat nicht geklappt",
-  "mp_waking": "Server wird geweckt… das kann eine Minute dauern"
+  "mp_waking": "Server wird geweckt… das kann eine Minute dauern",
+  "set_check_updates": "Nach Updates suchen",
+  "set_checking": "Suche…",
+  "set_up_to_date": "Du bist auf der neuesten Version.",
+  "set_check_failed": "Konnte nicht prüfen. Bist du online?",
+  "set_web_version": "fabu web, immer die neueste Version"
 }
