@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.0.3
+- Fixed Windows auto-update. Updates now install silently and reliably instead of failing and leaving the app uninstalled. (Switched to a one-click installer.)
+
 ## 1.0.2
 - Fixed a lot of bugs in multiplayer: no more lag storms, edits and sliders no longer jump back, joining no longer wipes the project, and false "host left" / two-hosts is fixed.
 - Multiplayer cursors are smooth now, everyone has their own colour, and you can see other players' playheads.
