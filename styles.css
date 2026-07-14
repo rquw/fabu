@@ -1242,6 +1242,16 @@ input[type="range"].locked { opacity: 0.45; filter: saturate(0.4); }
 #homeKofi:hover { opacity: 1; color: var(--accent); border-color: var(--accent); transform: translateY(-1px); }
 #homeKofi .kofi-cup { font-size: 13px; }
 
+/* quiet version tag in the corner of the homescreen (desktop app only) */
+#homeVer {
+  position: absolute;
+  left: 18px;
+  bottom: 30px;
+  font-size: 11px;
+  color: var(--faint);
+  opacity: 0.6;
+}
+
 /* ---- Web-only mobile nudge ---- */
 #webNudge {
   position: fixed;
@@ -1303,6 +1313,7 @@ input[type="range"].locked { opacity: 0.45; filter: saturate(0.4); }
   .home-recent-list { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
 
   #homeLangs { position: static; margin: 6px 0 0; }
-  #homeKofi { position: static; align-self: center; margin: 10px 0 84px; }
+  #homeKofi { position: static; align-self: center; margin: 10px 0 0; }
+  #homeVer { position: static; align-self: center; margin: 8px 0 20px; }
 }
 

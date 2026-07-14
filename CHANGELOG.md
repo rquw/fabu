@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.0.9
+- You can now see your version (home screen corner + Settings) and check for updates yourself with a button in Settings.
+
 ## 1.0.8
 - Multiplayer: if your connection drops, fabu reconnects by itself and slips you back into the room, no re-approval, no "left/joined" spam.
 - Multiplayer: late-arriving old states can no longer roll back newer edits.
