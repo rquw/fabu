@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.0.4
+- Fixed bugs.
+
 ## 1.0.3
 - Fixed Windows auto-update. Updates now install silently and reliably instead of failing and leaving the app uninstalled. (Switched to a one-click installer.)
 

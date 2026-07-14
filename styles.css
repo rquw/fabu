@@ -790,6 +790,7 @@ kbd {
 .home-act .ic { width: 16px; height: 16px; }
 .home-act:hover { background: #eb8b52; }
 .home-act:active { transform: translateY(1px); }
+#homeNew:hover { transform: scale(1.05); }
 .home-act.ghost {
   background: transparent;
   border-color: var(--line);
