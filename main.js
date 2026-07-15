@@ -19,11 +19,28 @@ function setupAutoUpdate() {
   try { ({ autoUpdater: updater } = require('electron-updater')); } catch (e) { return; }
   updater.autoDownload = false;
   updater.autoInstallOnAppQuit = false;
+  // full download instead of the differential/blockmap one — the diff download
+  // was what kept cancelling halfway on the unsigned build.
+  updater.disableDifferentialDownload = true;
   updater.on('update-available', (info) => {
     updateInfo = info;
     if (win) win.webContents.send('update-ready', info && info.version);
   });
-  updater.on('error', () => { /* offline or no release: ignore silently */ });
+  // Windows: electron-updater does the download + install (it sequences the
+  // app-quit-then-install correctly; the old hand-rolled spawn raced it and
+  // never actually replaced the files).
+  updater.on('download-progress', (p) => {
+    if (win) win.webContents.send('update-progress', Math.floor(p.percent || 0));
+  });
+  updater.on('update-downloaded', async () => {
+    if (win) win.webContents.send('update-restarting');
+    quitOk = true;
+    await new Promise((r) => setTimeout(r, 700)); // let the renderer autosave
+    try { updater.quitAndInstall(false, true); } catch (e) { /* ignore */ }
+  });
+  updater.on('error', () => {
+    if (win) win.webContents.send('update-error', 'err');
+  });
   updater.checkForUpdates().catch(() => {});
   // check again every 3 hours for long sessions
   setInterval(() => updater.checkForUpdates().catch(() => {}), 3 * 3600 * 1000);
@@ -99,13 +116,12 @@ function cleanUpdateLeftovers() {
   } catch (e) { /* ignore */ }
 }
 
-async function applyUpdate() {
+async function applyUpdateMac() {
   const files = (updateInfo && updateInfo.files) || [];
-  const wantExt = process.platform === 'darwin' ? '.zip' : '.exe';
-  const meta = files.find((f) => f.url && f.url.endsWith(wantExt));
+  const meta = files.find((f) => f.url && f.url.endsWith('.zip'));
   if (!meta) throw new Error('no installer in this release');
   const tmp = app.getPath('temp');
-  const dest = path.join(tmp, 'fabu-update-' + updateInfo.version + wantExt);
+  const dest = path.join(tmp, 'fabu-update-' + updateInfo.version + '.zip');
   try {
     await downloadAsset(meta, dest);
   } catch (e) {
@@ -119,47 +135,48 @@ async function applyUpdate() {
   if (win) win.webContents.send('update-restarting');
   await new Promise((r) => setTimeout(r, 700));
 
-  if (process.platform === 'darwin') {
-    // unpack the new fabu.app and swap it in place, then relaunch
-    const { execFile } = require('child_process');
-    const run = (cmd, args) => new Promise((res, rej) => execFile(cmd, args, (e) => (e ? rej(e) : res())));
-    const dir = path.join(tmp, 'fabu-update-' + updateInfo.version);
-    fs.rmSync(dir, { recursive: true, force: true });
-    fs.mkdirSync(dir, { recursive: true });
-    await run('/usr/bin/ditto', ['-x', '-k', dest, dir]);
-    const newApp = path.join(dir, 'fabu.app');
-    if (!fs.existsSync(newApp)) throw new Error('no app in the update');
-    const curApp = path.resolve(process.execPath, '..', '..', '..');
-    if (!curApp.endsWith('.app')) throw new Error('not running from an .app');
-    try { await run('/usr/bin/xattr', ['-dr', 'com.apple.quarantine', newApp]); } catch (e) { /* none set */ }
-    const oldApp = path.join(tmp, 'fabu-old-' + Date.now() + '.app');
-    await run('/bin/mv', [curApp, oldApp]);
-    try {
-      await run('/bin/mv', [newApp, curApp]);
-    } catch (e) {
-      await run('/bin/mv', [oldApp, curApp]); // put the old one back
-      throw e;
-    }
-    quitOk = true;
-    app.relaunch();
-    app.quit();
-  } else {
-    // windows: run the verified one-click installer silently; it swaps the app
-    // and starts the new version
-    const { spawn } = require('child_process');
-    spawn(dest, ['/S', '--force-run'], { detached: true, stdio: 'ignore' }).unref();
-    quitOk = true;
-    app.quit();
+  // unpack the new fabu.app and swap it in place, then relaunch
+  const { execFile } = require('child_process');
+  const run = (cmd, args) => new Promise((res, rej) => execFile(cmd, args, (e) => (e ? rej(e) : res())));
+  const dir = path.join(tmp, 'fabu-update-' + updateInfo.version);
+  fs.rmSync(dir, { recursive: true, force: true });
+  fs.mkdirSync(dir, { recursive: true });
+  await run('/usr/bin/ditto', ['-x', '-k', dest, dir]);
+  const newApp = path.join(dir, 'fabu.app');
+  if (!fs.existsSync(newApp)) throw new Error('no app in the update');
+  const curApp = path.resolve(process.execPath, '..', '..', '..');
+  if (!curApp.endsWith('.app')) throw new Error('not running from an .app');
+  // strip quarantine and ad-hoc sign so Gatekeeper doesn't re-warn on the swap
+  try { await run('/usr/bin/xattr', ['-cr', newApp]); } catch (e) { /* none set */ }
+  try { await run('/usr/bin/codesign', ['--force', '--deep', '--sign', '-', newApp]); } catch (e) { /* best effort */ }
+  const oldApp = path.join(tmp, 'fabu-old-' + Date.now() + '.app');
+  await run('/bin/mv', [curApp, oldApp]);
+  try {
+    await run('/bin/mv', [newApp, curApp]);
+  } catch (e) {
+    await run('/bin/mv', [oldApp, curApp]); // put the old one back
+    throw e;
   }
+  quitOk = true;
+  app.relaunch();
+  app.quit();
 }
 
 ipcMain.on('install-update', () => {
   if (!updateInfo) { shell.openExternal('https://rquw.github.io/fabu/').catch(() => {}); return; }
-  applyUpdate().catch((e) => {
+  const fail = (e) => {
     if (win) win.webContents.send('update-error', String((e && e.message) || e));
-    // fallback: the site always works
-    shell.openExternal('https://rquw.github.io/fabu/').catch(() => {});
-  });
+    shell.openExternal('https://rquw.github.io/fabu/').catch(() => {}); // the site always works
+  };
+  if (process.platform === 'darwin') {
+    // macOS can't use electron-updater unsigned, so we swap the .app ourselves
+    applyUpdateMac().catch(fail);
+  } else {
+    // Windows: electron-updater downloads then installs (fires download-progress
+    // + update-downloaded above)
+    if (!updater) { fail(new Error('no updater')); return; }
+    updater.downloadUpdate().catch(fail);
+  }
 });
 
 function createWindow() {

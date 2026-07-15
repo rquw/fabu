@@ -548,6 +548,18 @@ kbd {
 }
 #keysInfo { display: flex; flex-direction: column; gap: 7px; min-width: 190px; }
 .keys-row { display: flex; align-items: center; gap: 8px; }
+.keys-close {
+  position: absolute;
+  top: 6px; right: 6px;
+  width: 22px; height: 22px;
+  display: flex; align-items: center; justify-content: center;
+  border: none; border-radius: 6px;
+  background: transparent; color: var(--faint);
+  cursor: pointer;
+  transition: background 0.12s var(--ease), color 0.12s var(--ease);
+}
+.keys-close:hover { background: var(--panel2); color: var(--text); }
+.keys-close .ic { width: 13px; height: 13px; }
 .ki-label { font-size: 10px; font-weight: 700; color: var(--faint); letter-spacing: 0.5px; width: 74px; }
 .keys-row select { background: var(--panel2); border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; }
 .mini-btn {
@@ -725,14 +737,46 @@ kbd {
   position: fixed;
   inset: 0;
   z-index: 400;
+  overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
-  background:
-    radial-gradient(900px 520px at 78% -8%, rgba(224, 122, 63, 0.10), transparent),
-    radial-gradient(700px 500px at 12% 108%, rgba(86, 182, 166, 0.07), transparent),
-    var(--bg);
+  background: var(--bg);
   animation: homeIn 0.24s var(--ease);
+}
+/* slow, softly drifting blurred colour blobs for a living background */
+#home::before, #home::after {
+  content: '';
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(70px);
+  pointer-events: none;
+  z-index: 0;
+  will-change: transform;
+}
+#home::before {
+  width: 46vw; height: 46vw; max-width: 620px; max-height: 620px;
+  top: -12vh; right: -6vw;
+  background: radial-gradient(circle, rgba(224, 122, 63, 0.42), transparent 68%);
+  animation: blobDriftA 26s ease-in-out infinite alternate;
+}
+#home::after {
+  width: 44vw; height: 44vw; max-width: 560px; max-height: 560px;
+  bottom: -16vh; left: -6vw;
+  background: radial-gradient(circle, rgba(86, 182, 166, 0.30), transparent 68%);
+  animation: blobDriftB 32s ease-in-out infinite alternate;
+}
+@keyframes blobDriftA {
+  from { transform: translate(0, 0) scale(1); }
+  to   { transform: translate(-9vw, 10vh) scale(1.18); }
+}
+@keyframes blobDriftB {
+  from { transform: translate(0, 0) scale(1); }
+  to   { transform: translate(8vw, -8vh) scale(1.14); }
+}
+.home-inner, #homeLangs, #homeKofi, #homeVer { position: relative; z-index: 1; }
+@media (prefers-reduced-motion: reduce) {
+  #home::before, #home::after { animation: none; }
 }
 #home.closing { animation: homeOut 0.22s var(--ease) forwards; }
 @keyframes homeIn { from { opacity: 0; } to { opacity: 1; } }

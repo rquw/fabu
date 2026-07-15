@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.0
+- Updating actually works now, for real. Windows installs the update properly instead of failing, and Mac swaps itself in place. This is the last version you have to install by hand — everything after updates itself.
+- Mac: the app is ad-hoc signed so it launches cleanly (including on Apple Silicon), and after the first open you never see the security prompt again.
+- The home screen background gently drifts now.
+- The on-screen keyboard has a close button, and picking an instrument no longer stops the keys from playing.
+
 ## 1.0.9
 - You can now see your version (home screen corner + Settings) and check for updates yourself with a button in Settings.
 

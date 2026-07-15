@@ -472,5 +472,6 @@
   "set_checking": "Checking…",
   "set_up_to_date": "You're on the latest version.",
   "set_check_failed": "Could not check. Are you online?",
-  "set_web_version": "fabu web, always the latest version"
+  "set_web_version": "fabu web, always the latest version",
+  "tip_keys_close": "Close the keyboard (K)"
 }

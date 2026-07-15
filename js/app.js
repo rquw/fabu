@@ -1141,10 +1141,24 @@ const KeysPanel = {
   visible: false,
 
   init() {
-    $('#octDown').addEventListener('click', () => this.setOctave(UI.keysOctave - 1));
-    $('#octUp').addEventListener('click', () => this.setOctave(UI.keysOctave + 1));
-    $('#keysTrackSel').addEventListener('change', (e) => { UI.keysTrackId = e.target.value; });
-    $('#keysRecBtn').addEventListener('click', () => Engine.toggleMidiRecord());
+    // controls steal keyboard focus, which then swallows the note keys until you
+    // click back into the app; blur them so playing keeps working right away.
+    const blurSoon = (el) => setTimeout(() => { if (el && el.blur) el.blur(); }, 0);
+    $('#octDown').addEventListener('click', (e) => { this.setOctave(UI.keysOctave - 1); blurSoon(e.currentTarget); });
+    $('#octUp').addEventListener('click', (e) => { this.setOctave(UI.keysOctave + 1); blurSoon(e.currentTarget); });
+    $('#keysTrackSel').addEventListener('change', (e) => { UI.keysTrackId = e.target.value; blurSoon(e.target); });
+    $('#keysRecBtn').addEventListener('click', (e) => { Engine.toggleMidiRecord(); blurSoon(e.currentTarget); });
+
+    // a close button (X) on the keyboard panel
+    const close = document.createElement('button');
+    close.id = 'keysClose';
+    close.className = 'keys-close';
+    close.setAttribute('aria-label', 'close');
+    close.dataset.tip = tr('tip_keys_close', 'Close the keyboard (K)');
+    close.innerHTML = '<svg class="ic"><use href="#i-x"/></svg>';
+    close.addEventListener('click', () => this.toggle());
+    $('#keysPanel').appendChild(close);
+
     this.refreshTracks();
   },
 

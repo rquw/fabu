@@ -47,6 +47,9 @@
   .dl-alt{font-size:13px;color:var(--dim)}
   .dl-alt a{color:var(--teal);text-decoration:none}
   .dl-alt a:hover{text-decoration:underline}
+  #firstRun{font-size:12.5px;color:var(--faint);margin:12px 0 2px;line-height:1.5;max-width:520px}
+  #firstRun b{color:var(--dim);font-weight:600}
+  #firstRun kbd{background:var(--panel);border:1px solid var(--line);border-radius:5px;padding:1px 6px;font-size:11.5px;color:var(--text)}
 
   .badges{display:flex;flex-wrap:wrap;gap:10px;margin:22px 0 6px}
   .badge{
@@ -87,6 +90,7 @@
     </a>
     <div class="dl-alt" id="dlAlt"><a href="https://github.com/rquw/fabu/releases/latest">All downloads →</a></div>
   </div>
+  <div id="firstRun"></div>
 
   <div class="badges">
     <span class="badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>Free forever</span>
@@ -153,13 +157,17 @@
 
   var ALL_DL = '<a href="' + RELEASES + '">All downloads →</a>';
 
+  var firstRun = document.getElementById('firstRun');
+
   // baseline (before the API answers)
   if (isWin) {
     setBtns(RELEASES, 'Download for Windows', '', ICON_WIN);
     document.getElementById('dlAlt').innerHTML = ALL_DL;
+    firstRun.innerHTML = 'First time only: Windows may warn it’s from an unknown publisher — click <b>More info</b> → <b>Run anyway</b>. After that, fabu updates itself.';
   } else if (isMac) {
     setBtns(RELEASES, 'Download for Mac', '', ICON_APPLE);
     document.getElementById('dlAlt').innerHTML = ALL_DL;
+    firstRun.innerHTML = 'First time only: macOS will say the developer can’t be verified. <b>Right-click the fabu app → Open → Open</b> (or Open Anyway in System Settings › Privacy &amp; Security). You only do this once — updates after that are seamless.';
   } else {
     // iPhone / iPad / Android / Linux / anything else: no installer, use the web app
     setBtns(WEB, 'Use Web-Version', "(you're on an unsupported platform)", ICON_WEB);
