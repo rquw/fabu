@@ -149,3 +149,25 @@ function b64ToBuf(b64) {
   for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
   return bytes.buffer;
 }
+
+// ---------- droppable clip effects ----------
+// One entry per effect the user can drag from the Effects browser onto a clip.
+// p = param defs: key -> { min, max, step, def, unit }
+const FX_DEFS = {
+  reverb: { nameKey: 'fx_reverb', fallback: 'Reverb',
+    p: { amt: { min: 0, max: 1, step: 0.01, def: 0.35, labelKey: 'fx_amount', labelFb: 'Amount' } } },
+  echo: { nameKey: 'fx_echo', fallback: 'Echo',
+    p: { time: { min: 0.05, max: 1, step: 0.01, def: 0.3, labelKey: 'fx_time', labelFb: 'Time' },
+         fb:   { min: 0, max: 0.9, step: 0.01, def: 0.35, labelKey: 'fx_feedback', labelFb: 'Feedback' },
+         mix:  { min: 0, max: 1, step: 0.01, def: 0.35, labelKey: 'fx_mix', labelFb: 'Mix' } } },
+  dampen: { nameKey: 'fx_dampen', fallback: 'Dampen',
+    p: { freq: { min: 200, max: 20000, step: 100, def: 2500, labelKey: 'fx_cutoff', labelFb: 'Cutoff' } } },
+  drive: { nameKey: 'fx_drive', fallback: 'Drive',
+    p: { amt: { min: 0, max: 100, step: 1, def: 40, labelKey: 'fx_amount', labelFb: 'Amount' } } },
+  crush: { nameKey: 'fx_crush', fallback: 'Crush',
+    p: { amt: { min: 0, max: 100, step: 1, def: 50, labelKey: 'fx_amount', labelFb: 'Amount' } } }
+};
+function fxName(type) {
+  const d = FX_DEFS[type];
+  return d ? tr(d.nameKey, d.fallback) : type;
+}

@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.1.1
+- Select many at once: drag a box on the timeline or in the piano roll, shift-click to add. Move, resize, delete and duplicate work on the whole selection.
+- Effects you can drag onto clips: Reverb, Echo, Dampen, Drive, Crush (new Effects window in the toolbar). Right-click a clip → "Edit effects" to tweak or remove them.
+- Instrument clips get Drive, Crush and Filter too, and effect edits apply live while the song plays.
+- The mixer EQ is visual now: drag the three points to shape the curve.
+- New instruments: E-Piano, Organ, Strings.
+- Metronome: real tick sound options — long-press the metronome button to pick one.
+- Smoother on weak computers: fabu limits voices under load, and Settings has a "Reduce CPU load" switch.
+- Small stuff: BPM dragging locks the cursor, the add-track buttons sit under the track list now, and recent projects have listen/edit halves.
+
 ## 1.1.0
 - Updating actually works now, for real. Windows installs the update properly instead of failing, and Mac swaps itself in place. This is the last version you have to install by hand — everything after updates itself.
 - Mac: you only see the security prompt on the very first open (right-click → Open). After that, updates are seamless and prompt-free.

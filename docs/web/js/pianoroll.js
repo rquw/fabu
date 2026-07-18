@@ -3,7 +3,8 @@
 
 const PianoRoll = {
   clipId: null,
-  selNoteId: null,
+  selNoteId: null,        // primary
+  selNoteIds: new Set(),  // full selection
   topPitch: 84,       // highest visible pitch
   rowH: 14,
   pxb: 96,            // pixels per beat
@@ -27,6 +28,7 @@ const PianoRoll = {
   open(clipId) {
     this.clipId = clipId;
     this.selNoteId = null;
+    this.selNoteIds = new Set();
     const f = this.clip();
     if (!f) return;
 
@@ -80,7 +82,9 @@ const PianoRoll = {
     if (!this.isOpen()) return;
     const f = this.clip();
     if (!f) { this.close(); return; }
-    if (this.selNoteId && !f.clip.notes.find(n => n.id === this.selNoteId)) this.selNoteId = null;
+    const live = new Set(f.clip.notes.map(n => n.id));
+    for (const id of [...this.selNoteIds]) if (!live.has(id)) this.selNoteIds.delete(id);
+    if (this.selNoteId && !live.has(this.selNoteId)) this.selNoteId = [...this.selNoteIds].pop() || null;
     this.redraw();
   },
 
@@ -174,7 +178,7 @@ const PianoRoll = {
       if (y < -this.rowH || y > H) continue;
       const x = n.start * this.pxb;
       const nw = Math.max(4, n.length * this.pxb - 1);
-      const sel = n.id === this.selNoteId;
+      const sel = this.selNoteIds.has(n.id);
       g.fillStyle = sel ? '#ffffff' : f.track.color;
       g.beginPath();
       g.roundRect(x, y + 1, nw, this.rowH - 2.5, 3);
@@ -186,6 +190,15 @@ const PianoRoll = {
         g.font = '700 9px -apple-system, sans-serif';
         g.fillText(noteName(n.pitch), x + 4, y + 10.5);
       }
+    }
+
+    if (this._marquee) {
+      const m = this._marquee;
+      g.fillStyle = 'rgba(224,122,63,0.14)';
+      g.fillRect(m.L, m.T, m.R - m.L, m.B - m.T);
+      g.strokeStyle = 'rgba(224,122,63,0.85)';
+      g.lineWidth = 1;
+      g.strokeRect(m.L + 0.5, m.T + 0.5, m.R - m.L - 1, m.B - m.T - 1);
     }
   },
 
@@ -207,13 +220,16 @@ const PianoRoll = {
       const r = gc.getBoundingClientRect();
       const n = this.noteAt(e.clientX - r.left, e.clientY - r.top);
       if (n) {
-        Undo.push('Delete note');
         const f = this.clip();
-        f.clip.notes.splice(f.clip.notes.indexOf(n), 1);
-        if (this.selNoteId === n.id) this.selNoteId = null;
+        // delete the whole selection if the note is part of a multi-selection
+        const ids = (this.selNoteIds.has(n.id) && this.selNoteIds.size > 1) ? new Set(this.selNoteIds) : new Set([n.id]);
+        Undo.push(ids.size > 1 ? 'Delete notes' : 'Delete note');
+        f.clip.notes = f.clip.notes.filter(nn => !ids.has(nn.id));
+        for (const id of ids) this.selNoteIds.delete(id);
+        this.selNoteId = [...this.selNoteIds].pop() || null;
         this.redraw();
         Timeline.drawClip(this.clipId);
-        toast(tr('toast_note_deleted', 'Note deleted'));
+        toast(ids.size > 1 ? tr('toast_notes_deleted', '{n} notes deleted', { n: ids.size }) : tr('toast_note_deleted', 'Note deleted'));
       }
     });
 
@@ -225,6 +241,36 @@ const PianoRoll = {
       const x = e.clientX - r.left;
       const y = e.clientY - r.top;
       let n = this.noteAt(x, y);
+
+      // shift toggles a note, or draws a marquee over empty grid
+      if (e.shiftKey) {
+        if (n) {
+          if (this.selNoteIds.has(n.id)) this.selNoteIds.delete(n.id); else this.selNoteIds.add(n.id);
+          this.selNoteId = [...this.selNoteIds].pop() || null;
+          this.redraw();
+          return;
+        }
+        const preSel = new Set(this.selNoteIds);
+        const mmove = (ev) => {
+          const x1 = ev.clientX - r.left, y1 = ev.clientY - r.top;
+          const L = Math.min(x, x1), T = Math.min(y, y1), R = Math.max(x, x1), B = Math.max(y, y1);
+          this._marquee = { L, T, R, B };
+          const hits = new Set(preSel);
+          for (const nn of f.clip.notes) {
+            const nx = nn.start * this.pxb, nw = Math.max(4, nn.length * this.pxb), ny = this.pitchToY(nn.pitch);
+            if (nx < R && nx + nw > L && ny < B && ny + this.rowH > T) hits.add(nn.id);
+          }
+          this.selNoteIds = hits; this.selNoteId = [...hits].pop() || null;
+          this.redraw();
+        };
+        const mup = () => {
+          window.removeEventListener('mousemove', mmove); window.removeEventListener('mouseup', mup);
+          this._marquee = null; this.redraw();
+        };
+        window.addEventListener('mousemove', mmove); window.addEventListener('mouseup', mup);
+        return;
+      }
+
       let mode = 'move';
       let pushed = false;
 
@@ -237,6 +283,8 @@ const PianoRoll = {
         }
         // right edge = resize
         if (x > (n.start + n.length) * this.pxb - 7) mode = 'resize';
+        // clicking an unselected note selects just it; keep the group otherwise
+        if (!this.selNoteIds.has(n.id)) this.selNoteIds = new Set([n.id]);
         this.selNoteId = n.id;
         Engine.previewNote(f.track, n.pitch, 0.25);
       } else {
@@ -252,6 +300,7 @@ const PianoRoll = {
           vel: 0.9
         };
         f.clip.notes.push(n);
+        this.selNoteIds = new Set([n.id]);
         this.selNoteId = n.id;
         this.extendClipIfNeeded(n);
         Engine.previewNote(f.track, n.pitch, 0.25);
@@ -261,6 +310,10 @@ const PianoRoll = {
 
       const startX = e.clientX, startY = e.clientY;
       const orig = { start: n.start, pitch: n.pitch, length: n.length };
+      // the rest of the selection moves along with the primary note
+      const groupNotes = [...this.selNoteIds].filter(id => id !== n.id)
+        .map(id => f.clip.notes.find(nn => nn.id === id)).filter(Boolean)
+        .map(nn => ({ note: nn, start: nn.start, pitch: nn.pitch }));
       let lastPreview = n.pitch;
 
       const move = (ev) => {
@@ -284,8 +337,14 @@ const PianoRoll = {
             Engine.previewNote(f.track, n.pitch, 0.15);
             lastPreview = n.pitch;
           }
+          const dStart = n.start - orig.start, dPitch = n.pitch - orig.pitch;
+          for (const gr of groupNotes) {
+            gr.note.start = Math.max(0, gr.start + dStart);
+            gr.note.pitch = clamp(gr.pitch + dPitch, 12, 120);
+          }
         }
         this.extendClipIfNeeded(n);
+        for (const gr of groupNotes) this.extendClipIfNeeded(gr.note);
         this.redraw();
       };
       const up = () => {
@@ -320,37 +379,44 @@ const PianoRoll = {
 
   // note operations used by global shortcuts (only while the roll is open,
   // otherwise the shortcut should fall through to the clip-level action)
+  selectedNotes() {
+    const f = this.clip();
+    if (!f) return [];
+    return f.clip.notes.filter(n => this.selNoteIds.has(n.id));
+  },
+
   deleteSelected() {
     if (!this.isOpen()) return false;
     const f = this.clip();
-    if (!f || !this.selNoteId) return false;
-    const n = f.clip.notes.find(n => n.id === this.selNoteId);
-    if (!n) return false;
-    Undo.push('Delete note');
-    f.clip.notes.splice(f.clip.notes.indexOf(n), 1);
+    const sel = this.selectedNotes();
+    if (!f || !sel.length) return false;
+    Undo.push(sel.length > 1 ? 'Delete notes' : 'Delete note');
+    f.clip.notes = f.clip.notes.filter(n => !this.selNoteIds.has(n.id));
+    this.selNoteIds.clear();
     this.selNoteId = null;
     this.redraw();
     Timeline.drawClip(this.clipId);
-    toast('Note deleted');
+    toast(sel.length > 1 ? tr('toast_notes_deleted', '{n} notes deleted', { n: sel.length }) : tr('toast_note_deleted', 'Note deleted'));
     return true;
   },
 
   copySelected(cut) {
     if (!this.isOpen()) return false;
     const f = this.clip();
-    if (!f || !this.selNoteId) return false;
-    const n = f.clip.notes.find(n => n.id === this.selNoteId);
-    if (!n) return false;
-    UI.clipboard = { type: 'note', data: JSON.parse(JSON.stringify(n)) };
+    const sel = this.selectedNotes();
+    if (!f || !sel.length) return false;
+    const base = Math.min(...sel.map(n => n.start));
+    UI.clipboard = { type: 'notes', data: sel.map(n => ({ ...JSON.parse(JSON.stringify(n)), start: n.start - base })) };
     if (cut) {
-      Undo.push('Cut note');
-      f.clip.notes.splice(f.clip.notes.indexOf(n), 1);
+      Undo.push(sel.length > 1 ? 'Cut notes' : 'Cut note');
+      f.clip.notes = f.clip.notes.filter(n => !this.selNoteIds.has(n.id));
+      this.selNoteIds.clear();
       this.selNoteId = null;
       this.redraw();
       Timeline.drawClip(this.clipId);
-      toast(tr('toast_note_cut', 'Note cut'));
+      toast(sel.length > 1 ? tr('toast_notes_cut', '{n} notes cut', { n: sel.length }) : tr('toast_note_cut', 'Note cut'));
     } else {
-      toast(tr('toast_note_copied', 'Note copied'));
+      toast(sel.length > 1 ? tr('toast_notes_copied', '{n} notes copied', { n: sel.length }) : tr('toast_note_copied', 'Note copied'));
     }
     return true;
   },
@@ -358,17 +424,29 @@ const PianoRoll = {
   paste() {
     if (!this.isOpen()) return false;
     const f = this.clip();
-    if (!f || !UI.clipboard || UI.clipboard.type !== 'note') return false;
-    Undo.push('Paste note');
-    const n = JSON.parse(JSON.stringify(UI.clipboard.data));
-    n.id = uid('note');
-    n.start = n.start + n.length; // lands right after the original
-    f.clip.notes.push(n);
-    this.selNoteId = n.id;
-    this.extendClipIfNeeded(n);
+    if (!f || !UI.clipboard) return false;
+    // accept both a single legacy note and a group of notes
+    let notes;
+    if (UI.clipboard.type === 'notes') notes = UI.clipboard.data;
+    else if (UI.clipboard.type === 'note') notes = [{ ...UI.clipboard.data, start: 0 }];
+    else return false;
+    Undo.push(notes.length > 1 ? 'Paste notes' : 'Paste note');
+    // drop the group at the playhead (or at the start of the clip)
+    const at = this.snap ? Math.round((this.selNoteId ? 0 : 0) / this.snap) * this.snap : 0;
+    const newIds = new Set();
+    for (const src of notes) {
+      const n = JSON.parse(JSON.stringify(src));
+      n.id = uid('note');
+      n.start = at + src.start;
+      f.clip.notes.push(n);
+      this.extendClipIfNeeded(n);
+      newIds.add(n.id);
+    }
+    this.selNoteIds = newIds;
+    this.selNoteId = [...newIds].pop() || null;
     this.redraw();
     Timeline.drawClip(this.clipId);
-    toast(tr('toast_note_pasted', 'Note pasted'));
+    toast(notes.length > 1 ? tr('toast_notes_pasted', '{n} notes pasted', { n: notes.length }) : tr('toast_note_pasted', 'Note pasted'));
     return true;
   }
 };

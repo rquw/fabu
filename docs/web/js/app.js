@@ -366,10 +366,17 @@ const App = {
       card.innerHTML = `
         <div class="home-card-art" style="--h:${hue}">
           <svg class="ic"><use href="#i-note"/></svg>
+          <div class="card-acts">
+            <span class="card-act" data-act="listen" data-tip="${tr('recent_listen', 'Open and play')}"><svg class="ic"><use href="#i-play"/></svg></span>
+            <span class="card-act" data-act="edit" data-tip="${tr('recent_edit', 'Open to edit')}"><svg class="ic"><use href="#i-edit"/></svg></span>
+          </div>
         </div>
         <div class="home-card-name">${r.name || 'Untitled'}</div>
         <div class="home-card-sub">${this.agoText(r.at)}</div>`;
-      card.addEventListener('click', () => this.openRecent(r.path));
+      card.addEventListener('click', (e) => {
+        const act = e.target.closest && e.target.closest('.card-act');
+        this.openRecent(r.path, !!(act && act.dataset.act === 'listen'));
+      });
       card.addEventListener('contextmenu', (e) => {
         e.preventDefault();
         this.removeRecent(r.path);
@@ -379,8 +386,9 @@ const App = {
     });
   },
 
-  async openRecent(path) {
+  async openRecent(path, autoplay = false) {
     if (!window.electronAPI) { toast(tr('toast_recents_need_app', 'Recents need the app'), 'red'); return; }
+    if (autoplay) { Engine.ensureCtx(); Engine.ctx.resume(); } // grab the click's audio permission
     const res = await window.electronAPI.openPath({ filePath: path });
     if (!res.ok) {
       toast(tr('toast_open_failed', 'File could not be opened'), 'red');
@@ -389,6 +397,7 @@ const App = {
     }
     await this.loadFab(b64ToBuf(res.data), res.name, res.path);
     this.hideHome();
+    if (autoplay) setTimeout(() => { if (!UI.playing) this.togglePlay(); }, 250);
   },
 
   // ---------- languages (file-driven i18n) ----------
@@ -548,19 +557,47 @@ const App = {
 
   // ---------- selection ----------
 
-  selectClip(id) {
-    UI.selClipId = id;
-    for (const el of $$('.clip')) el.classList.toggle('sel', el.dataset.clipId === id);
-    if (id) {
-      const f = getClip(id);
+  selectClip(id, add = false) {
+    if (!add) {
+      UI.selClipIds = new Set(id ? [id] : []);
+      UI.selClipId = id;
+    } else if (id) {
+      // shift-click: toggle membership, last one clicked becomes primary
+      if (UI.selClipIds.has(id) && UI.selClipIds.size > 1) {
+        UI.selClipIds.delete(id);
+        if (UI.selClipId === id) UI.selClipId = [...UI.selClipIds].pop() || null;
+      } else {
+        UI.selClipIds.add(id);
+        UI.selClipId = id;
+      }
+    }
+    this.paintClipSelection();
+    if (UI.selClipId) {
+      const f = getClip(UI.selClipId);
       if (f) this.selectTrack(f.track.id);
       const w = Windows.wins.get('inspector');
       if (w) w.refresh();
-      setHint(tr('hint_clip_selected', 'Drag to move, double-click to edit, right-click to delete, Cmd D to duplicate.'));
+      setHint(UI.selClipIds.size > 1
+        ? tr('hint_clips_selected', '{n} clips selected. Drag moves them together, edge-drag resizes them together.', { n: UI.selClipIds.size })
+        : tr('hint_clip_selected', 'Drag to move, double-click to edit, right-click to delete, Cmd D to duplicate.'));
     } else {
       const w = Windows.wins.get('inspector');
       if (w) w.refresh();
     }
+  },
+
+  // replace the whole selection at once (marquee)
+  selectClipSet(ids) {
+    UI.selClipIds = new Set(ids);
+    UI.selClipId = ids.length ? ids[ids.length - 1] : null;
+    this.paintClipSelection();
+    const w = Windows.wins.get('inspector');
+    if (w) w.refresh();
+    if (ids.length > 1) setHint(tr('hint_clips_selected', '{n} clips selected. Drag moves them together, edge-drag resizes them together.', { n: ids.length }));
+  },
+
+  paintClipSelection() {
+    for (const el of $$('.clip')) el.classList.toggle('sel', UI.selClipIds.has(el.dataset.clipId));
   },
 
   selectTrack(id) {
@@ -618,31 +655,37 @@ const App = {
   },
 
   deleteSelectedClip() {
-    if (!UI.selClipId) return;
-    const f = getClip(UI.selClipId);
-    if (!f) return;
-    Undo.push('Delete clip');
-    f.track.clips.splice(f.track.clips.indexOf(f.clip), 1);
-    UI.selClipId = null;
-    if (PianoRoll.clipId === f.clip.id) PianoRoll.close();
+    if (!UI.selClipIds.size) return;
+    const found = [...UI.selClipIds].map(getClip).filter(Boolean);
+    if (!found.length) return;
+    Undo.push(found.length > 1 ? 'Delete clips' : 'Delete clip');
+    for (const f of found) {
+      f.track.clips.splice(f.track.clips.indexOf(f.clip), 1);
+      if (PianoRoll.clipId === f.clip.id) PianoRoll.close();
+    }
+    this.selectClip(null);
     Timeline.render();
     Windows.refreshAll();
-    toast(tr('toast_clip_deleted', 'Clip deleted'));
+    toast(found.length > 1 ? tr('toast_clips_deleted', '{n} clips deleted', { n: found.length }) : tr('toast_clip_deleted', 'Clip deleted'));
   },
 
   duplicateClip() {
-    if (!UI.selClipId) return;
-    const f = getClip(UI.selClipId);
-    if (!f) return;
-    Undo.push('Duplicate clip');
-    const c = JSON.parse(JSON.stringify(f.clip));
-    c.id = uid('clip');
-    if (c.notes) for (const n of c.notes) n.id = uid('note');
-    c.start = f.clip.start + clipBeats(f.clip);
-    f.track.clips.push(c);
+    if (!UI.selClipIds.size) return;
+    const found = [...UI.selClipIds].map(getClip).filter(Boolean);
+    if (!found.length) return;
+    Undo.push(found.length > 1 ? 'Duplicate clips' : 'Duplicate clip');
+    const newIds = [];
+    for (const f of found) {
+      const c = JSON.parse(JSON.stringify(f.clip));
+      c.id = uid('clip');
+      if (c.notes) for (const n of c.notes) n.id = uid('note');
+      c.start = f.clip.start + clipBeats(f.clip);
+      f.track.clips.push(c);
+      newIds.push(c.id);
+    }
     Timeline.render();
-    this.selectClip(c.id);
-    toast(tr('toast_clip_duplicated', 'Clip duplicated'));
+    this.selectClipSet(newIds);
+    toast(found.length > 1 ? tr('toast_clips_duplicated', '{n} clips duplicated', { n: found.length }) : tr('toast_clip_duplicated', 'Clip duplicated'));
   },
 
   // slice the selected clip in two at the playhead
@@ -731,6 +774,93 @@ const App = {
     this.selectClip(c.id);
     toast(tr('toast_clip_pasted', 'Clip pasted at playhead'));
     return true;
+  },
+
+  // ---------- droppable clip effects ----------
+
+  addFxToClip(clip, type) {
+    if (!FX_DEFS[type]) return;
+    Undo.push('Add effect');
+    clip.fx = clip.fx || [];
+    const p = {};
+    for (const [k, def] of Object.entries(FX_DEFS[type].p)) p[k] = def.def;
+    clip.fx.push({ id: uid('fx'), type, p });
+    Timeline.render();
+    if (UI.playing) Engine.reschedule();
+    toast(tr('fx_added', '{name} added to the clip', { name: fxName(type) }), 'green');
+  },
+
+  openFxEditor(clipId) {
+    const f = getClip(clipId);
+    if (!f) return;
+    const old = document.getElementById('fxEditor');
+    if (old) old.remove();
+    const wrap = document.createElement('div');
+    wrap.id = 'fxEditor';
+    wrap.className = 'modal-back';
+    document.body.appendChild(wrap);
+    wrap.addEventListener('mousedown', (e) => { if (e.target === wrap) wrap.remove(); });
+
+    const render = () => {
+      const clip = getClip(clipId) && getClip(clipId).clip;
+      if (!clip) { wrap.remove(); return; }
+      const list = clip.fx || [];
+      wrap.innerHTML = `
+        <div class="modal-card">
+          <div class="modal-title">${tr('fx_editor_title', 'Effects on "{name}"', { name: clip.name || 'Clip' })}</div>
+          <div class="modal-sub">${tr('fx_editor_sub', 'Changes apply right away, also while playing.')}</div>
+          <div id="fxRows"></div>
+          <div class="modal-btns"><button id="fxClose" class="fbtn accent">${tr('close', 'Close')}</button></div>
+        </div>`;
+      const rows = wrap.querySelector('#fxRows');
+      if (!list.length) rows.innerHTML = `<div style="color:var(--faint);font-size:12px;padding:6px 0">${tr('fx_none_on_clip', 'No effects on this clip. Drag some from the Effects window.')}</div>`;
+      for (const fx of list) {
+        const def = FX_DEFS[fx.type];
+        if (!def) continue;
+        const sec = document.createElement('div');
+        sec.className = 'fx-sec';
+        const head = document.createElement('div');
+        head.className = 'fx-sec-head';
+        head.innerHTML = `<span>${fxName(fx.type)}</span>`;
+        const rm = document.createElement('button');
+        rm.className = 'fbtn danger';
+        rm.textContent = tr('fx_remove', 'Remove');
+        rm.addEventListener('click', () => {
+          Undo.push('Remove effect');
+          clip.fx.splice(clip.fx.indexOf(fx), 1);
+          Timeline.render();
+          if (UI.playing) Engine.reschedule();
+          toast(tr('fx_removed', '{name} removed', { name: fxName(fx.type) }));
+          render();
+        });
+        head.appendChild(rm);
+        sec.appendChild(head);
+        for (const [k, pd] of Object.entries(def.p)) {
+          const row = document.createElement('div');
+          row.className = 'frow';
+          const lbl = document.createElement('label');
+          lbl.textContent = tr(pd.labelKey, pd.labelFb);
+          const inp = document.createElement('input');
+          inp.type = 'range';
+          inp.min = pd.min; inp.max = pd.max; inp.step = pd.step; inp.value = fx.p[k] ?? pd.def;
+          const val = document.createElement('span');
+          val.className = 'val';
+          const fmt = (v) => pd.max <= 1 ? Math.round(v * 100) + '%' : (k === 'freq' ? Math.round(v) + ' Hz' : (k === 'time' ? v.toFixed(2) + ' s' : Math.round(v)));
+          val.textContent = fmt(parseFloat(inp.value));
+          inp.addEventListener('input', () => {
+            if (!inp._g) { Undo.push('Edit effect'); inp._g = true; }
+            fx.p[k] = parseFloat(inp.value);
+            val.textContent = fmt(fx.p[k]);
+          });
+          inp.addEventListener('change', () => { inp._g = false; if (UI.playing) Engine.reschedule(); });
+          row.append(lbl, inp, val);
+          sec.appendChild(row);
+        }
+        rows.appendChild(sec);
+      }
+      wrap.querySelector('#fxClose').addEventListener('click', () => wrap.remove());
+    };
+    render();
   },
 
   // ---------- audio file import ----------
@@ -976,7 +1106,50 @@ const App = {
     $('#btnPlay').addEventListener('click', () => this.togglePlay());
     $('#btnStop').addEventListener('click', () => this.stop());
     $('#btnRec').addEventListener('click', () => Engine.toggleRecord());
-    $('#btnMetro').addEventListener('click', () => this.setMetronome(!S.metronome));
+    // metronome: click toggles, long-press (or right-click) picks the sound
+    const metroBtn = $('#btnMetro');
+    let metroHeld = false, metroTimer = null;
+    const openMetroMenu = () => {
+      metroHeld = true;
+      const old = document.getElementById('metroMenu');
+      if (old) old.remove();
+      const m = document.createElement('div');
+      m.id = 'metroMenu';
+      m.className = 'ctx-menu';
+      const names = {
+        classic: tr('metro_classic', 'Classic beep'),
+        tick: tr('metro_tick', 'Metronome tick'),
+        wood: tr('metro_wood', 'Woodblock'),
+        beep: tr('metro_beep', 'Soft beep')
+      };
+      const current = Engine.metroSound();
+      for (const k of Engine.METRO_SOUNDS) {
+        const b = document.createElement('button');
+        b.className = 'ctx-item';
+        b.textContent = (k === current ? '✓ ' : '  ') + names[k];
+        b.addEventListener('click', () => {
+          Engine.setMetroSound(k);
+          Engine.previewClick(k);
+          m.remove();
+          toast(tr('metro_set', 'Metronome sound: {name}', { name: names[k] }));
+        });
+        m.appendChild(b);
+      }
+      document.body.appendChild(m);
+      const r = metroBtn.getBoundingClientRect();
+      m.style.left = Math.min(r.left, window.innerWidth - m.offsetWidth - 8) + 'px';
+      m.style.top = (r.bottom + 6) + 'px';
+      const close = (ev) => { if (!m.contains(ev.target)) { m.remove(); window.removeEventListener('mousedown', close, true); } };
+      setTimeout(() => window.addEventListener('mousedown', close, true), 0);
+    };
+    metroBtn.addEventListener('pointerdown', () => {
+      metroHeld = false;
+      metroTimer = setTimeout(openMetroMenu, 480);
+    });
+    metroBtn.addEventListener('pointerup', () => clearTimeout(metroTimer));
+    metroBtn.addEventListener('pointerleave', () => clearTimeout(metroTimer));
+    metroBtn.addEventListener('click', () => { if (!metroHeld) this.setMetronome(!S.metronome); });
+    metroBtn.addEventListener('contextmenu', (e) => { e.preventDefault(); openMetroMenu(); });
     $('#btnUndo').addEventListener('click', () => Undo.undo());
     $('#btnRedo').addEventListener('click', () => Undo.redo());
     $('#btnSave').addEventListener('click', () => this.save());
@@ -988,8 +1161,7 @@ const App = {
     $('#btnKeys').addEventListener('click', () => KeysPanel.toggle());
     $('#btnZoomIn').addEventListener('click', () => Timeline.setZoom(UI.zoom * 1.3));
     $('#btnZoomOut').addEventListener('click', () => Timeline.setZoom(UI.zoom / 1.3));
-    $('#btnAddMidi').addEventListener('click', () => this.addTrack('midi'));
-    $('#btnAddAudio').addEventListener('click', () => this.addTrack('audio'));
+    $('#btnFx').addEventListener('click', () => Windows.toggleFxBrowser());
     $('#btnHome').addEventListener('click', () => this.goHome());
     $('#btnJam').addEventListener('click', () => Sync.togglePanel());
 
@@ -1000,19 +1172,32 @@ const App = {
 
     const bpm = $('#bpmInput');
     bpm.addEventListener('change', () => this.setBpm(parseFloat(bpm.value) || 120));
-    // drag the BPM number up/down
+    // drag the BPM number up/down; the cursor locks in place so it can't run
+    // off the screen mid-drag
     bpm.addEventListener('mousedown', (e) => {
       const startY = e.clientY;
       const startV = S.bpm;
       let pushed = false;
+      let acc = 0; // accumulated movement while the pointer is locked
       const move = (ev) => {
-        const dv = Math.round((startY - ev.clientY) / 3);
+        let dy;
+        if (document.pointerLockElement === bpm) {
+          acc += ev.movementY;
+          dy = -acc;
+        } else {
+          dy = startY - ev.clientY;
+          if (!pushed && Math.abs(dy) > 3 && bpm.requestPointerLock) {
+            try { bpm.requestPointerLock(); } catch (err) { /* fine without */ }
+          }
+        }
+        const dv = Math.round(dy / 3);
         if (dv !== 0 && !pushed) { Undo.push('Change BPM'); pushed = true; }
         if (pushed) this.setBpm(startV + dv, false);
       };
       const up = () => {
         window.removeEventListener('mousemove', move);
         window.removeEventListener('mouseup', up);
+        if (document.pointerLockElement === bpm && document.exitPointerLock) document.exitPointerLock();
       };
       window.addEventListener('mousemove', move);
       window.addEventListener('mouseup', up);
@@ -1023,6 +1208,7 @@ const App = {
 
   syncWindowButtons() {
     $('#btnMixer').classList.toggle('on', Windows.isOpen('mixer'));
+    $('#btnFx').classList.toggle('on', Windows.isOpen('fxbrowser'));
     $('#btnSettings').classList.toggle('on', Windows.isOpen('settings'));
     $('#btnHelp').classList.toggle('on', Windows.isOpen('help'));
     $('#btnKeys').classList.toggle('on', KeysPanel.visible);
