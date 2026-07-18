@@ -3,6 +3,9 @@
 
 const INSTRUMENTS = {
   keys:  'Keys',
+  epiano: 'E-Piano',
+  organ: 'Organ',
+  strings: 'Strings',
   synth: 'Synth Lead',
   bass:  'Bass',
   pluck: 'Pluck',
@@ -44,7 +47,8 @@ const Engine = {
     this.master.gain.value = S.masterVol;
     this.master.connect(this.comp);
     // a little room reverb makes the synths feel real
-    this.buildReverb(this.ctx, this.master, this.comp, 0.16);
+    this.rev = this.buildReverb(this.ctx, this.master, this.comp, 0.16);
+    if (this.ecoMode()) { try { this.rev.pre.disconnect(this.rev.conv); } catch (e) {} }
     this.comp.connect(this.ctx.destination);
     this.metroGain = this.ctx.createGain();
     this.metroGain.gain.value = 1;
@@ -69,13 +73,43 @@ const Engine = {
   },
 
   // master reverb send: dryBus -> convolver -> wet -> dest (dryBus already -> dest)
+  // `pre` is exposed so per-clip reverb effects can send into the same convolver.
   buildReverb(ac, source, dest, wetLevel) {
     const conv = ac.createConvolver();
     conv.buffer = this.impulse(ac);
     const pre = ac.createGain(); pre.gain.value = 1;
     const wet = ac.createGain(); wet.gain.value = wetLevel;
     source.connect(pre); pre.connect(conv); conv.connect(wet); wet.connect(dest);
-    return { conv, wet };
+    return { conv, wet, pre };
+  },
+
+  // eco mode: cheaper audio path for low-end machines (no convolver, fewer voices)
+  ecoMode() { try { return localStorage.getItem('fabu.eco') === '1'; } catch (e) { return false; } },
+  setEco(on) {
+    try { localStorage.setItem('fabu.eco', on ? '1' : '0'); } catch (e) {}
+    if (this.rev) {
+      try {
+        if (on) this.rev.pre.disconnect(this.rev.conv);
+        else this.rev.pre.connect(this.rev.conv);
+      } catch (e) {}
+    }
+  },
+  voiceCap() { return this.ecoMode() ? 24 : 64; },
+
+  // every sounding voice registers here; past the cap the oldest voices are
+  // stolen so heavy projects stay smooth instead of stuttering
+  registerVoice(h) {
+    this.live.add(h);
+    const cap = this.voiceCap();
+    if (this.live.size > cap) {
+      const it = this.live.values();
+      while (this.live.size > cap) {
+        const old = it.next().value;
+        if (!old) break;
+        try { old.kill(); } catch (e) {}
+        this.live.delete(old);
+      }
+    }
   },
 
   // ----- track chains: clips → input → EQ(3 band) → pan → gain → master -----
@@ -287,6 +321,44 @@ const Engine = {
       mk('square', f / 2, 0, 0.2).connect(filter);
       filter.connect(g);
       A = 0.014; D = 0.3; SUS = 0.65; R = 0.26; peak = 0.3;
+    } else if (instr === 'epiano') {
+      // FM tine: sine carrier + fast-decaying modulator, soft bark on attack
+      const carrier = ac.createOscillator();
+      carrier.type = 'sine'; carrier.frequency.value = f;
+      const mod = ac.createOscillator();
+      mod.type = 'sine'; mod.frequency.value = f * 14;
+      const modG = ac.createGain();
+      modG.gain.setValueAtTime(f * (1.2 + vel * 2.2), t);
+      modG.gain.exponentialRampToValueAtTime(f * 0.02, t + 0.35);
+      mod.connect(modG); modG.connect(carrier.frequency);
+      carrier.connect(g);
+      const body = mk('sine', f * 2, 4, 0.12); body.connect(g);
+      oscs.push(carrier, mod);
+      A = 0.004; D = 1.1; SUS = 0.24; R = 0.35; peak = 0.42;
+    } else if (instr === 'organ') {
+      // drawbar stack with slow vibrato, holds while pressed
+      const vib = ac.createOscillator(); vib.frequency.value = 5.6;
+      const vibG = ac.createGain(); vibG.gain.value = 2.4;
+      vib.connect(vibG);
+      for (const [mult, lvl] of [[0.5, 0.5], [1, 1], [2, 0.55], [3, 0.3], [4, 0.2]]) {
+        const og = mk('sine', f * mult, 0, lvl * 0.28);
+        vibG.connect(oscs[oscs.length - 1].detune);
+        og.connect(g);
+      }
+      oscs.push(vib);
+      A = 0.02; D = 0.05; SUS = 1.0; R = 0.08; peak = 0.32;
+    } else if (instr === 'strings') {
+      // detuned saw ensemble, slow bow-in, mellow top end
+      filter = ac.createBiquadFilter();
+      filter.type = 'lowpass';
+      filter.frequency.value = clamp(f * 5, 900, 5200); filter.Q.value = 0.4;
+      mk('sawtooth', f, -12, 0.3).connect(filter);
+      mk('sawtooth', f, -4, 0.3).connect(filter);
+      mk('sawtooth', f, 5, 0.3).connect(filter);
+      mk('sawtooth', f, 11, 0.3).connect(filter);
+      mk('sawtooth', f * 2, 7, 0.1).connect(filter);
+      filter.connect(g);
+      A = 0.22; D = 0.4; SUS = 0.85; R = 0.5; peak = 0.3;
     } else if (instr === 'bass') {
       filter = ac.createBiquadFilter();
       filter.type = 'lowpass'; filter.frequency.value = 320; filter.Q.value = 4;
@@ -509,15 +581,43 @@ const Engine = {
 
   // ----- metronome click -----
 
+  METRO_SOUNDS: ['classic', 'tick', 'wood', 'beep'],
+  metroSound() { try { return localStorage.getItem('fabu.metroSound') || 'classic'; } catch (e) { return 'classic'; } },
+  setMetroSound(s) { try { localStorage.setItem('fabu.metroSound', s); } catch (e) {} },
+
   click(ac, dest, t, accent) {
+    const kind = this.metroSound();
+    if (kind === 'tick' || kind === 'wood') {
+      // a real metronome tick: a tiny filtered noise knock
+      const n = ac.createBufferSource();
+      n.buffer = this.noise(ac); n.loop = true;
+      const bp = ac.createBiquadFilter();
+      bp.type = 'bandpass'; bp.Q.value = kind === 'wood' ? 6 : 9;
+      bp.frequency.value = kind === 'wood' ? (accent ? 1200 : 850) : (accent ? 3400 : 2300);
+      const g = ac.createGain();
+      g.gain.setValueAtTime(accent ? 0.9 : 0.55, t);
+      g.gain.exponentialRampToValueAtTime(0.001, t + (kind === 'wood' ? 0.07 : 0.045));
+      n.connect(bp); bp.connect(g); g.connect(dest);
+      n.start(t); n.stop(t + 0.09);
+      return;
+    }
     const o = ac.createOscillator();
-    o.type = 'square';
-    o.frequency.value = accent ? 1568 : 1047;
+    o.type = kind === 'beep' ? 'sine' : 'square';
+    o.frequency.value = kind === 'beep' ? (accent ? 1320 : 880) : (accent ? 1568 : 1047);
     const g = ac.createGain();
-    g.gain.setValueAtTime(accent ? 0.25 : 0.16, t);
+    g.gain.setValueAtTime(kind === 'beep' ? (accent ? 0.3 : 0.2) : (accent ? 0.25 : 0.16), t);
     g.gain.exponentialRampToValueAtTime(0.001, t + 0.05);
     o.connect(g); g.connect(dest);
     o.start(t); o.stop(t + 0.08);
+  },
+
+  previewClick(kind) {
+    this.ensureCtx(); this.ctx.resume();
+    const prev = this.metroSound();
+    this.setMetroSound(kind);
+    this.click(this.ctx, this.metroGain, this.ctx.currentTime + 0.01, true);
+    this.click(this.ctx, this.metroGain, this.ctx.currentTime + 0.22, false);
+    this.setMetroSound(prev);
   },
 
   // ----- audio clip playback with fades + pitch -----
@@ -542,21 +642,16 @@ const Engine = {
     return curve;
   },
 
-  scheduleAudioClip(ac, dest, clip, when, outOff, register = true) {
-    const s = Samples[clip.sampleId];
-    if (!s || !s.buffer) return;
-    const speed = clip.speed || 1;
-    const trimOff = clipOffSec(clip);
-    const durOut = clipDurSec(clip) / speed;   // speed changes the output length
-    if (outOff >= durOut) return;
-
-    const src = ac.createBufferSource();
-    src.buffer = this.shiftedBuffer(s, clip.pitch || 0); // shift pitch, keep length
-    src.playbackRate.value = speed;
-    const g = ac.createGain();
-
-    // effect chain: src -> [drive] -> [crush] -> [filter] -> gain -> dest
-    let node = src;
+  // A per-clip effect chain: the built-in drive → crush → filter sliders plus
+  // any dropped effects from clip.fx (reverb send, dampen, echo, …). Every note
+  // or audio source of the clip routes through it. Returns `dest` unchanged
+  // when the clip has nothing to apply.
+  clipFxDest(ac, dest, clip, revIn) {
+    const list = clip.fx || [];
+    const hasFx = clip.drive > 0 || clip.crush > 0 || (clip.cutoff > 0 && clip.cutoff < 20000) || list.length;
+    if (!hasFx) return dest;
+    const input = ac.createGain();
+    let node = input;
     if (clip.drive > 0) {
       const ws = ac.createWaveShaper();
       ws.curve = this.distortionCurve(clip.drive); ws.oversample = '2x';
@@ -572,7 +667,54 @@ const Engine = {
       filt.type = 'lowpass'; filt.frequency.value = clip.cutoff; filt.Q.value = 1;
       node.connect(filt); node = filt;
     }
-    node.connect(g); g.connect(dest);
+    for (const fx of list) {
+      const p = fx.p || {};
+      if (fx.type === 'drive') {
+        const ws = ac.createWaveShaper();
+        ws.curve = this.distortionCurve(p.amt ?? 40); ws.oversample = '2x';
+        node.connect(ws); node = ws;
+      } else if (fx.type === 'crush') {
+        const cr = ac.createWaveShaper();
+        cr.curve = this.crushCurve(p.amt ?? 50);
+        node.connect(cr); node = cr;
+      } else if (fx.type === 'dampen') {
+        const f = ac.createBiquadFilter();
+        f.type = 'lowpass'; f.frequency.value = p.freq ?? 2500; f.Q.value = 0.9;
+        node.connect(f); node = f;
+      } else if (fx.type === 'echo') {
+        const sum = ac.createGain();
+        const dl = ac.createDelay(2); dl.delayTime.value = p.time ?? 0.3;
+        const fb = ac.createGain(); fb.gain.value = clamp(p.fb ?? 0.35, 0, 0.92);
+        const wet = ac.createGain(); wet.gain.value = p.mix ?? 0.35;
+        node.connect(sum);
+        node.connect(dl); dl.connect(fb); fb.connect(dl); dl.connect(wet); wet.connect(sum);
+        node = sum;
+      } else if (fx.type === 'reverb' && revIn) {
+        const send = ac.createGain(); send.gain.value = p.amt ?? 0.35;
+        node.connect(send); send.connect(revIn);
+      }
+    }
+    node.connect(dest);
+    return input;
+  },
+
+  scheduleAudioClip(ac, dest, clip, when, outOff, register = true, revIn = undefined) {
+    const s = Samples[clip.sampleId];
+    if (!s || !s.buffer) return;
+    const speed = clip.speed || 1;
+    const trimOff = clipOffSec(clip);
+    const durOut = clipDurSec(clip) / speed;   // speed changes the output length
+    if (outOff >= durOut) return;
+
+    const src = ac.createBufferSource();
+    src.buffer = this.shiftedBuffer(s, clip.pitch || 0); // shift pitch, keep length
+    src.playbackRate.value = speed;
+    const g = ac.createGain();
+
+    // effects (built-in sliders + dropped fx) live in the shared per-clip chain
+    if (revIn === undefined) revIn = (ac === this.ctx && this.rev) ? this.rev.pre : null;
+    const fxDest = this.clipFxDest(ac, dest, clip, revIn);
+    src.connect(g); g.connect(fxDest);
 
     const lvl = clip.gain ?? 1;
     let fi = Math.min(clip.fadeIn || 0, durOut);
@@ -600,7 +742,7 @@ const Engine = {
         }
       };
       src.onended = () => this.live.delete(h);
-      this.live.add(h);
+      this.registerVoice(h);
     }
   },
 
@@ -617,6 +759,7 @@ const Engine = {
     for (const t of S.tracks) {
       for (const c of t.clips) {
         if (c.kind === 'midi') {
+          let clipDest = null; // one shared per-clip fx chain, built at play time
           for (const n of c.notes) {
             const b = c.start + n.start;
             // keep notes inside the clip bounds
@@ -626,9 +769,13 @@ const Engine = {
             ev.push({
               beat: b,
               fn: (time) => {
-                const v = this.makeVoice(this.ctx, this.trackInput(t.id), t.instrument, n.pitch + (c.pitch || 0), time, (n.vel ?? 0.9) * (c.gain ?? 1));
+                if (!clipDest) {
+                  clipDest = this.clipFxDest(this.ctx, this.trackInput(t.id), c, this.rev && this.rev.pre);
+                  if (clipDest !== this.trackInput(t.id)) this.live.add({ kill: () => { try { clipDest.disconnect(); } catch (e) {} } });
+                }
+                const v = this.makeVoice(this.ctx, clipDest, t.instrument, n.pitch + (c.pitch || 0), time, (n.vel ?? 0.9) * (c.gain ?? 1));
                 v.stop(time + durB * this.spb());
-                this.live.add(v);
+                this.registerVoice(v);
               }
             });
           }
@@ -713,6 +860,22 @@ const Engine = {
     UI.playhead = Math.max(0, beat);
     if (wasPlaying) this.play();
     else App.onTransport();
+  },
+
+  // Re-apply clip-level effect edits mid-playback without a full stop/start:
+  // kill what's sounding and reschedule from the current beat with the new
+  // settings. Track EQ/volume/pan already update live on their own.
+  reschedule() {
+    if (!UI.playing || !this.ctx) return;
+    const beat = this.currentBeat();
+    for (const v of this.live) v.kill();
+    this.live.clear();
+    this.startBeat = beat;
+    this.startCtxTime = this.ctx.currentTime + 0.03;
+    this.events = this.collectEvents(beat);
+    this.evIdx = 0;
+    this.nextClickBeat = Math.ceil(beat - 1e-6);
+    this.schedTick();
   },
 
   // ----- live keyboard playing -----
@@ -956,7 +1119,7 @@ const Engine = {
     const master = oc.createGain();
     master.gain.value = S.masterVol;
     master.connect(comp);
-    this.buildReverb(oc, master, comp, 0.16);
+    const rev = this.buildReverb(oc, master, comp, 0.16);
     comp.connect(oc.destination);
 
     for (const t of S.tracks) {
@@ -965,15 +1128,16 @@ const Engine = {
       this.scheduleAutomation(oc, chain, t, 0, lead, spb);
       for (const c of t.clips) {
         if (c.kind === 'midi') {
+          const clipDest = this.clipFxDest(oc, chain.input, c, rev.pre);
           for (const n of c.notes) {
             if (n.start >= c.length) continue;
             const time = lead + (c.start + n.start) * spb;
             const durB = Math.min(n.length, c.length - n.start);
-            const v = this.makeVoice(oc, chain.input, t.instrument, n.pitch + (c.pitch || 0), time, (n.vel ?? 0.9) * (c.gain ?? 1));
+            const v = this.makeVoice(oc, clipDest, t.instrument, n.pitch + (c.pitch || 0), time, (n.vel ?? 0.9) * (c.gain ?? 1));
             v.stop(time + durB * spb);
           }
         } else {
-          this.scheduleAudioClip(oc, chain.input, c, lead + c.start * spb, 0, false);
+          this.scheduleAudioClip(oc, chain.input, c, lead + c.start * spb, 0, false, rev.pre);
         }
       }
     }

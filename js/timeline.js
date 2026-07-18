@@ -47,13 +47,46 @@ const Timeline = {
       window.addEventListener('mouseup', up);
     });
 
-    // background click deselects
+    // background: click deselects, drag draws a selection box (marquee)
     this.lanes.addEventListener('mousedown', (e) => {
-      if (e.target === this.lanes || e.target.classList.contains('lane')) {
-        const idx = Math.floor((e.clientY - this.lanes.getBoundingClientRect().top) / TRACK_H);
-        App.selectClip(null);
-        if (S.tracks[idx]) App.selectTrack(S.tracks[idx].id);
-      }
+      if (e.button !== 0) return;
+      if (!(e.target === this.lanes || e.target.classList.contains('lane'))) return;
+      const rect = this.lanes.getBoundingClientRect();
+      const x0 = e.clientX - rect.left, y0 = e.clientY - rect.top;
+      const idx = Math.floor(y0 / TRACK_H);
+      if (!e.shiftKey) App.selectClip(null);
+      if (S.tracks[idx]) App.selectTrack(S.tracks[idx].id);
+      const preSel = new Set(UI.selClipIds);
+
+      const box = document.createElement('div');
+      box.className = 'marquee';
+      this.lanes.appendChild(box);
+      let dragging = false;
+
+      const move = (ev) => {
+        const x1 = ev.clientX - rect.left, y1 = ev.clientY - rect.top;
+        if (!dragging && Math.abs(x1 - x0) < 4 && Math.abs(y1 - y0) < 4) return;
+        dragging = true;
+        const L = Math.min(x0, x1), Tp = Math.min(y0, y1), R = Math.max(x0, x1), B = Math.max(y0, y1);
+        box.style.cssText = `display:block;left:${L}px;top:${Tp}px;width:${R - L}px;height:${B - Tp}px`;
+        const hits = [];
+        S.tracks.forEach((t, ti) => {
+          const laneY = ti * TRACK_H;
+          if (laneY >= B || laneY + TRACK_H <= Tp) return;
+          for (const c of t.clips) {
+            const cx = c.start * UI.zoom, cw = Math.max(10, clipBeats(c) * UI.zoom);
+            if (cx < R && cx + cw > L) hits.push(c.id);
+          }
+        });
+        App.selectClipSet(e.shiftKey ? [...new Set([...preSel, ...hits])] : hits);
+      };
+      const up = () => {
+        window.removeEventListener('mousemove', move);
+        window.removeEventListener('mouseup', up);
+        box.remove();
+      };
+      window.addEventListener('mousemove', move);
+      window.addEventListener('mouseup', up);
     });
 
     // double-click empty lane on an instrument track = new pattern clip
@@ -95,6 +128,10 @@ const Timeline = {
   // ---------- full render ----------
 
   render() {
+    // drop selection entries whose clips no longer exist
+    for (const id of [...UI.selClipIds]) if (!getClip(id)) UI.selClipIds.delete(id);
+    if (UI.selClipId && !UI.selClipIds.has(UI.selClipId)) UI.selClipId = [...UI.selClipIds].pop() || null;
+
     const width = this.totalBeats() * UI.zoom;
     this.lanes.style.width = width + 'px';
     this.ruler.style.width = width + 'px';
@@ -287,6 +324,19 @@ const Timeline = {
       el.addEventListener('mousedown', () => App.selectTrack(t.id));
       box.appendChild(el);
     }
+
+    // the "add a track" slot sits right below the last track, like an empty slot
+    const slot = document.createElement('div');
+    slot.className = 'thead-add';
+    const mkAdd = (kind, icon, key, fb) => {
+      const b = document.createElement('button');
+      b.innerHTML = `<svg class="ic"><use href="#${icon}"/></svg> <span>${tr(key, fb)}</span>`;
+      b.dataset.tip = tr(kind === 'midi' ? 'tip_add_instrument' : 'tip_add_audio', 'Add a track');
+      b.addEventListener('click', () => App.addTrack(kind));
+      return b;
+    };
+    slot.append(mkAdd('midi', 'i-note', 'add_instrument', 'Instrument'), mkAdd('audio', 'i-mic', 'add_audio', 'Audio'));
+    box.appendChild(slot);
   },
 
   syncHeads() {
@@ -305,7 +355,7 @@ const Timeline = {
 
   buildClip(clip, track) {
     const el = document.createElement('div');
-    el.className = 'clip' + (clip.id === UI.selClipId ? ' sel' : '');
+    el.className = 'clip' + (UI.selClipIds.has(clip.id) ? ' sel' : '');
     el.dataset.clipId = clip.id;
     const lenB = clipBeats(clip);
     el.style.left = (clip.start * UI.zoom) + 'px';
@@ -325,6 +375,31 @@ const Timeline = {
       badge.textContent = (clip.pitch > 0 ? '+' : '') + clip.pitch + 'st';
       el.appendChild(badge);
     }
+    if (clip.fx && clip.fx.length) {
+      const fxb = document.createElement('div');
+      fxb.className = 'clip-fx-badge';
+      fxb.textContent = 'fx' + (clip.fx.length > 1 ? clip.fx.length : '');
+      fxb.dataset.tip = clip.fx.map(f => fxName(f.type)).join(', ');
+      el.appendChild(fxb);
+    }
+
+    // effects from the browser can be dropped straight onto the clip
+    el.addEventListener('dragover', (e) => {
+      if (![...e.dataTransfer.types].includes('text/fabu-fx')) return;
+      e.preventDefault();
+      e.stopPropagation();
+      e.dataTransfer.dropEffect = 'copy';
+      el.classList.add('fx-over');
+    });
+    el.addEventListener('dragleave', () => el.classList.remove('fx-over'));
+    el.addEventListener('drop', (e) => {
+      const type = e.dataTransfer.getData('text/fabu-fx');
+      if (!type) return;
+      e.preventDefault();
+      e.stopPropagation();
+      el.classList.remove('fx-over');
+      App.addFxToClip(clip, type);
+    });
 
     const cv = document.createElement('canvas');
     el.appendChild(cv);
@@ -347,7 +422,7 @@ const Timeline = {
     el.addEventListener('contextmenu', (e) => {
       e.preventDefault();
       e.stopPropagation();
-      App.selectClip(clip.id);
+      if (!UI.selClipIds.has(clip.id)) App.selectClip(clip.id);
       this.openClipMenu(e.clientX, e.clientY, clip);
     });
 
@@ -370,6 +445,13 @@ const Timeline = {
     };
     if (clip.kind === 'midi') add(tr('menu_pianoroll', 'Open piano roll'), () => PianoRoll.open(clip.id));
     add(tr('menu_settings', 'Clip settings'), () => Windows.openInspector());
+    if (clip.fx && clip.fx.length) {
+      const b = document.createElement('button');
+      b.className = 'ctx-item fx';
+      b.textContent = tr('menu_edit_fx', 'Edit effects');
+      b.addEventListener('click', () => { m.remove(); App.openFxEditor(clip.id); });
+      m.appendChild(b);
+    }
     add(tr('insp_duplicate', 'Duplicate'), () => App.duplicateClip());
     add(tr('insp_split', 'Split at playhead'), () => App.splitSelectedClip());
     add(tr('insp_delete', 'Delete'), () => App.deleteSelectedClip(), true);
@@ -466,6 +548,8 @@ const Timeline = {
   clipMouseDown(e, clip, track, el) {
     if (e.button !== 0) return;
     e.stopPropagation();
+    // shift-click just toggles this clip in the selection, no drag
+    if (e.shiftKey) { App.selectClip(clip.id, true); return; }
     // in a room, a clip someone else is dragging is locked for you
     const clipLock = 'clip:' + clip.id;
     if (typeof Sync !== 'undefined' && Sync.admitted) {
@@ -473,7 +557,14 @@ const Timeline = {
       if (l) { toast(tr('mp_locked_by', '{name} is using this', { name: l.name })); return; }
       Sync.setLock(clipLock, true);
     }
-    App.selectClip(clip.id);
+    // clicking an unselected clip selects just it; clicking one that's already in
+    // a multi-selection keeps the group so you can drag them all together
+    if (!UI.selClipIds.has(clip.id)) App.selectClip(clip.id);
+    else App.selectTrack(track.id);
+    // the other selected clips that move/resize along with this one
+    const group = [...UI.selClipIds]
+      .filter(id => id !== clip.id).map(getClip).filter(Boolean)
+      .map(f => ({ clip: f.clip, start: f.clip.start, len: f.clip.kind === 'midi' ? f.clip.length : clipBeats(f.clip) }));
     const mode = e.target.classList.contains('clip-resize') ? 'right'
       : e.target.classList.contains('clip-resize-l') ? 'left' : 'move';
     const startX = e.clientX;
@@ -494,11 +585,31 @@ const Timeline = {
     const snapSeen = new Map();
     let lastSnapKey = null, coached = false;
 
+    const drawEl = (cl) => {
+      const cel = this.lanes.querySelector(`[data-clip-id="${cl.id}"]`);
+      if (!cel) return;
+      cel.style.left = (cl.start * UI.zoom) + 'px';
+      cel.style.width = Math.max(10, clipBeats(cl) * UI.zoom - 2) + 'px';
+      this.drawClipCanvas(cl, cel, cel.querySelector('canvas'));
+    };
     const applyVisual = () => {
       el = this.lanes.querySelector(`[data-clip-id="${clip.id}"]`) || el;
-      el.style.left = (clip.start * UI.zoom) + 'px';
-      el.style.width = Math.max(10, clipBeats(clip) * UI.zoom - 2) + 'px';
-      this.drawClipCanvas(clip, el, el.querySelector('canvas'));
+      drawEl(clip);
+      for (const g of group) drawEl(g.clip);
+    };
+    // move/resize the rest of the selection along with the primary clip
+    const applyGroup = () => {
+      if (!group.length) return;
+      if (mode === 'move') {
+        const delta = clip.start - orig.start;
+        for (const g of group) g.clip.start = Math.max(0, g.start + delta);
+      } else if (mode === 'right') {
+        // resizing one pattern fits every selected pattern to the same length
+        for (const g of group) if (g.clip.kind === 'midi') g.clip.length = clip.length;
+      } else if (mode === 'left') {
+        const delta = clip.start - orig.start;
+        for (const g of group) { g.clip.start = Math.max(0, g.start + delta); }
+      }
     };
 
     const move = (ev) => {
@@ -541,18 +652,21 @@ const Timeline = {
         }
       } else {
         clip.start = snapBeat(orig.start + dxBeats, S.snap);
-        // vertical move between tracks of the same kind
-        const laneIdx = clamp(
-          orig.trackIdx + Math.round((ev.clientY - startY) / TRACK_H),
-          0, S.tracks.length - 1);
-        const target = S.tracks[laneIdx];
-        const cur = getClip(clip.id).track;
-        if (target && target !== cur && target.kind === cur.kind) {
-          cur.clips.splice(cur.clips.indexOf(clip), 1);
-          target.clips.push(clip);
-          this.render();
+        // vertical move between tracks of the same kind (single clip only)
+        if (!group.length) {
+          const laneIdx = clamp(
+            orig.trackIdx + Math.round((ev.clientY - startY) / TRACK_H),
+            0, S.tracks.length - 1);
+          const target = S.tracks[laneIdx];
+          const cur = getClip(clip.id).track;
+          if (target && target !== cur && target.kind === cur.kind) {
+            cur.clips.splice(cur.clips.indexOf(clip), 1);
+            target.clips.push(clip);
+            this.render();
+          }
         }
       }
+      applyGroup();
       if (S.snap && !coached) {
         const key = (mode === 'right' ? clip.start + clipBeats(clip) : clip.start).toFixed(3);
         if (key !== lastSnapKey) {
@@ -586,6 +700,7 @@ const Timeline = {
     const area = this.scroller;
 
     area.addEventListener('dragover', (e) => {
+      if ([...e.dataTransfer.types].includes('text/fabu-fx')) return; // effect drags target clips
       e.preventDefault();
       e.dataTransfer.dropEffect = 'copy';
       const beat = snapBeat(this.xToBeat(e.clientX), S.snap);
@@ -620,7 +735,13 @@ const Timeline = {
   updatePlayhead() {
     const beat = Engine.ctx && UI.playing ? Engine.currentBeat() : UI.playhead;
     const x = beat * UI.zoom;
-    $('#playhead').style.left = x + 'px';
+    // cached refs + throttled text: this runs every frame, so keep it lean
+    if (!this._phEl) {
+      this._phEl = $('#playhead');
+      this._posBars = $('#posBars');
+      this._posTime = $('#posTime');
+    }
+    this._phEl.style.left = x + 'px';
 
     // let the others see where our playhead is (in our colour) while we play
     if (typeof Sync !== 'undefined' && Sync.admitted) {
@@ -629,10 +750,14 @@ const Timeline = {
       Sync._phWasPlaying = UI.playing;
     }
 
-    const bars = Math.floor(beat / 4) + 1;
-    const beats = Math.floor(beat % 4) + 1;
-    $('#posBars').textContent = bars + '.' + beats;
-    $('#posTime').textContent = fmtSec(beat * (60 / S.bpm));
+    const now = performance.now();
+    if (!this._lastTxt || now - this._lastTxt > 100) {
+      this._lastTxt = now;
+      const bars = Math.floor(beat / 4) + 1;
+      const beats = Math.floor(beat % 4) + 1;
+      this._posBars.textContent = bars + '.' + beats;
+      this._posTime.textContent = fmtSec(beat * (60 / S.bpm));
+    }
 
     if (UI.playing) {
       // keep the playhead in view

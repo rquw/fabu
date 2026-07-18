@@ -99,6 +99,96 @@ const Windows = {
     return b;
   },
 
+  // A little EQ curve you shape by dragging three points (low / mid / high).
+  // Maps straight onto the existing 3-band chain, so it applies live.
+  buildEqCanvas(t) {
+    const W = 132, H = 64, PAD = 10;
+    const box = document.createElement('div');
+    box.className = 'eq-canvas';
+    box.dataset.tip = tr('tip_eq_canvas', 'Drag the points to shape the EQ. Double-click a point to reset it.');
+    const cv = document.createElement('canvas');
+    box.appendChild(cv);
+    const bands = ['low', 'mid', 'high'];
+    const bandX = { low: PAD + (W - 2 * PAD) * 0.12, mid: PAD + (W - 2 * PAD) * 0.5, high: PAD + (W - 2 * PAD) * 0.88 };
+    const gainToY = (g) => H / 2 - (g / 12) * (H / 2 - 8);
+    const yToGain = (y) => clamp(((H / 2 - y) / (H / 2 - 8)) * 12, -12, 12);
+
+    const draw = () => {
+      const dpr = window.devicePixelRatio || 1;
+      cv.width = W * dpr; cv.height = H * dpr;
+      cv.style.width = W + 'px'; cv.style.height = H + 'px';
+      const x = cv.getContext('2d');
+      x.scale(dpr, dpr);
+      x.clearRect(0, 0, W, H);
+      x.fillStyle = 'rgba(255,255,255,0.04)';
+      x.fillRect(0, 0, W, H);
+      x.strokeStyle = 'rgba(255,255,255,0.12)';
+      x.beginPath(); x.moveTo(0, H / 2); x.lineTo(W, H / 2); x.stroke();
+      // the curve through the three points
+      const pts = [[0, gainToY(t.eq.low)], [bandX.low, gainToY(t.eq.low)],
+        [bandX.mid, gainToY(t.eq.mid)], [bandX.high, gainToY(t.eq.high)], [W, gainToY(t.eq.high)]];
+      x.strokeStyle = t.color; x.lineWidth = 2;
+      x.beginPath();
+      x.moveTo(pts[0][0], pts[0][1]);
+      for (let i = 1; i < pts.length; i++) {
+        const [x0, y0] = pts[i - 1], [x1, y1] = pts[i];
+        const mx = (x0 + x1) / 2;
+        x.bezierCurveTo(mx, y0, mx, y1, x1, y1);
+      }
+      x.stroke();
+      // handles
+      for (const b of bands) {
+        x.fillStyle = t.color;
+        x.beginPath(); x.arc(bandX[b], gainToY(t.eq[b]), 4.5, 0, Math.PI * 2); x.fill();
+        x.strokeStyle = 'rgba(0,0,0,0.4)'; x.lineWidth = 1.2; x.stroke();
+      }
+    };
+    draw();
+
+    const nearBand = (mx) => {
+      let best = null, bd = 1e9;
+      for (const b of bands) { const d = Math.abs(mx - bandX[b]); if (d < bd) { bd = d; best = b; } }
+      return bd < 26 ? best : null;
+    };
+
+    cv.addEventListener('dblclick', (e) => {
+      const r = cv.getBoundingClientRect();
+      const b = nearBand(e.clientX - r.left);
+      if (!b) return;
+      Undo.push(tr('act_change_eq', 'EQ') + ' ' + b);
+      t.eq[b] = 0; Engine.updateTrack(t); draw();
+      toast(tr('toast_eq_reset', 'EQ {band} reset', { band: b.toUpperCase() }));
+    });
+
+    cv.addEventListener('mousedown', (e) => {
+      const r = cv.getBoundingClientRect();
+      const b = nearBand(e.clientX - r.left);
+      if (!b) return;
+      const lk = 'eq:' + t.id + ':' + b;
+      if (typeof Sync !== 'undefined' && Sync.admitted) {
+        const l = Sync.lockedBy(lk);
+        if (l) { toast(tr('mp_locked_by', '{name} is using this', { name: l.name })); return; }
+        Sync.setLock(lk, true);
+      }
+      Undo.push(tr('act_change_eq', 'EQ') + ' ' + b);
+      const move = (ev) => {
+        t.eq[b] = Math.round(yToGain(ev.clientY - r.top) * 2) / 2;
+        Engine.updateTrack(t); // live, also while playing
+        draw();
+      };
+      const up = () => {
+        window.removeEventListener('mousemove', move);
+        window.removeEventListener('mouseup', up);
+        if (typeof Sync !== 'undefined') Sync.setLock(lk, false);
+      };
+      move(e);
+      window.addEventListener('mousemove', move);
+      window.addEventListener('mouseup', up);
+    });
+
+    return box;
+  },
+
   buildMixer(body) {
     body.innerHTML = '<div id="mixerStrips"></div>';
     const strips = body.querySelector('#mixerStrips');
@@ -111,22 +201,17 @@ const Windows = {
 
       const eqBox = document.createElement('div');
       eqBox.className = 'strip-eq';
-      for (const band of ['high', 'mid', 'low']) {
-        const row = document.createElement('div');
-        row.className = 'mix-row';
-        row.innerHTML = `<span class="mix-lbl">${bandLabel[band]}</span>`;
-        this.mixSlider(row, -12, 12, 0.5, t.eq[band],
-          tr('tip_eq', 'Boost or cut {band} on "{name}". Double-click to reset.', { band: bandLabel[band], name: t.name }),
-          (v) => { t.eq[band] = v; Engine.updateTrack(t); },
-          tr('act_change_eq', 'EQ') + ' ' + band, 'eq:' + t.id + ':' + band);
-        row.querySelector('input').addEventListener('dblclick', (e) => {
-          Undo.push(tr('act_change_eq', 'EQ') + ' ' + band);
-          t.eq[band] = 0; e.target.value = 0; Engine.updateTrack(t);
-          toast(tr('toast_eq_reset', 'EQ {band} reset', { band: bandLabel[band] }));
-        });
-        row.appendChild(this.autoDot(t, band));
-        eqBox.appendChild(row);
+      eqBox.appendChild(this.buildEqCanvas(t));
+      // keep the automation dots reachable
+      const dotRow = document.createElement('div');
+      dotRow.className = 'eq-dots';
+      for (const band of ['low', 'mid', 'high']) {
+        const lbl = document.createElement('span');
+        lbl.textContent = bandLabel[band][0];
+        dotRow.appendChild(lbl);
+        dotRow.appendChild(this.autoDot(t, band));
       }
+      eqBox.appendChild(dotRow);
       strip.appendChild(eqBox);
 
       const panRow = document.createElement('div');
@@ -255,7 +340,10 @@ const Windows = {
         val.textContent = fmt(v);
         Timeline.drawClip(clip.id);
       });
-      inp.addEventListener('change', () => { inp._gesture = false; });
+      inp.addEventListener('change', () => {
+        inp._gesture = false;
+        if (UI.playing) Engine.reschedule(); // apply the edit live, no stop/start
+      });
       r.append(inp, val);
       return inp;
     };
@@ -282,11 +370,19 @@ const Windows = {
       slider(tr('insp_fade_out', 'Fade out'), 0, 5, 0.05, clip.fadeOut ?? 0, v => v.toFixed(2) + ' s',
         tr('tip_fade_out', 'Fade out to silence'), v => { clip.fadeOut = v; }, 'Fade out');
     } else {
-      // instrument (MIDI) clips get their own volume + transpose
+      // instrument (MIDI) clips get their own volume + transpose + effects
       slider(tr('insp_gain', 'Gain'), 0, 3, 0.01, clip.gain ?? 1, v => Math.round(v * 100) + '%',
         tr('tip_clip_gain', 'Clip volume'), v => { clip.gain = v; }, 'Clip gain');
       slider(tr('insp_transpose', 'Transpose'), -24, 24, 1, clip.pitch ?? 0, v => (v > 0 ? '+' : '') + v + ' st',
         tr('tip_transpose', 'Shift every note up or down'), v => { clip.pitch = v; }, 'Transpose');
+      slider(tr('insp_drive', 'Drive'), 0, 100, 1, clip.drive ?? 0, v => Math.round(v) + '%',
+        tr('tip_drive', 'Distortion / overdrive'), v => { clip.drive = v; }, 'Clip drive');
+      slider(tr('insp_crush', 'Crush'), 0, 100, 1, clip.crush ?? 0, v => Math.round(v) + '%',
+        tr('tip_crush', 'Bit crusher, lo-fi grit'), v => { clip.crush = v; }, 'Clip crush');
+      slider(tr('insp_filter', 'Filter'), 200, 20000, 100, (clip.cutoff && clip.cutoff > 0) ? clip.cutoff : 20000,
+        v => v >= 20000 ? tr('word_off', 'off') : Math.round(v) + ' Hz',
+        tr('tip_filter', 'Low-pass filter, muffles the highs'),
+        v => { clip.cutoff = v >= 20000 ? 0 : v; }, 'Clip filter');
       const info = document.createElement('div');
       info.style.cssText = 'color:var(--dim);font-size:11.5px;margin:10px 0';
       info.textContent = tr('insp_info', '{notes} notes, {beats} beats, {instr}',
@@ -325,6 +421,41 @@ const Windows = {
     body.appendChild(btns);
   },
 
+  // ---------- Effects browser (drag onto clips) ----------
+
+  toggleFxBrowser() {
+    if (this.isOpen('fxbrowser')) { this.close('fxbrowser'); return; }
+    const w = this.create('fxbrowser', tr('fx_title', 'Effects'), 'i-fx', { x: window.innerWidth - 320, y: 130, width: 240 });
+    w.body.innerHTML = `
+      <input id="fxSearch" type="text" placeholder="${tr('fx_search', 'Search effects')}" spellcheck="false"
+        style="width:100%;background:var(--panel2);border:1px solid var(--line);border-radius:7px;padding:6px 9px;color:var(--text);outline:none;font-size:12px;margin-bottom:8px">
+      <div id="fxList"></div>
+      <div style="color:var(--faint);font-size:10.5px;margin-top:8px;line-height:1.5">${tr('fx_hint', 'Drag an effect onto a clip. Right-click the clip to edit or remove it.')}</div>`;
+    const list = w.body.querySelector('#fxList');
+    const search = w.body.querySelector('#fxSearch');
+    const render = () => {
+      const q = search.value.trim().toLowerCase();
+      list.innerHTML = '';
+      for (const type of Object.keys(FX_DEFS)) {
+        const name = fxName(type);
+        if (q && !name.toLowerCase().includes(q) && !type.includes(q)) continue;
+        const item = document.createElement('div');
+        item.className = 'fx-item';
+        item.draggable = true;
+        item.innerHTML = `<svg class="ic"><use href="#i-fx"/></svg><span>${name}</span>`;
+        item.addEventListener('dragstart', (e) => {
+          e.dataTransfer.setData('text/fabu-fx', type);
+          e.dataTransfer.effectAllowed = 'copy';
+        });
+        list.appendChild(item);
+      }
+      if (!list.children.length) list.innerHTML = `<div style="color:var(--faint);font-size:11.5px;padding:6px 2px">${tr('fx_none', 'No effect matches that.')}</div>`;
+    };
+    search.addEventListener('input', render);
+    render();
+    App.syncWindowButtons();
+  },
+
   // ---------- Settings ----------
 
   toggleSettings() {
@@ -354,6 +485,9 @@ const Windows = {
       mkCheck(tr('set_metro', 'Metronome while playing'), S.metronome,
         tr('tip_set_metro', 'Click on every beat (M)'),
         (v) => { App.setMetronome(v); w.refresh(); });
+      mkCheck(tr('set_eco', 'Reduce CPU load (weaker computers)'), Engine.ecoMode(),
+        tr('tip_eco', 'Turns off the room reverb and limits voices so playback stays smooth.'),
+        (v) => { Engine.setEco(v); toast(tr(v ? 'toast_eco_on' : 'toast_eco_off', 'CPU saver ' + (v ? 'on' : 'off'))); });
 
       const r = document.createElement('div');
       r.className = 'frow';

@@ -272,30 +272,33 @@ input[type="range"]::-webkit-slider-thumb {
 }
 input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.2); }
 
-#addTrackBar {
+/* the "add a track" slot lives inline under the last track, like an empty
+   half-height track slot with a dotted outline */
+.thead-add {
+  height: calc(var(--track-h) / 2);
   display: flex;
   gap: 6px;
-  padding: 10px;
-  border-top: 1px solid var(--line);
+  padding: 7px 10px;
+  box-sizing: border-box;
 }
-.add-btn {
+.thead-add button {
   flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 5px;
-  padding: 8px 4px;
-  background: var(--panel);
-  border: 1px dashed var(--faint);
-  border-radius: 8px;
+  background: transparent;
+  border: 1.5px dashed var(--faint);
+  border-radius: 10px;
   color: var(--dim);
   font-size: 11.5px;
   font-weight: 600;
   cursor: pointer;
   transition: border-color 0.15s var(--ease), color 0.15s var(--ease), background 0.15s var(--ease);
 }
-.add-btn:hover { border-color: var(--accent); border-style: solid; color: var(--accent); background: var(--accent-soft); }
-.add-btn .ic { width: 14px; height: 14px; }
+.thead-add button:hover { border-color: var(--accent); border-style: solid; color: var(--accent); background: var(--accent-soft); }
+.thead-add button .ic { width: 14px; height: 14px; }
+#lanes { padding-bottom: 48px; }
 
 #tlScroll {
   flex: 1;
@@ -365,6 +368,15 @@ input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.2); }
 }
 .clip:active { cursor: grabbing; }
 .clip.sel { border-color: var(--text); box-shadow: 0 0 0 1px var(--text), 0 5px 14px rgba(0,0,0,0.4); z-index: 4; }
+.marquee {
+  position: absolute;
+  display: none;
+  z-index: 6;
+  border: 1px solid var(--accent);
+  background: rgba(224, 122, 63, 0.12);
+  border-radius: 3px;
+  pointer-events: none;
+}
 .clip-label {
   height: 17px;
   font-size: 10px;
@@ -1361,3 +1373,50 @@ input[type="range"].locked { opacity: 0.45; filter: saturate(0.4); }
   #homeVer { position: static; align-self: center; margin: 8px 0 20px; }
 }
 
+
+/* ---- Effects browser + per-clip effects ---- */
+.fx-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 10px; margin-bottom: 6px;
+  background: var(--panel2); border: 1px solid var(--line); border-radius: 8px;
+  color: var(--text); font-size: 12.5px; font-weight: 600;
+  cursor: grab; user-select: none;
+  transition: border-color 0.12s var(--ease), transform 0.12s var(--ease);
+}
+.fx-item:hover { border-color: var(--accent); transform: translateY(-1px); }
+.fx-item:active { cursor: grabbing; }
+.fx-item .ic { width: 14px; height: 14px; color: var(--accent); }
+.clip.fx-over { outline: 2px dashed var(--accent); outline-offset: 1px; }
+.clip-fx-badge {
+  position: absolute; left: 3px; bottom: 3px;
+  padding: 0 5px; border-radius: 5px;
+  background: rgba(0, 0, 0, 0.45); color: #ffd35e;
+  font-size: 9px; font-weight: 800; letter-spacing: 0.3px;
+  pointer-events: auto;
+}
+.ctx-item.fx { color: #ffd35e; }
+.fx-sec { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); }
+.fx-sec-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; font-weight: 700; font-size: 13px; }
+.fx-sec-head .fbtn { padding: 3px 10px; font-size: 11px; }
+
+/* ---- visual EQ in the mixer ---- */
+.eq-canvas { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--bg2); cursor: ns-resize; }
+.eq-canvas canvas { display: block; }
+.eq-dots { display: flex; align-items: center; justify-content: center; gap: 6px; margin-top: 5px; font-size: 9px; color: var(--faint); font-weight: 700; }
+
+/* ---- recent-project cards: listen / edit halves ---- */
+.home-card-art { position: relative; }
+.card-acts {
+  position: absolute; inset: 0;
+  display: flex; opacity: 0;
+  transition: opacity 0.15s var(--ease);
+  border-radius: 10px; overflow: hidden;
+}
+.home-card:hover .card-acts { opacity: 1; }
+.card-act {
+  flex: 1; display: flex; align-items: center; justify-content: center;
+  background: rgba(0, 0, 0, 0.45); color: #fff;
+}
+.card-act + .card-act { border-left: 1px solid rgba(255, 255, 255, 0.25); }
+.card-act:hover { background: rgba(0, 0, 0, 0.62); color: var(--accent); }
+.card-act .ic { width: 20px; height: 20px; }

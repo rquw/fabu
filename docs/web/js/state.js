@@ -25,7 +25,8 @@ const UI = {
   playing: false,
   recording: false,
   zoom: 32,             // px per beat
-  selClipId: null,
+  selClipId: null,      // primary (last clicked)
+  selClipIds: new Set(),// full multi-selection (always contains selClipId when set)
   selTrackId: null,
   keysOctave: 4,
   keysTrackId: null,
