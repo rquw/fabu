@@ -296,10 +296,10 @@ const App = {
   // ---------- homescreen ----------
 
   wireHome() {
-    $('#homeNew').addEventListener('click', () => { this.newProject(false); this.hideHome(); });
-    $('#homeOpen').addEventListener('click', () => this.open());
-    $('#homeContinue').addEventListener('click', () => this.continueSession());
-    $('#homeMp').addEventListener('click', () => MP.openMenu());
+    $('#homeNew').addEventListener('click', () => { this.stopHomePreview(); this.newProject(false); this.hideHome(); });
+    $('#homeOpen').addEventListener('click', () => { this.stopHomePreview(); this.open(); });
+    $('#homeContinue').addEventListener('click', () => { this.stopHomePreview(); this.continueSession(); });
+    $('#homeMp').addEventListener('click', () => { this.stopHomePreview(); MP.openMenu(); });
     $('#logo').addEventListener('click', () => this.goHome());
   },
 
@@ -375,7 +375,8 @@ const App = {
         <div class="home-card-sub">${this.agoText(r.at)}</div>`;
       card.addEventListener('click', (e) => {
         const act = e.target.closest && e.target.closest('.card-act');
-        this.openRecent(r.path, !!(act && act.dataset.act === 'listen'));
+        if (act && act.dataset.act === 'listen') this.previewRecent(r.path);
+        else this.openRecent(r.path);
       });
       card.addEventListener('contextmenu', (e) => {
         e.preventDefault();
@@ -386,9 +387,9 @@ const App = {
     });
   },
 
-  async openRecent(path, autoplay = false) {
+  async openRecent(path) {
+    this.stopHomePreview();
     if (!window.electronAPI) { toast(tr('toast_recents_need_app', 'Recents need the app'), 'red'); return; }
-    if (autoplay) { Engine.ensureCtx(); Engine.ctx.resume(); } // grab the click's audio permission
     const res = await window.electronAPI.openPath({ filePath: path });
     if (!res.ok) {
       toast(tr('toast_open_failed', 'File could not be opened'), 'red');
@@ -397,7 +398,42 @@ const App = {
     }
     await this.loadFab(b64ToBuf(res.data), res.name, res.path);
     this.hideHome();
-    if (autoplay) setTimeout(() => { if (!UI.playing) this.togglePlay(); }, 250);
+  },
+
+  // "Listen" plays a recent project without leaving the home screen
+  async previewRecent(path) {
+    if (!window.electronAPI) { toast(tr('toast_recents_need_app', 'Recents need the app'), 'red'); return; }
+    Engine.ensureCtx(); Engine.ctx.resume(); // use the click gesture for audio permission
+    const res = await window.electronAPI.openPath({ filePath: path });
+    if (!res.ok) { toast(tr('toast_open_failed', 'File could not be opened'), 'red'); this.removeRecent(path); return; }
+    await this.loadFab(b64ToBuf(res.data), res.name, res.path);
+    this.homePreviewing = true;
+    this.showHomePlayer(res.name || 'Untitled');
+    UI.playhead = 0;
+    if (!UI.playing) this.togglePlay();
+  },
+
+  showHomePlayer(name) {
+    let bar = document.getElementById('homePlayer');
+    if (!bar) {
+      bar = document.createElement('div');
+      bar.id = 'homePlayer';
+      $('#home').appendChild(bar);
+    }
+    bar.innerHTML = `
+      <button id="hpStop" class="hp-btn" aria-label="stop"><svg class="ic"><use href="#i-stop"/></svg></button>
+      <span class="hp-name">${tr('home_now_playing', 'Playing')} · ${name}</span>
+      <button id="hpEdit" class="hp-edit">${tr('home_open_editor', 'Open editor')}</button>`;
+    bar.querySelector('#hpStop').addEventListener('click', () => this.stopHomePreview());
+    bar.querySelector('#hpEdit').addEventListener('click', () => { this.homePreviewing = false; const b = document.getElementById('homePlayer'); if (b) b.remove(); this.hideHome(); });
+  },
+
+  stopHomePreview() {
+    if (!this.homePreviewing) return;
+    this.homePreviewing = false;
+    Engine.stop();
+    const bar = document.getElementById('homePlayer');
+    if (bar) bar.remove();
   },
 
   // ---------- languages (file-driven i18n) ----------
@@ -1172,32 +1208,24 @@ const App = {
 
     const bpm = $('#bpmInput');
     bpm.addEventListener('change', () => this.setBpm(parseFloat(bpm.value) || 120));
-    // drag the BPM number up/down; the cursor locks in place so it can't run
-    // off the screen mid-drag
+    // drag the BPM number up/down; the pointer locks so it never runs off-screen
     bpm.addEventListener('mousedown', (e) => {
-      const startY = e.clientY;
+      e.preventDefault();
       const startV = S.bpm;
       let pushed = false;
-      let acc = 0; // accumulated movement while the pointer is locked
+      let acc = 0; // accumulated vertical movement (pixels) since mousedown
+      const locker = bpm.parentElement || bpm; // <input> pointer lock is flaky; lock the field
+      if (locker.requestPointerLock) { try { locker.requestPointerLock(); } catch (err) { /* fine without */ } }
       const move = (ev) => {
-        let dy;
-        if (document.pointerLockElement === bpm) {
-          acc += ev.movementY;
-          dy = -acc;
-        } else {
-          dy = startY - ev.clientY;
-          if (!pushed && Math.abs(dy) > 3 && bpm.requestPointerLock) {
-            try { bpm.requestPointerLock(); } catch (err) { /* fine without */ }
-          }
-        }
-        const dv = Math.round(dy / 3);
+        acc += (ev.movementY || 0);
+        const dv = Math.round(-acc / 3);
         if (dv !== 0 && !pushed) { Undo.push('Change BPM'); pushed = true; }
         if (pushed) this.setBpm(startV + dv, false);
       };
       const up = () => {
         window.removeEventListener('mousemove', move);
         window.removeEventListener('mouseup', up);
-        if (document.pointerLockElement === bpm && document.exitPointerLock) document.exitPointerLock();
+        if (document.exitPointerLock) { try { document.exitPointerLock(); } catch (err) {} }
       };
       window.addEventListener('mousemove', move);
       window.addEventListener('mouseup', up);
@@ -1269,6 +1297,7 @@ const App = {
       if (e.code === 'Enter') { e.preventDefault(); this.stop(); return; }
       if (e.code === 'F1') { e.preventDefault(); Windows.toggleHelp(); return; }
       if (e.code === 'Escape') {
+        if (UI.recording) { Engine.stopRecord(); Engine.pause(); return; } // cancel a count-in / recording
         if (KeysPanel.visible) { KeysPanel.toggle(); return; }
         this.selectClip(null);
         return;

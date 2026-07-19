@@ -40,11 +40,15 @@ const Sync = {
   pending: null,
   rev: 0,             // state revision: rejects late/stale states that would undo newer edits
 
-  // don't yank the project out from under someone typing a name into a field
+  // don't yank the project out from under someone mid-interaction: typing a
+  // name, an open dropdown (re-render closes it), or an open context menu
   typingBusy() {
     const a = document.activeElement;
-    return !!(a && (a.tagName === 'TEXTAREA' ||
-      (a.tagName === 'INPUT' && a.type !== 'range' && a.type !== 'checkbox' && a.type !== 'number')));
+    if (a && (a.tagName === 'TEXTAREA' ||
+      a.tagName === 'SELECT' ||
+      (a.tagName === 'INPUT' && a.type !== 'range' && a.type !== 'checkbox' && a.type !== 'number'))) return true;
+    if (document.querySelector('.ctx-menu, #metroMenu, #clipMenu, #kickMenu')) return true;
+    return false;
   },
 
   // ---------- connection ----------
@@ -198,7 +202,7 @@ const Sync = {
     this.sendPresence();
     if (this.isHost) this.broadcast(true);
     this.setStatus('online');
-    this.renderPanel();
+    this.renderPanel(true); // force the panel to reflect the now-connected room
     Timeline.render(); // show attribution tags
   },
 
@@ -215,6 +219,7 @@ const Sync = {
   teardown(silent = false) {
     const was = this.connected;
     this.connected = false; this.admitted = false; this.isHost = false; this.synced = false;
+    this.following = null;
     clearInterval(this.periodTimer); clearInterval(this.presenceTimer);
     this.peers.clear(); this.locks.clear(); this.cursors.clear(); this.remotePH.clear(); this.pendingReqs = [];
     this.myLocks.clear();
@@ -223,6 +228,7 @@ const Sync = {
     this.renderPanel();
     this.renderCursors();
     this.renderRemotePlayheads();
+    this.renderFollowBar();
     this.updateLockVisuals();
     if (was && !silent) { toast(tr('mp_left', 'Left the room')); Timeline.render(); }
   },
@@ -249,7 +255,8 @@ const Sync = {
 
       case 'presence': {
         const isNew = !this.peers.has(m.id);
-        this.peers.set(m.id, { name: m.name, color: m.color, host: m.host, joinTs: m.joinTs, lastSeen: Date.now() });
+        this.peers.set(m.id, { name: m.name, color: m.color, host: m.host, joinTs: m.joinTs, following: m.following || null, lastSeen: Date.now() });
+        this.renderFollowBar(); // "X is following you" reflects their choice
         if (m.host && m.settings) {
           this.settings = m.settings;
           this.started = !!m.started;
@@ -303,9 +310,14 @@ const Sync = {
 
       case 'cursor':
         if (m.id !== this.me.id) {
-          this.cursors.set(m.id, { beat: m.beat, y: m.y, ts: Date.now(), name: m.name, color: m.color });
+          this.cursors.set(m.id, { beat: m.beat, y: m.y, fx: m.fx, fy: m.fy, over: m.over, ts: Date.now(), name: m.name, color: m.color });
           this.renderCursors();
+          this.applyFollowView(m);
         }
+        break;
+
+      case 'view':
+        if (m.id !== this.me.id) this.applyFollowView(m);
         break;
 
       case 'ph':
@@ -335,10 +347,12 @@ const Sync = {
         this.cursors.delete(m.id);
         this.remotePH.delete(m.id);
         if (p) toast(tr('mp_left_room', '{name} left', { name: p.name }));
+        if (this.following === m.id) this.following = null; // followed peer left
         if (m.host || (p && p.host)) this.hostLost();
         this.renderPanel();
         this.renderCursors();
         this.renderRemotePlayheads();
+        this.renderFollowBar();
         break;
       }
     }
@@ -384,7 +398,7 @@ const Sync = {
   sendPresence() {
     const p = {
       type: 'presence', id: this.me.id, name: this.me.name, color: this.me.color,
-      host: this.isHost, joinTs: this.me.joinTs
+      host: this.isHost, joinTs: this.me.joinTs, following: this.following || null
     };
     if (this.isHost) { p.settings = this.settings; p.started = this.started; }
     this.send(p);
@@ -528,31 +542,113 @@ const Sync = {
 
   // ---------- live cursors ----------
 
+  following: null, // peer id whose screen we're mirroring
+
+  viewportData() {
+    const sc = document.getElementById('tlScroll');
+    return { sl: sc ? sc.scrollLeft : 0, st: sc ? sc.scrollTop : 0, zoom: UI.zoom };
+  },
+
   initCursors() {
-    let last = 0;
-    document.getElementById('tlScroll').addEventListener('mousemove', (e) => {
+    let lastC = 0, lastV = 0;
+    // cursors follow the mouse anywhere in the window, not just the timeline
+    document.addEventListener('mousemove', (e) => {
       if (!this.admitted) return;
       const now = performance.now();
-      if (now - last < 66) return;
-      last = now;
+      if (now - lastC < 55) return;
+      lastC = now;
       const r = Timeline.lanes.getBoundingClientRect();
-      this.send({
+      const overCanvas = e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
+      const msg = {
         type: 'cursor', id: this.me.id, name: this.me.name, color: this.me.color,
-        beat: (e.clientX - r.left) / UI.zoom, y: e.clientY - r.top
-      });
+        over: overCanvas ? 'c' : 'w',
+        fx: e.clientX / window.innerWidth, fy: e.clientY / window.innerHeight
+      };
+      if (overCanvas) { msg.beat = (e.clientX - r.left) / UI.zoom; msg.y = e.clientY - r.top; }
+      Object.assign(msg, this.viewportData());
+      this.send(msg);
+    });
+    // keep followers in sync when we scroll/zoom without moving the mouse
+    const sc = document.getElementById('tlScroll');
+    if (sc) sc.addEventListener('scroll', () => {
+      if (!this.admitted) return;
+      if (this._applyingView) return;          // our own view moved because WE follow someone
+      if (this.following) this.unfollow(true);  // manual scroll breaks follow (Figma-style)
+      const now = performance.now();
+      if (now - lastV < 60) return;
+      lastV = now;
+      this.send(Object.assign({ type: 'view', id: this.me.id }, this.viewportData()));
     });
   },
 
-  // Reuse one element per cursor so the CSS transition can glide it between
-  // updates instead of teleporting (recreating the node every frame killed the
-  // tween and made it choppy).
+  // mirror a followed peer's viewport (scroll + zoom) onto our own screen
+  applyFollowView(m) {
+    if (this.following !== m.id || m.sl == null) return;
+    this._applyingView = true;
+    if (m.zoom && Math.abs(m.zoom - UI.zoom) > 0.01) Timeline.setZoom(m.zoom);
+    const sc = document.getElementById('tlScroll');
+    if (sc) { sc.scrollLeft = m.sl; sc.scrollTop = m.st; }
+    clearTimeout(this._applyViewT);
+    this._applyViewT = setTimeout(() => { this._applyingView = false; }, 80);
+  },
+
+  follow(peerId) {
+    if (peerId === this.me.id) return;
+    this.following = (this.following === peerId) ? null : peerId;
+    this.sendPresence();       // tell everyone who we're watching
+    this.renderFollowBar();
+    this.renderPanel();
+    const p = this.peers.get(peerId);
+    if (this.following && p) toast(tr('mp_following', 'Following {name}', { name: p.name }));
+  },
+  unfollow(silent) {
+    if (!this.following) return;
+    this.following = null;
+    this.sendPresence();
+    this.renderFollowBar();
+    this.renderPanel();
+  },
+
+  // "Following X" + "X is following you" / "N people are following you"
+  renderFollowBar() {
+    let bar = document.getElementById('followBar');
+    const followers = [...this.peers.values()].filter(p => p.following === this.me.id);
+    const followingPeer = this.following ? this.peers.get(this.following) : null;
+    if (!this.admitted || (!followingPeer && !followers.length)) { if (bar) bar.remove(); return; }
+    if (!bar) {
+      bar = document.createElement('div');
+      bar.id = 'followBar';
+      document.body.appendChild(bar);
+    }
+    let html = '';
+    if (followingPeer) {
+      bar.style.setProperty('--fc', followingPeer.color);
+      html += `<span class="fb-following">${tr('mp_following', 'Following {name}', { name: followingPeer.name })}
+        <button id="fbStop" class="fb-stop">✕</button></span>`;
+    }
+    if (followers.length) {
+      const names = followers.map(p => p.name);
+      let txt;
+      if (followers.length === 1) txt = tr('mp_follows_you_1', '{a} is following you', { a: names[0] });
+      else if (followers.length <= 5) {
+        const last = names.pop();
+        txt = tr('mp_follows_you_n', '{list} and {last} are following you', { list: names.join(', '), last });
+      } else txt = tr('mp_follows_you_many', '{n} people are following you', { n: followers.length });
+      html += `<span class="fb-followers">${txt}</span>`;
+    }
+    bar.innerHTML = html;
+    const stop = bar.querySelector('#fbStop');
+    if (stop) stop.addEventListener('click', () => this.unfollow());
+  },
+
+  // Reuse one element per cursor so the CSS transition can glide it. Canvas
+  // cursors live in #cursorLayer (content coords); cursors over the rest of the
+  // UI live in #cursorLayerWin (fixed, window coords).
   renderCursors() {
     let layer = document.getElementById('cursorLayer');
-    if (!layer) {
-      layer = document.createElement('div');
-      layer.id = 'cursorLayer';
-      Timeline.lanes.appendChild(layer);
-    }
+    if (!layer) { layer = document.createElement('div'); layer.id = 'cursorLayer'; Timeline.lanes.appendChild(layer); }
+    let winLayer = document.getElementById('cursorLayerWin');
+    if (!winLayer) { winLayer = document.createElement('div'); winLayer.id = 'cursorLayerWin'; document.body.appendChild(winLayer); }
     if (!this._cursorEls) this._cursorEls = new Map();
     if (!this.admitted) {
       for (const [, el] of this._cursorEls) el.remove();
@@ -569,11 +665,14 @@ const Sync = {
         el = document.createElement('div');
         el.className = 'mp-cursor';
         el.innerHTML = '<div class="mp-cursor-dot"></div><div class="mp-cursor-name"></div>';
-        layer.appendChild(el);
         this._cursorEls.set(id, el);
       }
-      el.style.left = (c.beat * UI.zoom) + 'px';
-      el.style.top = c.y + 'px';
+      const onCanvas = c.over !== 'w';
+      const wantLayer = onCanvas ? layer : winLayer;
+      if (el.parentNode !== wantLayer) wantLayer.appendChild(el);
+      el.classList.toggle('mp-cursor-win', !onCanvas);
+      if (onCanvas && c.beat != null) { el.style.left = (c.beat * UI.zoom) + 'px'; el.style.top = c.y + 'px'; }
+      else { el.style.left = (c.fx * window.innerWidth) + 'px'; el.style.top = (c.fy * window.innerHeight) + 'px'; }
       el.querySelector('.mp-cursor-dot').style.background = c.color;
       const nm = el.querySelector('.mp-cursor-name');
       nm.style.background = c.color;
@@ -772,11 +871,17 @@ const Sync = {
     this.updatePill();
 
     if (!this.connected || !this.admitted) {
+      const inRoom = !!this.room; // we've started joining/creating a room
+      const hint = !inRoom
+        ? tr('mp_not_connected', 'Not in a room. Open Multiplayer from the home menu, or create a room now.')
+        : this.connected
+          ? tr('mp_waiting', 'Waiting for the host to let you in…')
+          : tr('mp_connecting', 'Setting up room {room}…', { room: this.room });
       p.innerHTML = `
         <div class="jam-head"><svg class="ic"><use href="#i-users"/></svg>
-          <span>${tr('jam_title', 'Jam together')}</span></div>
-        <div class="jam-hint">${this.connected ? tr('mp_waiting', 'Waiting for the host to let you in…') : tr('mp_not_connected', 'Not in a room. Open Multiplayer from the home menu, or create a room now.')}</div>
-        ${this.connected ? '' : `<div class="jam-row"><button id="jamCreateBtn" class="fbtn accent" style="flex:1">${tr('mp_create_room', 'Create a room')}</button></div>`}`;
+          <span>${inRoom ? tr('mp_room', 'Room') : tr('jam_title', 'Jam together')}</span></div>
+        <div class="jam-hint">${hint}</div>
+        ${inRoom ? '' : `<div class="jam-row"><button id="jamCreateBtn" class="fbtn accent" style="flex:1">${tr('mp_create_room', 'Create a room')}</button></div>`}`;
       const cb = p.querySelector('#jamCreateBtn');
       if (cb) cb.addEventListener('click', () => Auth.require(() => MP.openCreate(true)));
       return;
@@ -816,17 +921,22 @@ const Sync = {
     const list = p.querySelector('#jamPlayers');
     for (const pl of players) {
       const row = document.createElement('div');
-      row.className = 'jam-player';
+      row.className = 'jam-player' + (this.following === pl.id ? ' following' : '') + (pl.me ? '' : ' clickable');
       row.innerHTML = `
         <span class="jam-pdot" style="background:${pl.color}"></span>
         <span class="jam-pname">${pl.name}${pl.me ? ' <i>(' + tr('mp_you', 'you') + ')</i>' : ''}</span>
-        ${pl.host ? `<span class="jam-crown" data-tip="${tr('mp_host', 'Host')}">♛</span>` : ''}`;
+        ${pl.host ? `<span class="jam-crown" data-tip="${tr('mp_host', 'Host')}">♛</span>` : ''}
+        ${this.following === pl.id ? `<span class="jam-eye" data-tip="${tr('mp_following_tip', 'Following — click to stop')}"><svg class="ic"><use href="#i-eye"/></svg></span>` : ''}`;
+      if (!pl.me) {
+        row.dataset.tip = this.following === pl.id ? tr('mp_stop_follow', 'Click to stop following') : tr('mp_click_follow', 'Click to follow their screen');
+        row.addEventListener('click', (e) => { if (!e.target.closest('.jam-kick')) this.follow(pl.id); });
+      }
       if (this.isHost && !pl.me) {
         const kick = document.createElement('button');
         kick.className = 'jam-kick';
         kick.dataset.tip = tr('mp_kick', 'Remove this player');
         kick.innerHTML = '<svg class="ic"><use href="#i-x"/></svg>';
-        kick.addEventListener('click', (e) => this.openKickMenu(e.clientX, e.clientY, pl.id, pl.name));
+        kick.addEventListener('click', (e) => { e.stopPropagation(); this.openKickMenu(e.clientX, e.clientY, pl.id, pl.name); });
         row.appendChild(kick);
       }
       list.appendChild(row);
@@ -1047,6 +1157,7 @@ function _wrapUndo(name) {
   const orig = Undo[name].bind(Undo);
   Undo[name] = function (...args) {
     const r = orig(...args);
+    if (typeof Engine !== 'undefined') Engine.liveEdit(); // apply the edit to live playback
     if (Sync.admitted && !Sync.applyingRemote) { clearTimeout(_syncTimer); _syncTimer = setTimeout(() => Sync.broadcast(), 70); }
     return r;
   };

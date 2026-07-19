@@ -49,20 +49,20 @@ const Auth = {
         <div class="modal-title">${tr('auth_title', 'Account')}</div>
         <div class="modal-sub">${tr('auth_sub', 'You need an account to play together.')}</div>
         <div class="auth-tabs">
-          <button class="auth-tab on" data-tab="login">${tr('auth_login', 'Log in')}</button>
-          <button class="auth-tab" data-tab="register">${tr('auth_register', 'Register')}</button>
+          <button class="auth-tab" data-tab="login">${tr('auth_login', 'Log in')}</button>
+          <button class="auth-tab on" data-tab="register">${tr('auth_register', 'Register')}</button>
         </div>
         <input id="authUser" type="text" placeholder="${tr('auth_username', 'Username')}" spellcheck="false" autocomplete="off">
         <input id="authPass" type="password" placeholder="${tr('auth_password', 'Password')}">
         <div id="authErr" class="auth-err"></div>
         <div class="modal-btns">
           <button id="authCancel" class="fbtn">${tr('cancel', 'Cancel')}</button>
-          <button id="authGo" class="fbtn accent">${tr('auth_login', 'Log in')}</button>
+          <button id="authGo" class="fbtn accent">${tr('auth_register', 'Register')}</button>
         </div>
       </div>`;
     document.body.appendChild(wrap);
 
-    let mode = 'login';
+    let mode = 'register'; // most people opening this need an account first
     const err = wrap.querySelector('#authErr');
     const go = wrap.querySelector('#authGo');
     const uEl = wrap.querySelector('#authUser');

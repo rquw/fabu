@@ -504,6 +504,42 @@ const Windows = {
       r.appendChild(inp);
       w.body.appendChild(r);
 
+      // microphone input picker (recording is raw — no noise suppression)
+      const micRow = document.createElement('div');
+      micRow.className = 'frow';
+      micRow.style.marginTop = '4px';
+      const micLbl = document.createElement('label');
+      micLbl.textContent = tr('set_mic', 'Microphone');
+      micLbl.style.cssText = 'flex:0 0 auto;width:auto';
+      const micSel = document.createElement('select');
+      micSel.style.cssText = 'flex:1;min-width:0;background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:4px 6px;color:var(--text)';
+      const optDefault = document.createElement('option');
+      optDefault.value = ''; optDefault.textContent = tr('set_mic_default', 'System default');
+      micSel.appendChild(optDefault);
+      micSel.value = Engine.micId();
+      micSel.addEventListener('change', () => { Engine.setMicId(micSel.value); toast(tr('toast_mic_set', 'Microphone changed')); });
+      micRow.append(micLbl, micSel);
+      w.body.appendChild(micRow);
+      // populate device list (labels appear once mic permission is granted)
+      if (navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) {
+        navigator.mediaDevices.enumerateDevices().then((devs) => {
+          const ins = devs.filter(d => d.kind === 'audioinput');
+          for (const d of ins) {
+            const o = document.createElement('option');
+            o.value = d.deviceId;
+            o.textContent = d.label || tr('set_mic_generic', 'Microphone');
+            micSel.appendChild(o);
+          }
+          micSel.value = Engine.micId();
+          if (!ins.some(d => d.label)) {
+            const hint = document.createElement('div');
+            hint.style.cssText = 'color:var(--faint);font-size:10px;margin:-2px 0 4px';
+            hint.textContent = tr('set_mic_hint', 'Record once to see device names.');
+            micRow.after(hint);
+          }
+        }).catch(() => {});
+      }
+
       const note = document.createElement('div');
       note.style.cssText = 'color:var(--faint);font-size:10.5px;margin-top:10px;line-height:1.5';
       note.textContent = tr('set_note', 'Projects save as .fab files, sounds included. Export makes a WAV audio file.');

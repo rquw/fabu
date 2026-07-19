@@ -40,9 +40,15 @@ const Engine = {
   ensureCtx() {
     if (this.ctx) return this.ctx;
     this.ctx = new AudioContext({ latencyHint: 'interactive' });
+    // A gentle glue/limiter, not a pumping compressor. The old aggressive
+    // settings (thr -8, ratio 6) ducked quiet notes hard whenever one loud
+    // sound hit, so notes seemed to "cut out"; this only catches the peaks.
     this.comp = this.ctx.createDynamicsCompressor();
-    this.comp.threshold.value = -8;
-    this.comp.ratio.value = 6;
+    this.comp.threshold.value = -3;
+    this.comp.knee.value = 8;
+    this.comp.ratio.value = 3;
+    this.comp.attack.value = 0.006;
+    this.comp.release.value = 0.2;
     this.master = this.ctx.createGain();
     this.master.gain.value = S.masterVol;
     this.master.connect(this.comp);
@@ -94,21 +100,19 @@ const Engine = {
       } catch (e) {}
     }
   },
-  voiceCap() { return this.ecoMode() ? 24 : 64; },
+  voiceCap() { return this.ecoMode() ? 40 : 96; },
 
-  // every sounding voice registers here; past the cap the oldest voices are
-  // stolen so heavy projects stay smooth instead of stuttering
-  registerVoice(h) {
+  // Every sounding voice registers here. Past the cap we steal the voices that
+  // are CLOSEST TO ENDING (least audible to cut) instead of the oldest — the
+  // old "steal oldest" logic chopped sustained notes off mid-hold.
+  registerVoice(h, endTime) {
+    if (endTime) h._end = endTime;
     this.live.add(h);
     const cap = this.voiceCap();
     if (this.live.size > cap) {
-      const it = this.live.values();
-      while (this.live.size > cap) {
-        const old = it.next().value;
-        if (!old) break;
-        try { old.kill(); } catch (e) {}
-        this.live.delete(old);
-      }
+      const arr = [...this.live].sort((a, b) => (a._end || Infinity) - (b._end || Infinity));
+      const kill = arr.slice(0, this.live.size - cap);
+      for (const v of kill) { try { v.kill(); } catch (e) {} this.live.delete(v); }
     }
   },
 
@@ -692,6 +696,33 @@ const Engine = {
       } else if (fx.type === 'reverb' && revIn) {
         const send = ac.createGain(); send.gain.value = p.amt ?? 0.35;
         node.connect(send); send.connect(revIn);
+      } else if (fx.type === 'lowcut') {
+        const f = ac.createBiquadFilter();
+        f.type = 'highpass'; f.frequency.value = p.freq ?? 200; f.Q.value = 0.7;
+        node.connect(f); node = f;
+      } else if (fx.type === 'tremolo') {
+        const g2 = ac.createGain();
+        const depth = clamp(p.depth ?? 0.6, 0, 1);
+        g2.gain.value = 1 - depth / 2;
+        const lfo = ac.createOscillator(); lfo.type = 'sine'; lfo.frequency.value = p.rate ?? 5;
+        const lg = ac.createGain(); lg.gain.value = depth / 2;
+        lfo.connect(lg); lg.connect(g2.gain); lfo.start();
+        node.connect(g2); node = g2;
+      } else if (fx.type === 'wobble') {
+        const f = ac.createBiquadFilter();
+        f.type = 'lowpass'; f.frequency.value = 800; f.Q.value = 6;
+        const lfo = ac.createOscillator(); lfo.type = 'sine'; lfo.frequency.value = p.rate ?? 3;
+        const lg = ac.createGain(); lg.gain.value = (p.amt ?? 0.7) * 1800;
+        lfo.connect(lg); lg.connect(f.frequency); lfo.start();
+        node.connect(f); node = f;
+      } else if (fx.type === 'widen') {
+        // Haas widening: delay one side a few ms
+        const splitL = ac.createGain(), splitR = ac.createDelay(0.05);
+        splitR.delayTime.value = 0.004 + (p.amt ?? 0.6) * 0.02;
+        const merger = ac.createChannelMerger(2);
+        node.connect(splitL); node.connect(splitR);
+        splitL.connect(merger, 0, 0); splitR.connect(merger, 0, 1);
+        node = merger;
       }
     }
     node.connect(dest);
@@ -760,22 +791,30 @@ const Engine = {
       for (const c of t.clips) {
         if (c.kind === 'midi') {
           let clipDest = null; // one shared per-clip fx chain, built at play time
+          const getDest = () => {
+            if (!clipDest) {
+              clipDest = this.clipFxDest(this.ctx, this.trackInput(t.id), c, this.rev && this.rev.pre);
+              if (clipDest !== this.trackInput(t.id)) this.live.add({ kill: () => { try { clipDest.disconnect(); } catch (e) {} } });
+            }
+            return clipDest;
+          };
           for (const n of c.notes) {
             const b = c.start + n.start;
-            // keep notes inside the clip bounds
             if (n.start >= c.length) continue;
-            if (b < fromBeat - 1e-6) continue;
             const durB = Math.min(n.length, c.length - n.start);
+            const endB = b + durB;
+            if (endB <= fromBeat + 1e-6) continue; // already finished
+            // a note already sounding at the seek point starts NOW, shortened,
+            // so long/held notes aren't silent when you drop the playhead into them
+            const startBeat = Math.max(b, fromBeat);
+            const remain = endB - startBeat;
             ev.push({
-              beat: b,
+              beat: startBeat,
               fn: (time) => {
-                if (!clipDest) {
-                  clipDest = this.clipFxDest(this.ctx, this.trackInput(t.id), c, this.rev && this.rev.pre);
-                  if (clipDest !== this.trackInput(t.id)) this.live.add({ kill: () => { try { clipDest.disconnect(); } catch (e) {} } });
-                }
-                const v = this.makeVoice(this.ctx, clipDest, t.instrument, n.pitch + (c.pitch || 0), time, (n.vel ?? 0.9) * (c.gain ?? 1));
-                v.stop(time + durB * this.spb());
-                this.registerVoice(v);
+                const v = this.makeVoice(this.ctx, getDest(), t.instrument, n.pitch + (c.pitch || 0), time, (n.vel ?? 0.9) * (c.gain ?? 1));
+                const end = time + remain * this.spb();
+                v.stop(end);
+                this.registerVoice(v, end);
               }
             });
           }
@@ -876,6 +915,16 @@ const Engine = {
     this.evIdx = 0;
     this.nextClickBeat = Math.ceil(beat - 1e-6);
     this.schedTick();
+  },
+
+  // Any edit while the song plays (add/delete a clip or note, drop an effect,
+  // move something) reschedules from the current beat — debounced so a flurry
+  // of edits coalesces. This is what makes deletes stop sounding and effects
+  // take hold live, for you AND remote collaborators.
+  liveEdit() {
+    if (!UI.playing) return;
+    clearTimeout(this._reTimer);
+    this._reTimer = setTimeout(() => { if (UI.playing) this.reschedule(); }, 150);
   },
 
   // ----- live keyboard playing -----
@@ -988,15 +1037,21 @@ const Engine = {
 
   // ----- voice recording with count-in -----
 
+  micId() { try { return localStorage.getItem('fabu.micId') || ''; } catch (e) { return ''; } },
+  setMicId(id) { try { localStorage.setItem('fabu.micId', id || ''); } catch (e) {} },
+
   async toggleRecord() {
     if (UI.recording) { this.stopRecord(); return; }
     this.ensureCtx();
     this.ctx.resume();
     let stream;
     try {
-      stream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true }
-      });
+      const id = this.micId();
+      // record the mic RAW — no echo cancel / noise suppression / auto-gain,
+      // which mangle music and vocals. And use the chosen input device.
+      const audio = { echoCancellation: false, noiseSuppression: false, autoGainControl: false };
+      if (id) audio.deviceId = { exact: id };
+      stream = await navigator.mediaDevices.getUserMedia({ audio });
     } catch (e) {
       toast(tr('toast_mic_denied', 'Microphone access denied'), 'red');
       return;
@@ -1029,6 +1084,8 @@ const Engine = {
       const overlay = $('#countOverlay');
       const num = $('#countNum');
       overlay.classList.remove('hidden');
+      // clicking the badge (or the cancel hint) stops the count-in
+      overlay.onmousedown = () => { UI.recording = false; };
       const spb = this.spb();
       const t0 = this.ctx.currentTime + 0.15;
       for (let i = 0; i < 4; i++) this.click(this.ctx, this.metroGain, t0 + i * spb, i === 0);
@@ -1036,13 +1093,13 @@ const Engine = {
         setTimeout(() => {
           if (!isActive()) return;
           num.textContent = String(i + 1);
-          num.classList.remove('go');
           num.style.animation = 'none'; void num.offsetWidth; num.style.animation = '';
         }, Math.max(0, (t0 + i * spb - this.ctx.currentTime) * 1000));
       }
       const downbeat = t0 + 4 * spb;   // the beat right after "4" — recording begins here
       setTimeout(() => {
         overlay.classList.add('hidden');
+        overlay.onmousedown = null;
         resolve(isActive() ? downbeat : null);
       }, Math.max(0, (downbeat - this.ctx.currentTime) * 1000 - 30));
     });
