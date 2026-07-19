@@ -542,5 +542,15 @@
   "mp_click_follow": "Klicken, um dem Bildschirm zu folgen",
   "mp_follows_you_1": "{a} folgt dir",
   "mp_follows_you_n": "{list} und {last} folgen dir",
-  "mp_follows_you_many": "{n} Leute folgen dir"
+  "mp_follows_you_many": "{n} Leute folgen dir",
+  "tip_samples": "Loops zum auf die Timeline ziehen",
+  "samp_title": "Loops",
+  "samp_search": "Loops suchen",
+  "samp_hint": "Zieh einen Loop auf die Timeline. Es sind bearbeitbare Patterns — Doppelklick zum Anpassen der Noten.",
+  "samp_none": "Kein Loop passt dazu.",
+  "samp_added": "{name} hinzugefügt",
+  "samp_cat_drums": "Drums",
+  "samp_cat_bass": "Bass",
+  "samp_cat_melodic": "Melodisch",
+  "hint_drop_loop": "Zum Hinzufügen des Loops bei Takt {bar} ablegen."
 }

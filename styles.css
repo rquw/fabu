@@ -1481,3 +1481,8 @@ input[type="range"].locked { opacity: 0.45; filter: saturate(0.4); }
   animation: emptyPulse 2.4s var(--ease) infinite;
 }
 @keyframes emptyPulse { 50% { opacity: 0.5; } }
+
+/* ---- samples / loops browser ---- */
+.samp-cat { font-size: 10px; font-weight: 800; letter-spacing: 0.5px; text-transform: uppercase; color: var(--faint); margin: 10px 0 5px; }
+.samp-item { justify-content: flex-start; }
+.samp-item .samp-inst { margin-left: auto; font-size: 10.5px; color: var(--faint); font-weight: 600; }

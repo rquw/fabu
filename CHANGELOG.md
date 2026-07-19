@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.1.3
+- New Loops browser: drag in ready-made drum beats, basslines and melodic loops from the toolbar. They're editable patterns, so double-click to make them your own.
+
 ## 1.1.2
 - Playback fixes: notes no longer cut out when something loud hits, long notes play when you drop the playhead into them, and edits (delete a clip, add an effect) apply live while the song plays — for you and everyone in the room.
 - Much lighter on the CPU: gentler limiting, smarter voice handling, and the playhead no longer stutters or freezes.

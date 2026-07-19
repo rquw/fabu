@@ -718,7 +718,9 @@ const Timeline = {
       ghost.style.display = 'block';
       ghost.style.left = (beat * UI.zoom) + 'px';
       ghost.style.height = Math.max(S.tracks.length * TRACK_H, TRACK_H) + 'px';
-      setHint(tr('hint_drop_at_bar', 'Drop to place the sound at bar {bar}.', { bar: Math.floor(beat / 4) + 1 }));
+      const isLoop = [...e.dataTransfer.types].includes('text/fabu-sample');
+      setHint(isLoop ? tr('hint_drop_loop', 'Drop to add this loop at bar {bar}.', { bar: Math.floor(beat / 4) + 1 })
+        : tr('hint_drop_at_bar', 'Drop to place the sound at bar {bar}.', { bar: Math.floor(beat / 4) + 1 }));
     });
     area.addEventListener('dragleave', () => { ghost.style.display = 'none'; });
     area.addEventListener('drop', async (e) => {
@@ -726,6 +728,9 @@ const Timeline = {
       ghost.style.display = 'none';
       const beat = snapBeat(this.xToBeat(e.clientX), S.snap);
       const laneIdx = Math.floor((e.clientY - this.lanes.getBoundingClientRect().top) / TRACK_H);
+      // a loop from the Samples browser
+      const sampleId = e.dataTransfer.getData('text/fabu-sample');
+      if (sampleId) { App.addSampleToProject(sampleId, beat, S.tracks[laneIdx] ? laneIdx : null); return; }
       const files = [...e.dataTransfer.files].filter(f =>
         /\.(wav|mp3|ogg|m4a|aac|flac|aiff?|webm|opus)$/i.test(f.name) || f.type.startsWith('audio/'));
       if (!files.length) { toast(tr('toast_not_audio', 'That is not an audio file'), 'red'); return; }

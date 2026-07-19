@@ -1,7 +1,7 @@
 {
   "name": "fabu",
   "productName": "fabu",
-  "version": "1.1.2",
+  "version": "1.1.3",
   "description": "The simplest music creation program out there.",
   "author": "Fabio Schwaiger",
   "homepage": "https://rquw.github.io/fabu/",
@@ -32,7 +32,11 @@
     },
     "afterPack": "build/afterPack.js",
     "publish": [
-      { "provider": "github", "owner": "rquw", "repo": "fabu" }
+      {
+        "provider": "github",
+        "owner": "rquw",
+        "repo": "fabu"
+      }
     ],
     "files": [
       "main.js",
@@ -43,7 +47,10 @@
       "languages/**"
     ],
     "extraResources": [
-      { "from": "languages", "to": "languages" }
+      {
+        "from": "languages",
+        "to": "languages"
+      }
     ],
     "fileAssociations": [
       {
@@ -55,8 +62,18 @@
     ],
     "mac": {
       "target": [
-        { "target": "dmg", "arch": ["universal"] },
-        { "target": "zip", "arch": ["universal"] }
+        {
+          "target": "dmg",
+          "arch": [
+            "universal"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "universal"
+          ]
+        }
       ],
       "icon": "build/icon.icns",
       "category": "public.app-category.music",
@@ -67,15 +84,32 @@
       "title": "Install fabu",
       "icon": "build/icon.icns",
       "iconSize": 120,
-      "window": { "width": 540, "height": 380 },
+      "window": {
+        "width": 540,
+        "height": 380
+      },
       "contents": [
-        { "x": 150, "y": 200, "type": "file" },
-        { "x": 390, "y": 200, "type": "link", "path": "/Applications" }
+        {
+          "x": 150,
+          "y": 200,
+          "type": "file"
+        },
+        {
+          "x": 390,
+          "y": 200,
+          "type": "link",
+          "path": "/Applications"
+        }
       ]
     },
     "win": {
       "target": [
-        { "target": "nsis", "arch": ["x64"] }
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
       ],
       "icon": "build/icon.ico"
     },
