@@ -223,6 +223,8 @@ const SAMPLE_LIB = [
     notes: _drum({ k: 'X.........X.....', s: '........X.......', h: 'xxxxxxxxxxxxxxxx', o: '..............x.' }) },
   { id: 'dr_house', cat: 'drums', name: 'House Groove', instrument: 'drums', length: 4,
     notes: _drum({ k: 'X...X...X...X...', o: '..x...x...x...x.', c: '....X.......X...' }) },
+  { id: 'dr_break', cat: 'drums', name: 'Breakcore', instrument: 'drums', length: 4,
+    notes: _drum({ k: 'X..X..X.X..X.X.X.', s: '..X..X..X.X..X.X.', h: 'xxxxxxxxxxxxxxxx' }) },
 
   // --- bass (low octave) ---
   { id: 'ba_walk', cat: 'bass', name: 'Walking Bass', instrument: 'bass', length: 4,
@@ -237,16 +239,25 @@ const SAMPLE_LIB = [
   // --- melodic ---
   { id: 'me_chords', cat: 'melodic', name: 'Piano Chords', instrument: 'keys', length: 4,
     notes: _chords([[0, [60, 64, 67], 1], [1, [57, 60, 64], 1], [2, [53, 57, 60], 1], [3, [55, 59, 62], 1]]) },
-  { id: 'me_pad', cat: 'melodic', name: 'String Pad', instrument: 'strings', length: 4,
+  { id: 'me_pad', cat: 'melodic', name: 'Warm Pad', instrument: 'strings', length: 4,
     notes: _chords([[0, [55, 60, 64], 2], [2, [53, 57, 60], 2]]) },
-  { id: 'me_arp', cat: 'melodic', name: 'Pluck Arp', instrument: 'pluck', length: 4,
+  { id: 'me_arp', cat: 'melodic', name: 'Bright Arp', instrument: 'pluck', length: 4,
     notes: _line([[0, 60, 0.25], [0.5, 64, 0.25], [1, 67, 0.25], [1.5, 72, 0.25], [2, 67, 0.25], [2.5, 64, 0.25], [3, 60, 0.25], [3.5, 64, 0.25]]) },
-  { id: 'me_epiano', cat: 'melodic', name: 'E-Piano Keys', instrument: 'epiano', length: 4,
+  { id: 'me_epiano', cat: 'melodic', name: 'Dreamy Chords', instrument: 'epiano', length: 4,
     notes: _chords([[0, [64, 67, 71], 1.5], [1.5, [62, 65, 69], 1.5], [3, [60, 64, 67], 1]]) },
-  { id: 'me_bell', cat: 'melodic', name: 'Bell Melody', instrument: 'bell', length: 4,
-    notes: _line([[0, 72, 0.5], [1, 76, 0.5], [2, 79, 0.5], [2.5, 76, 0.25], [3, 72, 1]]) }
+  { id: 'me_bell', cat: 'melodic', name: 'Sparkle Melody', instrument: 'bell', length: 4,
+    notes: _line([[0, 72, 0.5], [1, 76, 0.5], [2, 79, 0.5], [2.5, 76, 0.25], [3, 72, 1]]) },
+
+  // --- one-shot sound effects (fill silence / transitions) ---
+  { id: 'fx_riser', cat: 'fx', name: 'Riser', instrument: 'sfx_riser', length: 4, notes: [{ pitch: 60, start: 0, length: 4, vel: 0.9 }] },
+  { id: 'fx_reverse', cat: 'fx', name: 'Reverse Cymbal', instrument: 'sfx_reverse', length: 4, notes: [{ pitch: 60, start: 0, length: 4, vel: 0.9 }] },
+  { id: 'fx_impact', cat: 'fx', name: 'Impact Hit', instrument: 'sfx_impact', length: 2, notes: [{ pitch: 60, start: 0, length: 2, vel: 1 }] },
+  { id: 'fx_zap', cat: 'fx', name: 'Laser Zap', instrument: 'sfx_zap', length: 1, notes: [{ pitch: 60, start: 0, length: 1, vel: 0.9 }] },
+  { id: 'fx_coin', cat: 'fx', name: 'Skill Point', instrument: 'sfx_coin', length: 1, notes: [{ pitch: 60, start: 0, length: 1, vel: 0.9 }] },
+  { id: 'fx_downer', cat: 'fx', name: 'Downlifter', instrument: 'sfx_downer', length: 4, notes: [{ pitch: 60, start: 0, length: 4, vel: 0.9 }] },
+  { id: 'fx_whoosh', cat: 'fx', name: 'Whoosh', instrument: 'sfx_whoosh', length: 2, notes: [{ pitch: 60, start: 0, length: 2, vel: 0.9 }] }
 ];
-const SAMPLE_CATS = ['drums', 'bass', 'melodic'];
+const SAMPLE_CATS = ['drums', 'bass', 'melodic', 'fx'];
 function sampleCatName(c) {
-  return tr('samp_cat_' + c, c === 'drums' ? 'Drums' : c === 'bass' ? 'Bass' : 'Melodic');
+  return tr('samp_cat_' + c, c === 'drums' ? 'Drums' : c === 'bass' ? 'Bass' : c === 'melodic' ? 'Melodic' : 'Sound FX');
 }

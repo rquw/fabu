@@ -291,11 +291,14 @@ const Engine = {
 
   // ----- instruments (all synthesized, clean sounds, no samples needed) -----
 
-  makeVoice(ac, dest, instr, pitch, t, vel = 0.9) {
+  // noAttack = true starts the voice already in its sustain phase (a tiny fade,
+  // no hard attack transient) so a note you seek INTO doesn't re-strike.
+  makeVoice(ac, dest, instr, pitch, t, vel = 0.9, noAttack = false) {
     const custom = resolveInstrument(instr);
-    if (custom) return this.makeSamplerVoice(ac, dest, custom, pitch, t, vel);
+    if (custom) return this.makeSamplerVoice(ac, dest, custom, pitch, t, vel, noAttack);
+    if (this.SFX && this.SFX[instr]) return this.SFX[instr](ac, dest, pitch, t, vel);
     if (instr === 'drums') return this.makeDrum(ac, dest, pitch, t, vel);
-    if (instr === 'keys') return this.makePiano(ac, dest, pitch, t, vel);
+    if (instr === 'keys') return this.makePiano(ac, dest, pitch, t, vel, noAttack);
 
     const f = midiToFreq(pitch);
     const g = ac.createGain();
@@ -395,13 +398,20 @@ const Engine = {
     }
 
     const p = peak * vel;
-    g.gain.setValueAtTime(0, t);
-    g.gain.linearRampToValueAtTime(p, t + A);
-    g.gain.setTargetAtTime(p * SUS, t + A, Math.max(0.02, D / 3));
-    if (filter && filtEnv) {
-      const base = filter.frequency.value;
-      filter.frequency.setValueAtTime(base + filtEnv * (0.4 + 0.6 * vel), t);
-      filter.frequency.exponentialRampToValueAtTime(Math.max(120, base), t + D + 0.05);
+    if (noAttack) {
+      // straight to sustain with a tiny fade so there's no attack thump/click
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(p * SUS, t + 0.01);
+      // no filter sweep — it's mid-note, the filter has already settled
+    } else {
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(p, t + A);
+      g.gain.setTargetAtTime(p * SUS, t + A, Math.max(0.02, D / 3));
+      if (filter && filtEnv) {
+        const base = filter.frequency.value;
+        filter.frequency.setValueAtTime(base + filtEnv * (0.4 + 0.6 * vel), t);
+        filter.frequency.exponentialRampToValueAtTime(Math.max(120, base), t + D + 0.05);
+      }
     }
     for (const o of oscs) o.start(t);
 
@@ -410,7 +420,7 @@ const Engine = {
 
   // A grand-ish piano: inharmonic partials that each decay at their own rate,
   // plus a short hammer click. Brighter the harder you play.
-  makePiano(ac, dest, pitch, t, vel = 0.9) {
+  makePiano(ac, dest, pitch, t, vel = 0.9, noAttack = false) {
     const f = midiToFreq(pitch);
     const g = ac.createGain();
     g.connect(dest);
@@ -425,24 +435,28 @@ const Engine = {
       o.type = 'sine';
       o.frequency.value = f * n * (1 + 0.0007 * n * n); // slight inharmonicity
       const pg = ac.createGain();
-      const amp = lvl * (0.4 + 0.6 * vel) * 0.5;
+      // mid-note: start each partial part-way down its decay so it sounds like
+      // the note has been ringing, not freshly struck
+      const amp = lvl * (0.4 + 0.6 * vel) * 0.5 * (noAttack ? 0.5 : 1);
       pg.gain.setValueAtTime(0, t);
-      pg.gain.linearRampToValueAtTime(amp, t + 0.004);
-      pg.gain.exponentialRampToValueAtTime(0.0002, t + bodyDecay * decayScale);
+      pg.gain.linearRampToValueAtTime(amp, t + (noAttack ? 0.012 : 0.004));
+      pg.gain.exponentialRampToValueAtTime(0.0002, t + bodyDecay * decayScale * (noAttack ? 0.6 : 1));
       o.connect(pg); pg.connect(g);
       o.start(t);
       oscs.push(o);
     }
-    // hammer thock
-    const noise = ac.createBufferSource();
-    noise.buffer = this.noise(ac); noise.loop = true;
-    const hp = ac.createBiquadFilter(); hp.type = 'bandpass';
-    hp.frequency.value = clamp(f * 2, 300, 4000); hp.Q.value = 0.6;
-    const ng = ac.createGain();
-    ng.gain.setValueAtTime(0.18 * vel, t);
-    ng.gain.exponentialRampToValueAtTime(0.0002, t + 0.05);
-    noise.connect(hp); hp.connect(ng); ng.connect(g);
-    noise.start(t); noise.stop(t + 0.08);
+    if (!noAttack) {
+      // hammer thock — the attack transient we skip for a mid-note start
+      const noise = ac.createBufferSource();
+      noise.buffer = this.noise(ac); noise.loop = true;
+      const hp = ac.createBiquadFilter(); hp.type = 'bandpass';
+      hp.frequency.value = clamp(f * 2, 300, 4000); hp.Q.value = 0.6;
+      const ng = ac.createGain();
+      ng.gain.setValueAtTime(0.18 * vel, t);
+      ng.gain.exponentialRampToValueAtTime(0.0002, t + 0.05);
+      noise.connect(hp); hp.connect(ng); ng.connect(g);
+      noise.start(t); noise.stop(t + 0.08);
+    }
 
     g.gain.value = 0.9;
     return this.wrapVoice(ac, g, oscs, 0.35);
@@ -465,7 +479,7 @@ const Engine = {
 
   // A custom instrument built from an audio file: resample by root note,
   // with a trimmed region and attack/release envelope.
-  makeSamplerVoice(ac, dest, inst, pitch, t, vel = 0.9) {
+  makeSamplerVoice(ac, dest, inst, pitch, t, vel = 0.9, noAttack = false) {
     const s = Samples[inst.sampleId];
     const g = ac.createGain();
     g.connect(dest);
@@ -474,7 +488,7 @@ const Engine = {
     src.buffer = s.buffer;
     src.playbackRate.value = Math.pow(2, (pitch - (inst.root ?? 60)) / 12);
     src.connect(g);
-    const A = inst.attack ?? 0.005;
+    const A = noAttack ? 0.01 : (inst.attack ?? 0.005);
     const R = inst.release ?? 0.08;
     const start = clamp(inst.start || 0, 0, s.buffer.duration);
     const end = clamp(inst.end != null ? inst.end : s.buffer.duration, start, s.buffer.duration);
@@ -500,6 +514,87 @@ const Engine = {
 
   // Drum kit: which sound depends on the note's pitch class
   // C = kick · D = snare · E = clap · F/F# = closed hat · A/A# = open hat
+  // ----- synthesized one-shot sound effects (risers, hits, zaps…) -----
+  // Each plays its FULL effect regardless of note length (stop is a no-op), so
+  // dropping one anywhere just fires it.
+  _sfxHandle(sources, node) {
+    return {
+      stop: () => {}, // one-shots play out on their own
+      kill: () => { for (const s of sources) { try { s.stop(); } catch (e) {} } try { node.disconnect(); } catch (e) {} }
+    };
+  },
+  SFX: {
+    sfx_riser(ac, dest, pitch, t, vel) {
+      const dur = 1.8;
+      const n = ac.createBufferSource(); n.buffer = Engine.noise(ac); n.loop = true;
+      const lp = ac.createBiquadFilter(); lp.type = 'bandpass'; lp.Q.value = 4;
+      lp.frequency.setValueAtTime(400, t); lp.frequency.exponentialRampToValueAtTime(9000, t + dur);
+      const g = ac.createGain();
+      g.gain.setValueAtTime(0.0006, t); g.gain.exponentialRampToValueAtTime(0.45 * vel, t + dur * 0.92);
+      g.gain.linearRampToValueAtTime(0, t + dur + 0.06);
+      n.connect(lp); lp.connect(g); g.connect(dest);
+      n.start(t); n.stop(t + dur + 0.1);
+      return Engine._sfxHandle([n], g);
+    },
+    sfx_reverse(ac, dest, pitch, t, vel) { // reverse cymbal swell
+      const dur = 1.4;
+      const n = ac.createBufferSource(); n.buffer = Engine.noise(ac); n.loop = true;
+      const hp = ac.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 3500;
+      const g = ac.createGain();
+      g.gain.setValueAtTime(0.0004, t); g.gain.exponentialRampToValueAtTime(0.5 * vel, t + dur);
+      g.gain.linearRampToValueAtTime(0, t + dur + 0.04);
+      n.connect(hp); hp.connect(g); g.connect(dest);
+      n.start(t); n.stop(t + dur + 0.08);
+      return Engine._sfxHandle([n], g);
+    },
+    sfx_impact(ac, dest, pitch, t, vel) { // big low hit
+      const o = ac.createOscillator(); o.type = 'sine';
+      o.frequency.setValueAtTime(120, t); o.frequency.exponentialRampToValueAtTime(38, t + 0.5);
+      const og = ac.createGain(); og.gain.setValueAtTime(1.1 * vel, t); og.gain.exponentialRampToValueAtTime(0.001, t + 0.7);
+      const n = ac.createBufferSource(); n.buffer = Engine.noise(ac); n.loop = true;
+      const ng = ac.createGain(); ng.gain.setValueAtTime(0.5 * vel, t); ng.gain.exponentialRampToValueAtTime(0.001, t + 0.25);
+      const out = ac.createGain();
+      o.connect(og); og.connect(out); n.connect(ng); ng.connect(out); out.connect(dest);
+      o.start(t); o.stop(t + 0.75); n.start(t); n.stop(t + 0.3);
+      return Engine._sfxHandle([o, n], out);
+    },
+    sfx_zap(ac, dest, pitch, t, vel) { // laser
+      const o = ac.createOscillator(); o.type = 'sawtooth';
+      o.frequency.setValueAtTime(2400, t); o.frequency.exponentialRampToValueAtTime(180, t + 0.3);
+      const g = ac.createGain(); g.gain.setValueAtTime(0.4 * vel, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.34);
+      o.connect(g); g.connect(dest); o.start(t); o.stop(t + 0.36);
+      return Engine._sfxHandle([o], g);
+    },
+    sfx_coin(ac, dest, pitch, t, vel) { // game point / skill blips
+      const out = ac.createGain(); out.connect(dest);
+      [[988, 0], [1319, 0.08]].forEach(([hz, off]) => {
+        const o = ac.createOscillator(); o.type = 'square'; o.frequency.value = hz;
+        const g = ac.createGain(); g.gain.setValueAtTime(0.35 * vel, t + off); g.gain.exponentialRampToValueAtTime(0.001, t + off + 0.16);
+        o.connect(g); g.connect(out); o.start(t + off); o.stop(t + off + 0.18);
+      });
+      return Engine._sfxHandle([], out);
+    },
+    sfx_downer(ac, dest, pitch, t, vel) { // downlifter
+      const dur = 1.2;
+      const n = ac.createBufferSource(); n.buffer = Engine.noise(ac); n.loop = true;
+      const lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.Q.value = 3;
+      lp.frequency.setValueAtTime(8000, t); lp.frequency.exponentialRampToValueAtTime(200, t + dur);
+      const g = ac.createGain(); g.gain.setValueAtTime(0.4 * vel, t); g.gain.linearRampToValueAtTime(0.02, t + dur);
+      n.connect(lp); lp.connect(g); g.connect(dest); n.start(t); n.stop(t + dur + 0.05);
+      return Engine._sfxHandle([n], g);
+    },
+    sfx_whoosh(ac, dest, pitch, t, vel) { // transition whoosh
+      const dur = 0.55;
+      const n = ac.createBufferSource(); n.buffer = Engine.noise(ac); n.loop = true;
+      const bp = ac.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 1.5;
+      bp.frequency.setValueAtTime(600, t); bp.frequency.exponentialRampToValueAtTime(5000, t + dur);
+      const g = ac.createGain();
+      g.gain.setValueAtTime(0.001, t); g.gain.exponentialRampToValueAtTime(0.4 * vel, t + dur * 0.5); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+      n.connect(bp); bp.connect(g); g.connect(dest); n.start(t); n.stop(t + dur + 0.05);
+      return Engine._sfxHandle([n], g);
+    }
+  },
+
   makeDrum(ac, dest, pitch, t, vel = 1) {
     const pc = pitch % 12;
     const out = ac.createGain();
@@ -808,10 +903,11 @@ const Engine = {
             // so long/held notes aren't silent when you drop the playhead into them
             const startBeat = Math.max(b, fromBeat);
             const remain = endB - startBeat;
+            const midNote = startBeat > b + 1e-6; // seeked INTO this note
             ev.push({
               beat: startBeat,
               fn: (time) => {
-                const v = this.makeVoice(this.ctx, getDest(), t.instrument, n.pitch + (c.pitch || 0), time, (n.vel ?? 0.9) * (c.gain ?? 1));
+                const v = this.makeVoice(this.ctx, getDest(), t.instrument, n.pitch + (c.pitch || 0), time, (n.vel ?? 0.9) * (c.gain ?? 1), midNote);
                 const end = time + remain * this.spb();
                 v.stop(end);
                 this.registerVoice(v, end);

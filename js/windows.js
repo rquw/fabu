@@ -30,11 +30,13 @@ const Windows = {
       if (e.target.closest('.fwin-close')) return;
       const sx = e.clientX - el.offsetLeft;
       const sy = e.clientY - el.offsetTop;
+      el.classList.add('dragging'); // goes slightly transparent while moving
       const move = (ev) => {
         el.style.left = clamp(ev.clientX - sx, -el.offsetWidth + 60, window.innerWidth - 60) + 'px';
         el.style.top = clamp(ev.clientY - sy, 0, window.innerHeight - 80) + 'px';
       };
       const up = () => {
+        el.classList.remove('dragging');
         window.removeEventListener('mousemove', move);
         window.removeEventListener('mouseup', up);
       };
@@ -101,17 +103,19 @@ const Windows = {
 
   // A little EQ curve you shape by dragging three points (low / mid / high).
   // Maps straight onto the existing 3-band chain, so it applies live.
-  buildEqCanvas(t) {
-    const W = 132, H = 64, PAD = 10;
+  buildEqCanvas(t, W = 132, H = 64, big = false) {
+    const PAD = 10;
     const box = document.createElement('div');
-    box.className = 'eq-canvas';
+    box.className = 'eq-canvas' + (big ? ' big' : '');
     box.dataset.tip = tr('tip_eq_canvas', 'Drag the points to shape the EQ. Double-click a point to reset it.');
     const cv = document.createElement('canvas');
     box.appendChild(cv);
     const bands = ['low', 'mid', 'high'];
-    const bandX = { low: PAD + (W - 2 * PAD) * 0.12, mid: PAD + (W - 2 * PAD) * 0.5, high: PAD + (W - 2 * PAD) * 0.88 };
-    const gainToY = (g) => H / 2 - (g / 12) * (H / 2 - 8);
-    const yToGain = (y) => clamp(((H / 2 - y) / (H / 2 - 8)) * 12, -12, 12);
+    const bandLbl = { low: tr('eq_low', 'LOW'), mid: tr('eq_mid', 'MID'), high: tr('eq_high', 'HIGH') };
+    const bandX = { low: PAD + (W - 2 * PAD) * 0.16, mid: PAD + (W - 2 * PAD) * 0.5, high: PAD + (W - 2 * PAD) * 0.84 };
+    const hr = H / 2 - (big ? 14 : 8);
+    const gainToY = (g) => H / 2 - (g / 12) * hr;
+    const yToGain = (y) => clamp(((H / 2 - y) / hr) * 12, -12, 12);
 
     const draw = () => {
       const dpr = window.devicePixelRatio || 1;
@@ -127,7 +131,7 @@ const Windows = {
       // the curve through the three points
       const pts = [[0, gainToY(t.eq.low)], [bandX.low, gainToY(t.eq.low)],
         [bandX.mid, gainToY(t.eq.mid)], [bandX.high, gainToY(t.eq.high)], [W, gainToY(t.eq.high)]];
-      x.strokeStyle = t.color; x.lineWidth = 2;
+      x.strokeStyle = t.color; x.lineWidth = big ? 2.5 : 2;
       x.beginPath();
       x.moveTo(pts[0][0], pts[0][1]);
       for (let i = 1; i < pts.length; i++) {
@@ -136,11 +140,19 @@ const Windows = {
         x.bezierCurveTo(mx, y0, mx, y1, x1, y1);
       }
       x.stroke();
-      // handles
+      // handles + labels
       for (const b of bands) {
+        const hx = bandX[b], hy = gainToY(t.eq[b]);
         x.fillStyle = t.color;
-        x.beginPath(); x.arc(bandX[b], gainToY(t.eq[b]), 4.5, 0, Math.PI * 2); x.fill();
+        x.beginPath(); x.arc(hx, hy, big ? 6 : 4.5, 0, Math.PI * 2); x.fill();
         x.strokeStyle = 'rgba(0,0,0,0.4)'; x.lineWidth = 1.2; x.stroke();
+        if (big) {
+          x.fillStyle = 'rgba(255,255,255,0.55)';
+          x.font = '700 9px -apple-system, sans-serif'; x.textAlign = 'center';
+          x.fillText(bandLbl[b], hx, H - 5);
+          const g = t.eq[b];
+          if (Math.abs(g) > 0.1) { x.fillStyle = 'var(--dim)'; x.fillStyle = 'rgba(255,255,255,0.7)'; x.fillText((g > 0 ? '+' : '') + g.toFixed(1), hx, 12); }
+        }
       }
     };
     draw();
@@ -190,29 +202,41 @@ const Windows = {
   },
 
   buildMixer(body) {
-    body.innerHTML = '<div id="mixerStrips"></div>';
+    body.innerHTML = '<div id="mixEq"></div><div id="mixerStrips"></div>';
     const strips = body.querySelector('#mixerStrips');
     const bandLabel = { high: tr('eq_high', 'HIGH'), mid: tr('eq_mid', 'MID'), low: tr('eq_low', 'LOW') };
 
-    for (const t of S.tracks) {
-      const strip = document.createElement('div');
-      strip.className = 'strip';
-      strip.innerHTML = `<div class="strip-name" style="color:${t.color}">${t.name}</div>`;
-
-      const eqBox = document.createElement('div');
-      eqBox.className = 'strip-eq';
-      eqBox.appendChild(this.buildEqCanvas(t));
-      // keep the automation dots reachable
+    // one clear EQ for the selected track (was a cramped tiny EQ on every strip)
+    const eqBox = body.querySelector('#mixEq');
+    const selT = UI.selTrackId ? getTrack(UI.selTrackId) : null;
+    if (selT) {
+      const head = document.createElement('div');
+      head.className = 'mixeq-head';
+      head.innerHTML = `<span>${tr('mixeq_title', 'Equalizer')}</span> <b style="color:${selT.color}">${selT.name}</b>`;
+      eqBox.appendChild(head);
+      eqBox.appendChild(this.buildEqCanvas(selT, 300, 116, true));
       const dotRow = document.createElement('div');
       dotRow.className = 'eq-dots';
       for (const band of ['low', 'mid', 'high']) {
         const lbl = document.createElement('span');
-        lbl.textContent = bandLabel[band][0];
+        lbl.textContent = bandLabel[band];
         dotRow.appendChild(lbl);
-        dotRow.appendChild(this.autoDot(t, band));
+        dotRow.appendChild(this.autoDot(selT, band));
       }
       eqBox.appendChild(dotRow);
-      strip.appendChild(eqBox);
+    } else {
+      eqBox.innerHTML = `<div class="mixeq-empty">${tr('mixeq_pick', 'Click a track below to shape its EQ.')}</div>`;
+    }
+
+    for (const t of S.tracks) {
+      const strip = document.createElement('div');
+      strip.className = 'strip' + (t.id === UI.selTrackId ? ' sel' : '');
+      const nameEl = document.createElement('div');
+      nameEl.className = 'strip-name';
+      nameEl.style.color = t.color;
+      nameEl.textContent = t.name;
+      nameEl.addEventListener('click', () => { App.selectTrack(t.id); this.buildMixer(body); });
+      strip.appendChild(nameEl);
 
       const panRow = document.createElement('div');
       panRow.className = 'mix-row';
@@ -464,8 +488,7 @@ const Windows = {
     w.body.innerHTML = `
       <input id="sampSearch" type="text" placeholder="${tr('samp_search', 'Search loops')}" spellcheck="false"
         style="width:100%;background:var(--panel2);border:1px solid var(--line);border-radius:7px;padding:6px 9px;color:var(--text);outline:none;font-size:12px;margin-bottom:8px">
-      <div id="sampList"></div>
-      <div style="color:var(--faint);font-size:10.5px;margin-top:8px;line-height:1.5">${tr('samp_hint', 'Drag a loop onto the timeline. They are editable patterns — double-click to tweak the notes.')}</div>`;
+      <div id="sampList" class="samp-scroll"></div>`;
     const list = w.body.querySelector('#sampList');
     const search = w.body.querySelector('#sampSearch');
     const render = () => {
@@ -482,11 +505,16 @@ const Windows = {
           const item = document.createElement('div');
           item.className = 'fx-item samp-item';
           item.draggable = true;
-          item.innerHTML = `<svg class="ic"><use href="#i-loops"/></svg><span>${s.name}</span><span class="samp-inst">${instrLabel(s.instrument)}</span>`;
+          const inst = s.cat === 'fx' ? '' : `<span class="samp-inst">${instrLabel(s.instrument)}</span>`;
+          item.innerHTML = `<svg class="ic"><use href="#i-loops"/></svg><span>${s.name}</span>${inst}`;
           item.addEventListener('dragstart', (e) => {
             e.dataTransfer.setData('text/fabu-sample', s.id);
             e.dataTransfer.effectAllowed = 'copy';
+            Windows._dragSample = s;   // so the timeline can preview its size
           });
+          item.addEventListener('dragend', () => { Windows._dragSample = null; });
+          // a plain click isn't obvious, so nudge people to drag (double-click still adds)
+          item.addEventListener('click', () => toast(tr('samp_drag_hint', 'Drag it anywhere on the timeline!')));
           item.addEventListener('dblclick', () => App.addSampleToProject(s.id));
           list.appendChild(item);
         }

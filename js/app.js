@@ -1241,16 +1241,22 @@ const App = {
 
     const bpm = $('#bpmInput');
     bpm.addEventListener('change', () => this.setBpm(parseFloat(bpm.value) || 120));
-    // drag the BPM number up/down; the pointer locks so it never runs off-screen
+    // drag the BPM number up/down. Pointer lock hides + pins the cursor so it
+    // can't run off-screen. Lock the document element (the reliable target on
+    // macOS — locking an <input> or a topbar element silently fails there);
+    // fall back gracefully to plain clientY deltas if lock is denied.
     bpm.addEventListener('mousedown', (e) => {
       e.preventDefault();
+      bpm.blur();
       const startV = S.bpm;
-      let pushed = false;
-      let acc = 0; // accumulated vertical movement (pixels) since mousedown
-      const locker = bpm.parentElement || bpm; // <input> pointer lock is flaky; lock the field
-      if (locker.requestPointerLock) { try { locker.requestPointerLock(); } catch (err) { /* fine without */ } }
+      let pushed = false, acc = 0, locked = false, lastY = e.clientY;
+      const target = document.documentElement;
+      const onLockChange = () => { locked = document.pointerLockElement === target; };
+      document.addEventListener('pointerlockchange', onLockChange);
+      if (target.requestPointerLock) { try { const r = target.requestPointerLock(); if (r && r.catch) r.catch(() => {}); } catch (err) {} }
       const move = (ev) => {
-        acc += (ev.movementY || 0);
+        acc += locked ? (ev.movementY || 0) : (ev.clientY - lastY);
+        lastY = ev.clientY;
         const dv = Math.round(-acc / 3);
         if (dv !== 0 && !pushed) { Undo.push('Change BPM'); pushed = true; }
         if (pushed) this.setBpm(startV + dv, false);
@@ -1258,7 +1264,8 @@ const App = {
       const up = () => {
         window.removeEventListener('mousemove', move);
         window.removeEventListener('mouseup', up);
-        if (document.exitPointerLock) { try { document.exitPointerLock(); } catch (err) {} }
+        document.removeEventListener('pointerlockchange', onLockChange);
+        if (document.pointerLockElement && document.exitPointerLock) { try { document.exitPointerLock(); } catch (err) {} }
       };
       window.addEventListener('mousemove', move);
       window.addEventListener('mouseup', up);
@@ -1331,6 +1338,7 @@ const App = {
       if (e.code === 'Enter') { e.preventDefault(); this.stop(); return; }
       if (e.code === 'F1') { e.preventDefault(); Windows.toggleHelp(); return; }
       if (e.code === 'Escape') {
+        if (typeof Tutor !== 'undefined' && Tutor.active) { Tutor.finish(); return; }
         if (UI.recording) { Engine.stopRecord(); Engine.pause(); return; } // cancel a count-in / recording
         if (KeysPanel.visible) { KeysPanel.toggle(); return; }
         this.selectClip(null);

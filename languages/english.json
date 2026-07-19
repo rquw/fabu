@@ -60,6 +60,13 @@
   "instr_pluck": "Pluck",
   "instr_bell": "Bell",
   "instr_drums": "Drum Kit",
+  "instr_sfx_riser": "Riser",
+  "instr_sfx_reverse": "Reverse Cymbal",
+  "instr_sfx_impact": "Impact Hit",
+  "instr_sfx_zap": "Laser Zap",
+  "instr_sfx_coin": "Skill Point",
+  "instr_sfx_downer": "Downlifter",
+  "instr_sfx_whoosh": "Whoosh",
 
   "drum_kick": "Kick",
   "drum_snare": "Snare",
@@ -552,5 +559,28 @@
   "samp_cat_drums": "Drums",
   "samp_cat_bass": "Bass",
   "samp_cat_melodic": "Melodic",
-  "hint_drop_loop": "Drop to add this loop at bar {bar}."
+  "samp_cat_fx": "Sound FX",
+  "samp_drag_hint": "Drag it anywhere onto your song.",
+  "drop_audio": "Audio file",
+  "hint_drop_loop": "Drop to add this loop at bar {bar}.",
+
+  "mixeq_title": "Equalizer for",
+  "mixeq_pick": "Click a track below to shape its sound with the equalizer.",
+
+  "tut_step": "Step {n} of {total}",
+  "tut_skip": "Skip",
+  "tut_next": "Next",
+  "tut_done": "Got it",
+  "tut_clip_t": "You made a pattern",
+  "tut_clip_b": "Double click it to open the note editor, then draw a melody by clicking on the grid.",
+  "tut_ms_t": "Mute and solo",
+  "tut_ms_b": "M silences a track. S plays only that track so you can focus on one sound.",
+  "tut_instr_t": "Change the sound",
+  "tut_instr_b": "Pick another instrument from this menu, like keys, bass or drums.",
+  "tut_add_t": "Stack more layers",
+  "tut_add_b": "Add another track here to layer more instruments on top of each other.",
+  "tut_samp_t": "Ready made loops",
+  "tut_samp_b": "Open this to grab drums, bass and effects. Drag one straight onto your song.",
+  "tut_jam_t": "Play together",
+  "tut_jam_b": "Start a room and a friend can build the track live with you. That is it, have fun."
 }

@@ -352,6 +352,21 @@ input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.2); }
   pointer-events: none;
   display: none;
 }
+/* translucent preview of a loop/audio clip while dragging it in */
+#dropGhost.preview {
+  width: auto;
+  border-radius: 8px;
+  border: 1.5px dashed rgba(255, 255, 255, 0.5);
+  background: rgba(224, 122, 63, 0.28);
+  overflow: hidden;
+  opacity: 0.85;
+}
+#dropGhost.preview .dp-name {
+  position: absolute; left: 6px; top: 4px;
+  font-size: 11px; font-weight: 700; color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5); pointer-events: none;
+}
+#dropGhost.preview canvas { display: block; position: absolute; left: 0; bottom: 0; }
 
 /* ---------- Clips ---------- */
 
@@ -422,9 +437,12 @@ input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.2); }
   display: flex;
   flex-direction: column;
   min-width: 260px;
+  max-height: calc(100vh - 120px);
   animation: winIn 0.15s var(--ease);
   overflow: hidden;
+  transition: opacity 0.12s var(--ease);
 }
+.fwin.dragging { opacity: 0.62; }
 @keyframes winIn {
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }
@@ -444,12 +462,15 @@ input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.2); }
 .fwin-head .ic { width: 14px; height: 14px; color: var(--accent); }
 .fwin-title { flex: 1; }
 .fwin-close {
-  background: none; border: none; color: var(--faint);
-  cursor: pointer; padding: 3px; border-radius: 6px; display: flex;
+  background: var(--panel3); border: 1px solid var(--line); color: var(--dim);
+  cursor: pointer; padding: 4px; border-radius: 7px; display: flex;
+  transition: background 0.12s var(--ease), color 0.12s var(--ease), border-color 0.12s var(--ease);
 }
-.fwin-close:hover { color: var(--text); background: var(--panel3); }
-.fwin-close .ic { width: 13px; height: 13px; color: currentColor; }
+.fwin-close:hover { color: #fff; background: var(--red); border-color: var(--red); }
+.fwin-close .ic { width: 14px; height: 14px; color: currentColor; }
 .fwin-body { padding: 12px; overflow: auto; }
+
+.samp-scroll { max-height: 54vh; overflow-y: auto; overflow-x: hidden; }
 
 /* rows inside windows */
 .frow { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
@@ -1486,3 +1507,38 @@ input[type="range"].locked { opacity: 0.45; filter: saturate(0.4); }
 .samp-cat { font-size: 10px; font-weight: 800; letter-spacing: 0.5px; text-transform: uppercase; color: var(--faint); margin: 10px 0 5px; }
 .samp-item { justify-content: flex-start; }
 .samp-item .samp-inst { margin-left: auto; font-size: 10.5px; color: var(--faint); font-weight: 600; }
+
+/* ---- mixer: one clear EQ for the selected track ---- */
+#mixEq { margin-bottom: 12px; }
+.mixeq-head { font-size: 12px; color: var(--dim); margin-bottom: 6px; }
+.mixeq-head b { font-weight: 700; }
+.mixeq-empty {
+  padding: 22px 14px; text-align: center; color: var(--faint); font-size: 12.5px;
+  border: 1.5px dashed var(--line); border-radius: 10px; background: var(--bg2);
+}
+.eq-canvas.big { width: 300px; }
+.strip-name { cursor: pointer; border-radius: 6px; }
+.strip.sel .strip-name { background: var(--accent-soft); }
+.eq-dots span { min-width: 30px; text-align: center; }
+
+/* ---- first-project tutorial ---- */
+#tutorCard {
+  position: fixed; z-index: 960; max-width: 260px;
+  background: var(--panel); border: 1px solid var(--accent); border-radius: 12px;
+  box-shadow: 0 14px 40px rgba(0,0,0,0.5); padding: 14px 16px;
+  animation: winIn 0.18s var(--ease);
+}
+#tutorCard .tc-title { font-weight: 800; font-size: 13.5px; margin-bottom: 5px; }
+#tutorCard .tc-body { font-size: 12.5px; color: var(--dim); line-height: 1.5; }
+#tutorCard .tc-row { display: flex; align-items: center; justify-content: space-between; margin-top: 12px; gap: 8px; }
+#tutorCard .tc-step { font-size: 11px; color: var(--faint); }
+#tutorCard .tc-btns { display: flex; gap: 6px; }
+#tutorCard .tc-skip { background: none; border: none; color: var(--faint); cursor: pointer; font-size: 12px; }
+#tutorCard .tc-skip:hover { color: var(--dim); }
+#tutorCard .tc-next { background: var(--accent); border: none; color: #fff; border-radius: 8px; padding: 6px 14px; font-weight: 700; font-size: 12px; cursor: pointer; }
+#tutorHighlight {
+  position: fixed; z-index: 955; pointer-events: none;
+  border: 2px solid var(--accent); border-radius: 10px;
+  box-shadow: 0 0 0 4000px rgba(0,0,0,0.45);
+  transition: all 0.25s var(--ease);
+}
