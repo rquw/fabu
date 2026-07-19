@@ -812,6 +812,38 @@ const App = {
     return true;
   },
 
+  // ---------- built-in sample loops ----------
+
+  // Add a preset loop as an editable pattern clip. Drops onto a matching-
+  // instrument track, otherwise spins up a fresh track with the right sound.
+  addSampleToProject(id, beat = null, laneIdx = null) {
+    const preset = SAMPLE_LIB.find(s => s.id === id);
+    if (!preset) return;
+    if (beat == null) beat = snapBeat(UI.playing ? Engine.currentBeat() : UI.playhead, S.snap || 1);
+    Undo.push('Add loop');
+    let track = (laneIdx != null) ? S.tracks[laneIdx] : null;
+    if (!(track && track.kind === 'midi' && track.instrument === preset.instrument)) {
+      // ensure the instrument exists as a built-in; make a track for the loop
+      track = makeTrack('midi');
+      track.instrument = preset.instrument;
+      track.name = preset.name;
+      S.tracks.push(track);
+      Engine.rebuildTracks();
+      KeysPanel.refreshTracks();
+    }
+    const clip = {
+      id: uid('clip'), kind: 'midi', name: preset.name, by: authorName(),
+      start: beat, length: preset.length,
+      notes: preset.notes.map(n => ({ id: uid('note'), pitch: n.pitch, start: n.start, length: n.length, vel: n.vel }))
+    };
+    track.clips.push(clip);
+    Timeline.render();
+    Windows.refreshAll();
+    this.selectClip(clip.id);
+    if (UI.playing) Engine.liveEdit();
+    toast(tr('samp_added', '{name} added', { name: preset.name }), 'green');
+  },
+
   // ---------- droppable clip effects ----------
 
   addFxToClip(clip, type) {
@@ -1198,6 +1230,7 @@ const App = {
     $('#btnZoomIn').addEventListener('click', () => Timeline.setZoom(UI.zoom * 1.3));
     $('#btnZoomOut').addEventListener('click', () => Timeline.setZoom(UI.zoom / 1.3));
     $('#btnFx').addEventListener('click', () => Windows.toggleFxBrowser());
+    $('#btnSamples').addEventListener('click', () => Windows.toggleSampleBrowser());
     $('#btnHome').addEventListener('click', () => this.goHome());
     $('#btnJam').addEventListener('click', () => Sync.togglePanel());
 
@@ -1237,6 +1270,7 @@ const App = {
   syncWindowButtons() {
     $('#btnMixer').classList.toggle('on', Windows.isOpen('mixer'));
     $('#btnFx').classList.toggle('on', Windows.isOpen('fxbrowser'));
+    $('#btnSamples').classList.toggle('on', Windows.isOpen('samples'));
     $('#btnSettings').classList.toggle('on', Windows.isOpen('settings'));
     $('#btnHelp').classList.toggle('on', Windows.isOpen('help'));
     $('#btnKeys').classList.toggle('on', KeysPanel.visible);

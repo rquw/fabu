@@ -456,6 +456,48 @@ const Windows = {
     App.syncWindowButtons();
   },
 
+  // ---------- Samples browser (drag loops onto the timeline) ----------
+
+  toggleSampleBrowser() {
+    if (this.isOpen('samples')) { this.close('samples'); return; }
+    const w = this.create('samples', tr('samp_title', 'Loops'), 'i-loops', { x: 60, y: 130, width: 250 });
+    w.body.innerHTML = `
+      <input id="sampSearch" type="text" placeholder="${tr('samp_search', 'Search loops')}" spellcheck="false"
+        style="width:100%;background:var(--panel2);border:1px solid var(--line);border-radius:7px;padding:6px 9px;color:var(--text);outline:none;font-size:12px;margin-bottom:8px">
+      <div id="sampList"></div>
+      <div style="color:var(--faint);font-size:10.5px;margin-top:8px;line-height:1.5">${tr('samp_hint', 'Drag a loop onto the timeline. They are editable patterns — double-click to tweak the notes.')}</div>`;
+    const list = w.body.querySelector('#sampList');
+    const search = w.body.querySelector('#sampSearch');
+    const render = () => {
+      const q = search.value.trim().toLowerCase();
+      list.innerHTML = '';
+      for (const cat of SAMPLE_CATS) {
+        const items = SAMPLE_LIB.filter(s => s.cat === cat && (!q || s.name.toLowerCase().includes(q)));
+        if (!items.length) continue;
+        const head = document.createElement('div');
+        head.className = 'samp-cat';
+        head.textContent = sampleCatName(cat);
+        list.appendChild(head);
+        for (const s of items) {
+          const item = document.createElement('div');
+          item.className = 'fx-item samp-item';
+          item.draggable = true;
+          item.innerHTML = `<svg class="ic"><use href="#i-loops"/></svg><span>${s.name}</span><span class="samp-inst">${instrLabel(s.instrument)}</span>`;
+          item.addEventListener('dragstart', (e) => {
+            e.dataTransfer.setData('text/fabu-sample', s.id);
+            e.dataTransfer.effectAllowed = 'copy';
+          });
+          item.addEventListener('dblclick', () => App.addSampleToProject(s.id));
+          list.appendChild(item);
+        }
+      }
+      if (!list.children.length) list.innerHTML = `<div style="color:var(--faint);font-size:11.5px;padding:6px 2px">${tr('samp_none', 'No loop matches that.')}</div>`;
+    };
+    search.addEventListener('input', render);
+    render();
+    App.syncWindowButtons();
+  },
+
   // ---------- Settings ----------
 
   toggleSettings() {

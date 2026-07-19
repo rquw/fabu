@@ -542,5 +542,15 @@
   "mp_click_follow": "Click to follow their screen",
   "mp_follows_you_1": "{a} is following you",
   "mp_follows_you_n": "{list} and {last} are following you",
-  "mp_follows_you_many": "{n} people are following you"
+  "mp_follows_you_many": "{n} people are following you",
+  "tip_samples": "Loops to drag onto the timeline",
+  "samp_title": "Loops",
+  "samp_search": "Search loops",
+  "samp_hint": "Drag a loop onto the timeline. They are editable patterns — double-click to tweak the notes.",
+  "samp_none": "No loop matches that.",
+  "samp_added": "{name} added",
+  "samp_cat_drums": "Drums",
+  "samp_cat_bass": "Bass",
+  "samp_cat_melodic": "Melodic",
+  "hint_drop_loop": "Drop to add this loop at bar {bar}."
 }
