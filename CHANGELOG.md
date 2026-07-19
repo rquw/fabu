@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.1.2
+- Playback fixes: notes no longer cut out when something loud hits, long notes play when you drop the playhead into them, and edits (delete a clip, add an effect) apply live while the song plays — for you and everyone in the room.
+- Much lighter on the CPU: gentler limiting, smarter voice handling, and the playhead no longer stutters or freezes.
+- Recording overhaul: the mic is captured raw (no more noise-cancelling artifacts), you can pick your input device in Settings, and the record button is now a microphone so it's clear what it does.
+- Count-in is off by default now, small and out of the way, and you can cancel it (Esc or click it).
+- Multiplayer: see each other's cursors everywhere (not just the timeline), click a person to follow their exact screen (Figma-style, with "Following X" / "X is following you"), and open dropdowns/menus no longer snap shut when someone edits.
+- Creating a room no longer shows a stale "create room" panel while it connects.
+- More effects: Low cut, Tremolo, Wobble, Widen.
+- New/empty projects show a "double-click to add a pattern" nudge.
+- Small stuff: BPM drag really locks the cursor now, group note-resize in the piano roll, listen to a recent project from the home screen without opening it, Register is the default account tab.
+
 ## 1.1.1
 - Select many at once: drag a box on the timeline or in the piano roll, shift-click to add. Move, resize, delete and duplicate work on the whole selection.
 - Effects you can drag onto clips: Reverb, Echo, Dampen, Drive, Crush (new Effects window in the toolbar). Right-click a clip → "Edit effects" to tweak or remove them.

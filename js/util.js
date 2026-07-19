@@ -165,7 +165,17 @@ const FX_DEFS = {
   drive: { nameKey: 'fx_drive', fallback: 'Drive',
     p: { amt: { min: 0, max: 100, step: 1, def: 40, labelKey: 'fx_amount', labelFb: 'Amount' } } },
   crush: { nameKey: 'fx_crush', fallback: 'Crush',
-    p: { amt: { min: 0, max: 100, step: 1, def: 50, labelKey: 'fx_amount', labelFb: 'Amount' } } }
+    p: { amt: { min: 0, max: 100, step: 1, def: 50, labelKey: 'fx_amount', labelFb: 'Amount' } } },
+  lowcut: { nameKey: 'fx_lowcut', fallback: 'Low cut',
+    p: { freq: { min: 20, max: 2000, step: 10, def: 200, labelKey: 'fx_cutoff', labelFb: 'Cutoff' } } },
+  tremolo: { nameKey: 'fx_tremolo', fallback: 'Tremolo',
+    p: { rate: { min: 0.5, max: 16, step: 0.1, def: 5, labelKey: 'fx_rate', labelFb: 'Rate' },
+         depth: { min: 0, max: 1, step: 0.01, def: 0.6, labelKey: 'fx_depth', labelFb: 'Depth' } } },
+  wobble: { nameKey: 'fx_wobble', fallback: 'Wobble',
+    p: { rate: { min: 0.25, max: 12, step: 0.05, def: 3, labelKey: 'fx_rate', labelFb: 'Rate' },
+         amt: { min: 0, max: 1, step: 0.01, def: 0.7, labelKey: 'fx_amount', labelFb: 'Amount' } } },
+  widen: { nameKey: 'fx_widen', fallback: 'Widen',
+    p: { amt: { min: 0, max: 1, step: 0.01, def: 0.6, labelKey: 'fx_amount', labelFb: 'Amount' } } }
 };
 function fxName(type) {
   const d = FX_DEFS[type];

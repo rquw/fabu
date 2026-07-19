@@ -12,7 +12,7 @@ function freshProject() {
     bpm: 120,
     snap: 1,          // grid in beats (0 = off)
     metronome: false,
-    countIn: true,    // 1-2-3-4-GO before recording
+    countIn: false,   // 1-2-3-4 before recording (off by default)
     masterVol: 0.9,
     instruments: {},   // id -> custom sampler instrument { name, sampleId, root, start, end, attack, release }
     tracks: []

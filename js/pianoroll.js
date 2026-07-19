@@ -313,7 +313,7 @@ const PianoRoll = {
       // the rest of the selection moves along with the primary note
       const groupNotes = [...this.selNoteIds].filter(id => id !== n.id)
         .map(id => f.clip.notes.find(nn => nn.id === id)).filter(Boolean)
-        .map(nn => ({ note: nn, start: nn.start, pitch: nn.pitch }));
+        .map(nn => ({ note: nn, start: nn.start, pitch: nn.pitch, length: nn.length }));
       let lastPreview = n.pitch;
 
       const move = (ev) => {
@@ -329,6 +329,8 @@ const PianoRoll = {
           n.length = Math.max(this.snap || 0.05,
             this.snap ? Math.round(raw / this.snap) * this.snap : raw);
           this.lastLen = n.length;
+          // resizing one note fits every selected note to the same length
+          for (const gr of groupNotes) gr.note.length = n.length;
         } else {
           const raw = orig.start + dx;
           n.start = Math.max(0, this.snap ? Math.round(raw / this.snap) * this.snap : raw);

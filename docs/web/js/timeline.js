@@ -143,6 +143,8 @@ const Timeline = {
 
     const beat = UI.zoom;
     const bar = UI.zoom * 4;
+    let clipCount = 0;
+    const firstMidiIdx = S.tracks.findIndex(t => t.kind === 'midi');
     for (const t of S.tracks) {
       const lane = document.createElement('div');
       lane.className = 'lane' + (t.id === UI.selTrackId ? ' sel' : '');
@@ -151,7 +153,16 @@ const Timeline = {
         `repeating-linear-gradient(90deg, rgba(255,255,255,0.07) 0 1px, transparent 1px ${bar}px),` +
         `repeating-linear-gradient(90deg, rgba(255,255,255,0.028) 0 1px, transparent 1px ${beat}px)`;
       this.lanes.appendChild(lane);
-      for (const c of t.clips) lane.appendChild(this.buildClip(c, t));
+      for (const c of t.clips) { lane.appendChild(this.buildClip(c, t)); clipCount++; }
+    }
+
+    // brand-new/empty project: gentle "double-click to add a pattern" nudge
+    if (clipCount === 0 && firstMidiIdx >= 0) {
+      const hint = document.createElement('div');
+      hint.className = 'empty-hint';
+      hint.style.top = (firstMidiIdx * TRACK_H + TRACK_H / 2 - 18) + 'px';
+      hint.textContent = tr('empty_hint', 'Double-click here to add a pattern');
+      this.lanes.appendChild(hint);
     }
 
     this.lanes.style.height = (S.tracks.length * TRACK_H) + 'px';
@@ -726,22 +737,29 @@ const Timeline = {
 
   startPlayheadLoop() {
     const loop = () => {
-      this.updatePlayhead();
+      // one stray error must never kill the rAF chain (that froze the playhead
+      // until the next play/pause); catch and keep going.
+      try { this.updatePlayhead(); } catch (e) { /* keep looping */ }
       this.rafId = requestAnimationFrame(loop);
     };
     loop();
   },
 
   updatePlayhead() {
+    // when idle (not playing, no pending move), skip the work entirely — saves
+    // battery/CPU since this fires ~60x a second forever
+    if (!UI.playing && this._lastX === UI.playhead * UI.zoom) return;
+
     const beat = Engine.ctx && UI.playing ? Engine.currentBeat() : UI.playhead;
     const x = beat * UI.zoom;
+    this._lastX = x;
     // cached refs + throttled text: this runs every frame, so keep it lean
-    if (!this._phEl) {
+    if (!this._phEl || !this._phEl.isConnected) {
       this._phEl = $('#playhead');
       this._posBars = $('#posBars');
       this._posTime = $('#posTime');
     }
-    this._phEl.style.left = x + 'px';
+    if (this._phEl) this._phEl.style.left = x + 'px';
 
     // let the others see where our playhead is (in our colour) while we play
     if (typeof Sync !== 'undefined' && Sync.admitted) {
@@ -751,7 +769,7 @@ const Timeline = {
     }
 
     const now = performance.now();
-    if (!this._lastTxt || now - this._lastTxt > 100) {
+    if (this._posBars && (!this._lastTxt || now - this._lastTxt > 100)) {
       this._lastTxt = now;
       const bars = Math.floor(beat / 4) + 1;
       const beats = Math.floor(beat % 4) + 1;
@@ -760,10 +778,11 @@ const Timeline = {
     }
 
     if (UI.playing) {
-      // keep the playhead in view
+      // keep the playhead in view (skip while following someone — their scroll wins)
       const viewL = this.scroller.scrollLeft;
       const viewR = viewL + this.scroller.clientWidth;
-      if (x > viewR - 80 || x < viewL) {
+      const following = typeof Sync !== 'undefined' && Sync.following;
+      if (!following && (x > viewR - 80 || x < viewL)) {
         this.scroller.scrollLeft = Math.max(0, x - 120);
       }
       // grow lanes if we run past the end
