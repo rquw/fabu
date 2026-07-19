@@ -60,6 +60,13 @@
   "instr_pluck": "Pluck",
   "instr_bell": "Glocke",
   "instr_drums": "Schlagzeug",
+  "instr_sfx_riser": "Riser",
+  "instr_sfx_reverse": "Reverse-Becken",
+  "instr_sfx_impact": "Impact-Schlag",
+  "instr_sfx_zap": "Laser-Zap",
+  "instr_sfx_coin": "Skill-Point",
+  "instr_sfx_downer": "Downlifter",
+  "instr_sfx_whoosh": "Whoosh",
 
   "drum_kick": "Kick",
   "drum_snare": "Snare",
@@ -552,5 +559,28 @@
   "samp_cat_drums": "Drums",
   "samp_cat_bass": "Bass",
   "samp_cat_melodic": "Melodisch",
-  "hint_drop_loop": "Zum Hinzufügen des Loops bei Takt {bar} ablegen."
+  "samp_cat_fx": "Sound-Effekte",
+  "samp_drag_hint": "Zieh es irgendwohin in deinen Song.",
+  "drop_audio": "Audiodatei",
+  "hint_drop_loop": "Zum Hinzufügen des Loops bei Takt {bar} ablegen.",
+
+  "mixeq_title": "Equalizer für",
+  "mixeq_pick": "Klick unten auf eine Spur, um ihren Klang mit dem Equalizer zu formen.",
+
+  "tut_step": "Schritt {n} von {total}",
+  "tut_skip": "Überspringen",
+  "tut_next": "Weiter",
+  "tut_done": "Alles klar",
+  "tut_clip_t": "Du hast ein Pattern erstellt",
+  "tut_clip_b": "Doppelklick es, um den Noten-Editor zu öffnen, und mal eine Melodie ins Raster.",
+  "tut_ms_t": "Stumm und Solo",
+  "tut_ms_b": "M schaltet eine Spur stumm. S spielt nur diese Spur, damit du dich auf einen Klang konzentrieren kannst.",
+  "tut_instr_t": "Klang ändern",
+  "tut_instr_b": "Wähl aus diesem Menü ein anderes Instrument, etwa Klavier, Bass oder Drums.",
+  "tut_add_t": "Mehr Ebenen stapeln",
+  "tut_add_b": "Füg hier eine weitere Spur hinzu, um mehr Instrumente übereinanderzulegen.",
+  "tut_samp_t": "Fertige Loops",
+  "tut_samp_b": "Öffne das für Drums, Bass und Effekte. Zieh einfach eins in deinen Song.",
+  "tut_jam_t": "Zusammen spielen",
+  "tut_jam_b": "Starte einen Raum, und ein Freund kann den Track live mit dir bauen. Das war es, viel Spaß."
 }

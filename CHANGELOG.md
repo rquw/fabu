@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.1.4
+- First-project tutorial: after you add your first pattern, a short skippable walkthrough points at double-click-to-edit, mute and solo, switching instruments, adding layers, the loops browser and playing together. Press Esc or Skip anytime.
+- Sound effects in the Loops browser: risers, reverse cymbals, impact hits, laser zaps, a skill-point ding, downlifters and whooshes to fill the silence.
+- Loops browser is scrollable, has a clearer icon, and tells you to "drag it anywhere" when you click a loop. Renamed a few loops to plainer names.
+- Drag-and-drop previews: dragging a loop or audio file now shows a translucent block where it will land, how long it is and its waveform.
+- Mixer EQ redesigned: pick a track and shape it with one large, clear equalizer instead of a cramped strip per track.
+- Previewing into the middle of a long note no longer re-strikes it, it eases in like it was already playing.
+- Windows go slightly see-through while you drag them, and the close X in the corner is easier to spot.
+
 ## 1.1.3
 - New Loops browser: drag in ready-made drum beats, basslines and melodic loops from the toolbar. They're editable patterns, so double-click to make them your own.
 

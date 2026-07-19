@@ -106,6 +106,7 @@ const Timeline = {
         this.render();
         App.selectClip(clip.id);
         toast(tr('toast_pattern_added', 'Pattern added'));
+        if (typeof Tutor !== 'undefined') Tutor.maybeStart(clip.id);
       } else {
         toast(tr('toast_drop_here', 'Drop an audio file here, or record with R'));
       }
@@ -271,6 +272,12 @@ const Timeline = {
         oNew.value = '__new_sampler';
         oNew.textContent = tr('instr_new', 'New from audio…');
         sel.appendChild(oNew);
+        // a sound not in the list (e.g. a sound-FX loop) still shows its name
+        if (![...sel.options].some(o => o.value === t.instrument)) {
+          const o = document.createElement('option');
+          o.value = t.instrument; o.textContent = instrLabel(t.instrument);
+          sel.insertBefore(o, sel.firstChild);
+        }
         sel.value = t.instrument;
         sel.addEventListener('change', () => {
           if (sel.value === '__new_sampler') { sel.value = t.instrument; Sampler.open(t.id); return; }
@@ -711,21 +718,30 @@ const Timeline = {
     const area = this.scroller;
 
     area.addEventListener('dragover', (e) => {
-      if ([...e.dataTransfer.types].includes('text/fabu-fx')) return; // effect drags target clips
+      const types = [...e.dataTransfer.types];
+      if (types.includes('text/fabu-fx')) return; // effect drags target clips
       e.preventDefault();
       e.dataTransfer.dropEffect = 'copy';
       const beat = snapBeat(this.xToBeat(e.clientX), S.snap);
+      const laneIdx = clamp(Math.floor((e.clientY - this.lanes.getBoundingClientRect().top) / TRACK_H), 0, Math.max(0, S.tracks.length - 1));
+      const samp = types.includes('text/fabu-sample') ? (typeof Windows !== 'undefined' && Windows._dragSample) : null;
+      const lenB = samp ? samp.length : 4; // audio: real length unknown until dropped, show a placeholder
+      // translucent preview of exactly how big it'll be and where it starts
+      ghost.className = 'preview';
       ghost.style.display = 'block';
       ghost.style.left = (beat * UI.zoom) + 'px';
-      ghost.style.height = Math.max(S.tracks.length * TRACK_H, TRACK_H) + 'px';
-      const isLoop = [...e.dataTransfer.types].includes('text/fabu-sample');
-      setHint(isLoop ? tr('hint_drop_loop', 'Drop to add this loop at bar {bar}.', { bar: Math.floor(beat / 4) + 1 })
+      ghost.style.top = (laneIdx * TRACK_H + 2) + 'px';
+      ghost.style.width = Math.max(24, lenB * UI.zoom - 2) + 'px';
+      ghost.style.height = (TRACK_H - 6) + 'px';
+      ghost.innerHTML = `<span class="dp-name">${samp ? samp.name : tr('drop_audio', 'Audio')}</span>`;
+      if (samp) this.drawGhostNotes(ghost, samp, lenB * UI.zoom - 2);
+      setHint(samp ? tr('hint_drop_loop', 'Drop to add this loop at bar {bar}.', { bar: Math.floor(beat / 4) + 1 })
         : tr('hint_drop_at_bar', 'Drop to place the sound at bar {bar}.', { bar: Math.floor(beat / 4) + 1 }));
     });
-    area.addEventListener('dragleave', () => { ghost.style.display = 'none'; });
+    area.addEventListener('dragleave', () => { ghost.style.display = 'none'; ghost.className = ''; ghost.innerHTML = ''; });
     area.addEventListener('drop', async (e) => {
       e.preventDefault();
-      ghost.style.display = 'none';
+      ghost.style.display = 'none'; ghost.className = ''; ghost.innerHTML = '';
       const beat = snapBeat(this.xToBeat(e.clientX), S.snap);
       const laneIdx = Math.floor((e.clientY - this.lanes.getBoundingClientRect().top) / TRACK_H);
       // a loop from the Samples browser
@@ -736,6 +752,30 @@ const Timeline = {
       if (!files.length) { toast(tr('toast_not_audio', 'That is not an audio file'), 'red'); return; }
       await App.importAudioFiles(files, beat, S.tracks[laneIdx]);
     });
+  },
+
+  // little note-block preview inside the drag ghost so you see the pattern
+  drawGhostNotes(ghost, samp, w) {
+    const h = TRACK_H - 6;
+    const cv = document.createElement('canvas');
+    const dpr = window.devicePixelRatio || 1;
+    cv.width = Math.max(2, w) * dpr; cv.height = h * dpr;
+    cv.style.width = Math.max(2, w) + 'px'; cv.style.height = h + 'px';
+    const x = cv.getContext('2d'); x.scale(dpr, dpr);
+    const notes = samp.notes;
+    let lo = 127, hi = 0;
+    for (const n of notes) { lo = Math.min(lo, n.pitch); hi = Math.max(hi, n.pitch); }
+    if (lo > hi) { lo = 60; hi = 72; }
+    lo -= 1; hi += 1;
+    const range = Math.max(1, hi - lo);
+    x.fillStyle = 'rgba(255,255,255,0.85)';
+    for (const n of notes) {
+      const nx = (n.start / samp.length) * w;
+      const nw = Math.max(2, (n.length / samp.length) * w - 1);
+      const ny = h - ((n.pitch - lo) / range) * (h - 20) - 6;
+      x.fillRect(nx, ny, nw, 3);
+    }
+    ghost.appendChild(cv);
   },
 
   // ---------- playhead ----------
