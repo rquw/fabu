@@ -25,7 +25,8 @@ function instrLabel(k) {
   return tr('instr_' + k, (typeof INSTRUMENTS !== 'undefined' && INSTRUMENTS[k]) || k);
 }
 // translated drum-row name for a pitch class, or null if it has no name
-const DRUM_LABEL_KEYS = { 0: 'drum_kick', 2: 'drum_snare', 4: 'drum_clap', 6: 'drum_hat', 10: 'drum_ophat' };
+const DRUM_LABEL_KEYS = { 0: 'drum_kick', 2: 'drum_snare', 4: 'drum_clap', 6: 'drum_hat', 9: 'drum_tom', 10: 'drum_ophat' };
+function isDrumInstr(i) { return i === 'drums' || i === 'drumkit'; }
 function drumLabel(pc) {
   const k = DRUM_LABEL_KEYS[pc];
   return k ? tr(k, k.replace('drum_', '')) : null;
@@ -63,6 +64,50 @@ function noteName(midi) {
 }
 function midiToFreq(m) { return 440 * Math.pow(2, (m - 69) / 12); }
 
+// ---------- Scales & chords (the "key helper") ----------
+// Semitone patterns from the root, one octave.
+const SCALES = {
+  major:      { name: 'Major',            steps: [0, 2, 4, 5, 7, 9, 11] },
+  minor:      { name: 'Minor',            steps: [0, 2, 3, 5, 7, 8, 10] },
+  pentMajor:  { name: 'Major pentatonic', steps: [0, 2, 4, 7, 9] },
+  pentMinor:  { name: 'Minor pentatonic', steps: [0, 3, 5, 7, 10] },
+  dorian:     { name: 'Dorian',           steps: [0, 2, 3, 5, 7, 9, 10] },
+  chromatic:  { name: 'Chromatic (all notes)', steps: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11] }
+};
+function scaleName(id) { const s = SCALES[id]; return s ? tr('scale_' + id, s.name) : id; }
+
+// Is a midi pitch inside the given key?
+function inScale(pitch, root, scaleId) {
+  const s = SCALES[scaleId] || SCALES.major;
+  return s.steps.includes(((pitch - root) % 12 + 12) % 12);
+}
+// Nearest in-key pitch (for snap-to-scale); ties round down.
+function nearestInScale(pitch, root, scaleId) {
+  if (inScale(pitch, root, scaleId)) return pitch;
+  for (let d = 1; d <= 6; d++) {
+    if (inScale(pitch - d, root, scaleId)) return pitch - d;
+    if (inScale(pitch + d, root, scaleId)) return pitch + d;
+  }
+  return pitch;
+}
+// Diatonic chord (stacked thirds within the key) built on a pitch, staying in key.
+// Returns an array of midi pitches. An off-key click is pulled onto the nearest key note first.
+function diatonicChord(pitch, root, scaleId, size = 3) {
+  const steps = (SCALES[scaleId] || SCALES.major).steps;
+  const base = nearestInScale(pitch, root, scaleId);
+  const rel = ((base - root) % 12 + 12) % 12;
+  const rootPitchBelow = base - rel;             // the scale root at/below base
+  let deg = steps.indexOf(rel);
+  if (deg < 0) deg = 0;
+  const out = [];
+  for (let i = 0; i < size; i++) {
+    const stepIdx = deg + i * 2;                  // stack thirds: root, +2, +4 steps
+    const oct = Math.floor(stepIdx / steps.length);
+    out.push(rootPitchBelow + steps[stepIdx % steps.length] + 12 * oct);
+  }
+  return out;
+}
+
 function fmtDb(v) { return (v > 0 ? '+' : '') + Number(v).toFixed(1) + ' dB'; }
 function fmtSec(s) {
   const m = Math.floor(s / 60);
@@ -95,7 +140,7 @@ function toast(msg, kind = '') {
   }, 2200);
 }
 
-function setHint(msg) { $('#statusHint').textContent = msg; }
+function setHint(msg) { const el = $('#statusHint'); if (el) el.textContent = msg; } // status bar removed; kept null-safe
 
 // ---------- Tooltips (hover any [data-tip]) ----------
 
@@ -186,7 +231,7 @@ function fxName(type) {
 // Loops are preset note PATTERNS played by the synth engine (no bundled audio,
 // so they stay tiny AND you can open and edit them). Notes are templates without
 // ids; ids get assigned when a loop is dropped into a project.
-const DRUM_PC = { k: 0, s: 2, c: 4, h: 6, o: 10 }; // kick snare clap hat ophat
+const DRUM_PC = { k: 0, s: 2, c: 4, h: 6, t: 9, o: 10 }; // kick snare clap hat tom ophat
 
 // build drum notes from 16-step strings (X = accent, x/o = normal, . = rest)
 function _drum(rows) {
@@ -223,8 +268,11 @@ const SAMPLE_LIB = [
     notes: _drum({ k: 'X.........X.....', s: '........X.......', h: 'xxxxxxxxxxxxxxxx', o: '..............x.' }) },
   { id: 'dr_house', cat: 'drums', name: 'House Groove', instrument: 'drums', length: 4,
     notes: _drum({ k: 'X...X...X...X...', o: '..x...x...x...x.', c: '....X.......X...' }) },
-  { id: 'dr_break', cat: 'drums', name: 'Breakcore', instrument: 'drums', length: 4,
-    notes: _drum({ k: 'X..X..X.X..X.X.X.', s: '..X..X..X.X..X.X.', h: 'xxxxxxxxxxxxxxxx' }) },
+  // real recorded kit (CC0 samples in assets/oneshots)
+  { id: 'dr_acoustic', cat: 'drums', name: 'Acoustic Groove', instrument: 'drumkit', length: 4,
+    notes: _drum({ k: 'X.......X.......', s: '....X.......X...', h: 'x.x.x.x.x.x.x.x.' }) },
+  { id: 'dr_acbap', cat: 'drums', name: 'Acoustic Boom Bap', instrument: 'drumkit', length: 4,
+    notes: _drum({ k: 'X.....X...X.....', s: '....X.......X...', h: 'x.x.x.x.x.x.x.x.', t: '.............x.x' }) },
 
   // --- bass (low octave) ---
   { id: 'ba_walk', cat: 'bass', name: 'Walking Bass', instrument: 'bass', length: 4,
@@ -248,14 +296,8 @@ const SAMPLE_LIB = [
   { id: 'me_bell', cat: 'melodic', name: 'Sparkle Melody', instrument: 'bell', length: 4,
     notes: _line([[0, 72, 0.5], [1, 76, 0.5], [2, 79, 0.5], [2.5, 76, 0.25], [3, 72, 1]]) },
 
-  // --- one-shot sound effects (fill silence / transitions) ---
-  { id: 'fx_riser', cat: 'fx', name: 'Riser', instrument: 'sfx_riser', length: 4, notes: [{ pitch: 60, start: 0, length: 4, vel: 0.9 }] },
-  { id: 'fx_reverse', cat: 'fx', name: 'Reverse Cymbal', instrument: 'sfx_reverse', length: 4, notes: [{ pitch: 60, start: 0, length: 4, vel: 0.9 }] },
-  { id: 'fx_impact', cat: 'fx', name: 'Impact Hit', instrument: 'sfx_impact', length: 2, notes: [{ pitch: 60, start: 0, length: 2, vel: 1 }] },
-  { id: 'fx_zap', cat: 'fx', name: 'Laser Zap', instrument: 'sfx_zap', length: 1, notes: [{ pitch: 60, start: 0, length: 1, vel: 0.9 }] },
-  { id: 'fx_coin', cat: 'fx', name: 'Skill Point', instrument: 'sfx_coin', length: 1, notes: [{ pitch: 60, start: 0, length: 1, vel: 0.9 }] },
-  { id: 'fx_downer', cat: 'fx', name: 'Downlifter', instrument: 'sfx_downer', length: 4, notes: [{ pitch: 60, start: 0, length: 4, vel: 0.9 }] },
-  { id: 'fx_whoosh', cat: 'fx', name: 'Whoosh', instrument: 'sfx_whoosh', length: 2, notes: [{ pitch: 60, start: 0, length: 2, vel: 0.9 }] }
+  // --- one-shot sound effect ---
+  { id: 'fx_downer', cat: 'fx', name: 'Downlifter', instrument: 'sfx_downer', length: 4, notes: [{ pitch: 60, start: 0, length: 4, vel: 0.9 }] }
 ];
 const SAMPLE_CATS = ['drums', 'bass', 'melodic', 'fx'];
 function sampleCatName(c) {

@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.1.5
+- Real drums: a new Acoustic Kit made from genuine recorded samples (kick, snare, hats, clap, tom). Pick it on any drum track and program beats with real hits, or grab the new Acoustic loops from the Loops browser.
+- Piano roll gained a lot: choose a Key and scale to shade the notes that fit, a Chord button that drops full chords, snap-to-key, a velocity lane to shape how loud notes are, and a playhead you can see and drag to scrub.
+- Quantize now lets you line up Selected notes or All of them.
+- Swing is per-track now, in the mixer, so you can make the drums groove while the bass stays straight.
+- Cleaner look: lighter scrollbars, loop names no longer wrap to two lines, home and top-bar buttons no longer get cut off or squished on smaller windows.
+- Clearer EQ: gridlines, frequency and dB readouts, a live value while you drag, and double-click a band to reset.
+- Dropping a loop or audio file shows a preview of where it lands. Windows dim slightly while you drag them.
+- Removed some synth sound effects that did not sound good. BPM dragging works reliably on macOS now.
+
 ## 1.1.4
 - First-project tutorial: after you add your first pattern, a short skippable walkthrough points at double-click-to-edit, mute and solo, switching instruments, adding layers, the loops browser and playing together. Press Esc or Skip anytime.
 - Sound effects in the Loops browser: risers, reverse cymbals, impact hits, laser zaps, a skill-point ding, downlifters and whooshes to fill the silence.

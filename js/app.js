@@ -293,10 +293,60 @@ const App = {
     if (announce) toast(tr('toast_new_project', 'New project'));
   },
 
+  // A finished little track built from the built-in loops, so a first-timer has
+  // something to press play on and take apart.
+  loadDemo() {
+    if (UI.playing || UI.recording) { Engine.stopRecord && Engine.stopRecord(); Engine.stop && Engine.stop(); }
+    S = freshProject();
+    S.bpm = 100;
+    const lib = (id) => SAMPLE_LIB.find(s => s.id === id);
+    const clipAt = (sampleId, start) => {
+      const s = lib(sampleId);
+      if (!s) return null;
+      return {
+        id: uid('clip'), kind: 'midi', name: s.name, by: authorName(), start, length: s.length,
+        notes: s.notes.map(n => ({ id: uid('note'), pitch: n.pitch, start: n.start, length: n.length, vel: n.vel ?? 0.9 }))
+      };
+    };
+    const layTrack = (name, instrument, sampleId, bars, fromBar = 0) => {
+      const t = makeTrack('midi');
+      t.name = name; t.instrument = instrument; t.clips = [];
+      for (let i = fromBar; i < bars; i++) { const c = clipAt(sampleId, i * 4); if (c) t.clips.push(c); }
+      return t;
+    };
+    const BARS = 8;
+    const drums = layTrack('Drums', 'drums', 'dr_house', BARS);
+    const chords = layTrack('Chords', 'keys', 'me_chords', BARS);
+    drums.swing = 0.14; chords.swing = 0.14;   // a little shared groove
+    S.tracks.push(
+      drums,
+      layTrack('Bass', 'bass', 'ba_house', BARS),
+      chords,
+      layTrack('Lead', 'pluck', 'me_arp', BARS, 2)   // the arp enters at bar 3
+    );
+    Undo.undoStack.length = 0;
+    Undo.redoStack.length = 0;
+    UI.playhead = 0;
+    UI.selClipId = null;
+    UI.selClipIds = new Set();
+    UI.selTrackId = null;
+    UI.dirty = true;
+    this.currentPath = null;
+    $('#projName').value = tr('demo_name', 'Example song');
+    $('#bpmInput').value = S.bpm;
+    if (Engine.ctx) { Engine.rebuildTracks(); Engine.updateAllTracks(); }
+    Timeline.render();
+    Windows.refreshAll();
+    KeysPanel.refreshTracks();
+    updateUndoButtons();
+    toast(tr('toast_demo_loaded', 'Example loaded. Press play, then take it apart.'));
+  },
+
   // ---------- homescreen ----------
 
   wireHome() {
     $('#homeNew').addEventListener('click', () => { this.stopHomePreview(); this.newProject(false); this.hideHome(); });
+    $('#homeDemo').addEventListener('click', () => { this.stopHomePreview(); this.loadDemo(); this.hideHome(); });
     $('#homeOpen').addEventListener('click', () => { this.stopHomePreview(); this.open(); });
     $('#homeContinue').addEventListener('click', () => { this.stopHomePreview(); this.continueSession(); });
     $('#homeMp').addEventListener('click', () => { this.stopHomePreview(); MP.openMenu(); });
@@ -1241,38 +1291,44 @@ const App = {
 
     const bpm = $('#bpmInput');
     bpm.addEventListener('change', () => this.setBpm(parseFloat(bpm.value) || 120));
-    // drag the BPM number up/down. Pointer lock hides + pins the cursor so it
-    // can't run off-screen. Lock the document element (the reliable target on
-    // macOS — locking an <input> or a topbar element silently fails there);
-    // fall back gracefully to plain clientY deltas if lock is denied.
-    bpm.addEventListener('mousedown', (e) => {
-      e.preventDefault();
-      bpm.blur();
-      const startV = S.bpm;
-      let pushed = false, acc = 0, locked = false, lastY = e.clientY;
-      const target = document.documentElement;
-      const onLockChange = () => { locked = document.pointerLockElement === target; };
-      document.addEventListener('pointerlockchange', onLockChange);
-      if (target.requestPointerLock) { try { const r = target.requestPointerLock(); if (r && r.catch) r.catch(() => {}); } catch (err) {} }
-      const move = (ev) => {
-        acc += locked ? (ev.movementY || 0) : (ev.clientY - lastY);
-        lastY = ev.clientY;
+    // drag the BPM number up/down to change it (no pointer lock — that never
+    // worked on macOS). A full-window overlay keeps the drag going anywhere.
+    let bpmStart = 120, bpmPushed = false;
+    this.bindVDrag(bpm, {
+      onStart: () => { bpmStart = S.bpm; bpmPushed = false; },
+      onMove: (acc) => {
         const dv = Math.round(-acc / 3);
-        if (dv !== 0 && !pushed) { Undo.push('Change BPM'); pushed = true; }
-        if (pushed) this.setBpm(startV + dv, false);
-      };
-      const up = () => {
-        window.removeEventListener('mousemove', move);
-        window.removeEventListener('mouseup', up);
-        document.removeEventListener('pointerlockchange', onLockChange);
-        if (document.pointerLockElement && document.exitPointerLock) { try { document.exitPointerLock(); } catch (err) {} }
-      };
-      window.addEventListener('mousemove', move);
-      window.addEventListener('mouseup', up);
+        if (dv !== 0 && !bpmPushed) { Undo.push('Change BPM'); bpmPushed = true; }
+        if (bpmPushed) this.setBpm(bpmStart + dv, false);
+      }
     });
 
     $('#projName').addEventListener('change', () => { UI.dirty = true; });
   },
+
+  // vertical drag on a number field, cross-platform. Overlay captures the drag
+  // so the cursor can leave the field and nothing else reacts mid-drag.
+  bindVDrag(el, opts) {
+    el.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      if (el.blur) el.blur();
+      let lastY = e.clientY, acc = 0;
+      const overlay = document.createElement('div');
+      overlay.className = 'vdrag-overlay';
+      document.body.appendChild(overlay);
+      if (opts.onStart) opts.onStart();
+      const move = (ev) => { acc += ev.clientY - lastY; lastY = ev.clientY; opts.onMove(acc); };
+      const up = () => {
+        window.removeEventListener('mousemove', move);
+        window.removeEventListener('mouseup', up);
+        overlay.remove();
+        if (opts.onEnd) opts.onEnd();
+      };
+      window.addEventListener('mousemove', move);
+      window.addEventListener('mouseup', up);
+    });
+  },
+
 
   syncWindowButtons() {
     $('#btnMixer').classList.toggle('on', Windows.isOpen('mixer'));

@@ -286,6 +286,7 @@ const Timeline = {
           // pulling a library instrument into the project makes it self-contained
           if (!S.instruments[id] && LIB[id]) S.instruments[id] = JSON.parse(JSON.stringify(LIB[id]));
           t.instrument = id;
+          if (id === 'drumkit') Engine.ensureDrumkit();
           toast(tr('toast_instr_changed', '{name} to {instr}', { name: t.name, instr: instrLabel(id) }));
           this.render();
           KeysPanel.refreshTracks();
@@ -798,6 +799,7 @@ const Timeline = {
     const beat = Engine.ctx && UI.playing ? Engine.currentBeat() : UI.playhead;
     const x = beat * UI.zoom;
     this._lastX = x;
+    if (typeof PianoRoll !== 'undefined' && PianoRoll.isOpen()) PianoRoll.syncPlayhead(beat);
     // cached refs + throttled text: this runs every frame, so keep it lean
     if (!this._phEl || !this._phEl.isConnected) {
       this._phEl = $('#playhead');

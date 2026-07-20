@@ -104,18 +104,24 @@ const Windows = {
   // A little EQ curve you shape by dragging three points (low / mid / high).
   // Maps straight onto the existing 3-band chain, so it applies live.
   buildEqCanvas(t, W = 132, H = 64, big = false) {
-    const PAD = 10;
     const box = document.createElement('div');
     box.className = 'eq-canvas' + (big ? ' big' : '');
-    box.dataset.tip = tr('tip_eq_canvas', 'Drag the points to shape the EQ. Double-click a point to reset it.');
+    box.dataset.tip = tr('tip_eq_canvas', 'Drag a handle up or down. Double-click it to reset.');
     const cv = document.createElement('canvas');
     box.appendChild(cv);
     const bands = ['low', 'mid', 'high'];
     const bandLbl = { low: tr('eq_low', 'LOW'), mid: tr('eq_mid', 'MID'), high: tr('eq_high', 'HIGH') };
-    const bandX = { low: PAD + (W - 2 * PAD) * 0.16, mid: PAD + (W - 2 * PAD) * 0.5, high: PAD + (W - 2 * PAD) * 0.84 };
-    const hr = H / 2 - (big ? 14 : 8);
-    const gainToY = (g) => H / 2 - (g / 12) * hr;
-    const yToGain = (y) => clamp(((H / 2 - y) / hr) * 12, -12, 12);
+    const bandHz = { low: '220 Hz', mid: '1 kHz', high: '4.5 kHz' };
+    const L = big ? 30 : 8;          // left gutter for dB labels
+    const R = W - 8;
+    const topPad = big ? 16 : 6;     // readout row
+    const botPad = big ? 22 : 6;     // band label rows
+    const midY = (topPad + (H - botPad)) / 2;
+    const halfH = (H - topPad - botPad) / 2;
+    const bandX = { low: L + (R - L) * 0.14, mid: L + (R - L) * 0.5, high: L + (R - L) * 0.86 };
+    const gainToY = (g) => midY - (g / 12) * halfH;
+    const yToGain = (y) => clamp(((midY - y) / halfH) * 12, -12, 12);
+    let active = null;               // band under the cursor, for the live readout
 
     const draw = () => {
       const dpr = window.devicePixelRatio || 1;
@@ -124,34 +130,53 @@ const Windows = {
       const x = cv.getContext('2d');
       x.scale(dpr, dpr);
       x.clearRect(0, 0, W, H);
-      x.fillStyle = 'rgba(255,255,255,0.04)';
+      x.fillStyle = 'rgba(255,255,255,0.03)';
       x.fillRect(0, 0, W, H);
-      x.strokeStyle = 'rgba(255,255,255,0.12)';
-      x.beginPath(); x.moveTo(0, H / 2); x.lineTo(W, H / 2); x.stroke();
-      // the curve through the three points
-      const pts = [[0, gainToY(t.eq.low)], [bandX.low, gainToY(t.eq.low)],
-        [bandX.mid, gainToY(t.eq.mid)], [bandX.high, gainToY(t.eq.high)], [W, gainToY(t.eq.high)]];
-      x.strokeStyle = t.color; x.lineWidth = big ? 2.5 : 2;
-      x.beginPath();
-      x.moveTo(pts[0][0], pts[0][1]);
-      for (let i = 1; i < pts.length; i++) {
-        const [x0, y0] = pts[i - 1], [x1, y1] = pts[i];
-        const mx = (x0 + x1) / 2;
-        x.bezierCurveTo(mx, y0, mx, y1, x1, y1);
+
+      // dB gridlines + labels
+      const lines = big ? [12, 6, 0, -6, -12] : [0];
+      x.textBaseline = 'middle'; x.font = '600 8.5px -apple-system, sans-serif';
+      for (const db of lines) {
+        const y = gainToY(db);
+        x.strokeStyle = db === 0 ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.07)';
+        x.lineWidth = 1;
+        x.beginPath(); x.moveTo(L, y); x.lineTo(R, y); x.stroke();
+        if (big) { x.fillStyle = 'rgba(255,255,255,0.38)'; x.textAlign = 'right'; x.fillText((db > 0 ? '+' : '') + db, L - 5, y); }
       }
-      x.stroke();
-      // handles + labels
+
+      // the curve through the three points, with a soft fill toward the 0 line
+      const pts = [[L, gainToY(t.eq.low)], [bandX.low, gainToY(t.eq.low)],
+        [bandX.mid, gainToY(t.eq.mid)], [bandX.high, gainToY(t.eq.high)], [R, gainToY(t.eq.high)]];
+      const trace = () => {
+        x.moveTo(pts[0][0], pts[0][1]);
+        for (let i = 1; i < pts.length; i++) {
+          const [x0, y0] = pts[i - 1], [x1, y1] = pts[i];
+          const mx = (x0 + x1) / 2;
+          x.bezierCurveTo(mx, y0, mx, y1, x1, y1);
+        }
+      };
+      x.beginPath(); trace(); x.lineTo(R, gainToY(0)); x.lineTo(L, gainToY(0)); x.closePath();
+      x.globalAlpha = 0.12; x.fillStyle = t.color; x.fill(); x.globalAlpha = 1;
+      x.beginPath(); trace(); x.strokeStyle = t.color; x.lineWidth = big ? 2.5 : 2; x.stroke();
+
+      // handles + labels + live value
+      x.textAlign = 'center';
       for (const b of bands) {
         const hx = bandX[b], hy = gainToY(t.eq[b]);
-        x.fillStyle = t.color;
-        x.beginPath(); x.arc(hx, hy, big ? 6 : 4.5, 0, Math.PI * 2); x.fill();
-        x.strokeStyle = 'rgba(0,0,0,0.4)'; x.lineWidth = 1.2; x.stroke();
+        const rad = big ? 6.5 : 4.5;
+        if (active === b) { x.globalAlpha = 0.25; x.fillStyle = t.color; x.beginPath(); x.arc(hx, hy, rad + 4, 0, 7); x.fill(); x.globalAlpha = 1; }
+        x.fillStyle = t.color; x.beginPath(); x.arc(hx, hy, rad, 0, Math.PI * 2); x.fill();
+        x.strokeStyle = 'rgba(0,0,0,0.45)'; x.lineWidth = 1.4; x.stroke();
+        x.fillStyle = 'rgba(255,255,255,0.9)'; x.beginPath(); x.arc(hx, hy, rad - 2.6, 0, Math.PI * 2); x.fill();
         if (big) {
-          x.fillStyle = 'rgba(255,255,255,0.55)';
-          x.font = '700 9px -apple-system, sans-serif'; x.textAlign = 'center';
-          x.fillText(bandLbl[b], hx, H - 5);
+          x.fillStyle = 'rgba(255,255,255,0.5)'; x.font = '700 9px -apple-system, sans-serif';
+          x.fillText(bandLbl[b], hx, H - botPad + 9);
+          x.fillStyle = 'rgba(255,255,255,0.3)'; x.font = '600 8px -apple-system, sans-serif';
+          x.fillText(bandHz[b], hx, H - botPad + 18);
           const g = t.eq[b];
-          if (Math.abs(g) > 0.1) { x.fillStyle = 'var(--dim)'; x.fillStyle = 'rgba(255,255,255,0.7)'; x.fillText((g > 0 ? '+' : '') + g.toFixed(1), hx, 12); }
+          x.fillStyle = active === b ? t.color : 'rgba(255,255,255,0.62)';
+          x.font = '700 9.5px -apple-system, sans-serif';
+          x.fillText((g > 0 ? '+' : '') + g.toFixed(1) + ' dB', hx, topPad - 6);
         }
       }
     };
@@ -160,7 +185,7 @@ const Windows = {
     const nearBand = (mx) => {
       let best = null, bd = 1e9;
       for (const b of bands) { const d = Math.abs(mx - bandX[b]); if (d < bd) { bd = d; best = b; } }
-      return bd < 26 ? best : null;
+      return bd < 30 ? best : null;
     };
 
     cv.addEventListener('dblclick', (e) => {
@@ -183,6 +208,7 @@ const Windows = {
         Sync.setLock(lk, true);
       }
       Undo.push(tr('act_change_eq', 'EQ') + ' ' + b);
+      active = b;
       const move = (ev) => {
         t.eq[b] = Math.round(yToGain(ev.clientY - r.top) * 2) / 2;
         Engine.updateTrack(t); // live, also while playing
@@ -191,6 +217,7 @@ const Windows = {
       const up = () => {
         window.removeEventListener('mousemove', move);
         window.removeEventListener('mouseup', up);
+        active = null; draw();
         if (typeof Sync !== 'undefined') Sync.setLock(lk, false);
       };
       move(e);
@@ -263,6 +290,19 @@ const Windows = {
       strip.appendChild(volRow);
       setDb(t.volume);
       strip.appendChild(db);
+
+      // per-track swing: some tracks can groove while others stay straight
+      const swRow = document.createElement('div');
+      swRow.className = 'mix-row';
+      swRow.innerHTML = `<span class="mix-lbl">${tr('mix_swing', 'SWING')}</span>`;
+      const swVal = document.createElement('div');
+      swVal.className = 'strip-db';
+      const setSw = (v) => { swVal.textContent = Math.round(v * 100) + '%'; };
+      this.mixSlider(swRow, 0, 0.6, 0.02, t.swing || 0, tr('tip_track_swing', 'Swing "{name}": nudges its offbeats for groove', { name: t.name }),
+        (v) => { t.swing = v; setSw(v); if (UI.playing) Engine.liveEdit(); }, tr('act_change_swing', 'Swing'), 'swing:' + t.id);
+      strip.appendChild(swRow);
+      setSw(t.swing || 0);
+      strip.appendChild(swVal);
 
       const ms = document.createElement('div');
       ms.className = 'strip-ms';
@@ -505,17 +545,18 @@ const Windows = {
           const item = document.createElement('div');
           item.className = 'fx-item samp-item';
           item.draggable = true;
+          item.dataset.tip = tr('tip_samp_item', 'Click to hear it, drag or double-click to add it');
           const inst = s.cat === 'fx' ? '' : `<span class="samp-inst">${instrLabel(s.instrument)}</span>`;
-          item.innerHTML = `<svg class="ic"><use href="#i-loops"/></svg><span>${s.name}</span>${inst}`;
+          item.innerHTML = `<button class="samp-play" title="${tr('samp_preview', 'Preview')}"><svg class="ic"><use href="#i-play"/></svg></button><span class="samp-nm">${s.name}</span>${inst}`;
           item.addEventListener('dragstart', (e) => {
             e.dataTransfer.setData('text/fabu-sample', s.id);
             e.dataTransfer.effectAllowed = 'copy';
             Windows._dragSample = s;   // so the timeline can preview its size
           });
           item.addEventListener('dragend', () => { Windows._dragSample = null; });
-          // a plain click isn't obvious, so nudge people to drag (double-click still adds)
-          item.addEventListener('click', () => toast(tr('samp_drag_hint', 'Drag it anywhere on the timeline!')));
-          item.addEventListener('dblclick', () => App.addSampleToProject(s.id));
+          // click hears it (drag or double-click still adds it to the song)
+          item.addEventListener('click', () => Engine.auditionSample(s));
+          item.addEventListener('dblclick', () => { Engine.stopAudition(); App.addSampleToProject(s.id); });
           list.appendChild(item);
         }
       }
