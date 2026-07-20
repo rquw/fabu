@@ -10,8 +10,13 @@ const INSTRUMENTS = {
   bass:  'Bass',
   pluck: 'Pluck',
   bell:  'Bell',
-  drums: 'Drum Kit'
+  drums: 'Drum Kit',
+  drumkit: 'Acoustic Kit'
 };
+
+// pitch-class -> bundled real drum sample (assets/oneshots). Same layout as the
+// synth kit (kick=C, snare=D, clap=E, closed hat=F#, open hat=A#) plus a tom.
+const DRUMKIT_MAP = { 0: 'kick', 2: 'snare', 4: 'clap', 6: 'hat_closed', 9: 'tom', 10: 'hat_open' };
 
 const Engine = {
   ctx: null,
@@ -156,6 +161,7 @@ const Engine = {
     for (const t of S.tracks) {
       this.chains.set(t.id, this.buildChain(this.ctx, this.master, t));
     }
+    if (S.tracks.some(t => t.instrument === 'drumkit')) this.ensureDrumkit();
   },
 
   updateTrack(track) {
@@ -298,6 +304,7 @@ const Engine = {
     if (custom) return this.makeSamplerVoice(ac, dest, custom, pitch, t, vel, noAttack);
     if (this.SFX && this.SFX[instr]) return this.SFX[instr](ac, dest, pitch, t, vel);
     if (instr === 'drums') return this.makeDrum(ac, dest, pitch, t, vel);
+    if (instr === 'drumkit') return this.makeDrumkitVoice(ac, dest, pitch, t, vel);
     if (instr === 'keys') return this.makePiano(ac, dest, pitch, t, vel, noAttack);
 
     const f = midiToFreq(pitch);
@@ -524,56 +531,6 @@ const Engine = {
     };
   },
   SFX: {
-    sfx_riser(ac, dest, pitch, t, vel) {
-      const dur = 1.8;
-      const n = ac.createBufferSource(); n.buffer = Engine.noise(ac); n.loop = true;
-      const lp = ac.createBiquadFilter(); lp.type = 'bandpass'; lp.Q.value = 4;
-      lp.frequency.setValueAtTime(400, t); lp.frequency.exponentialRampToValueAtTime(9000, t + dur);
-      const g = ac.createGain();
-      g.gain.setValueAtTime(0.0006, t); g.gain.exponentialRampToValueAtTime(0.45 * vel, t + dur * 0.92);
-      g.gain.linearRampToValueAtTime(0, t + dur + 0.06);
-      n.connect(lp); lp.connect(g); g.connect(dest);
-      n.start(t); n.stop(t + dur + 0.1);
-      return Engine._sfxHandle([n], g);
-    },
-    sfx_reverse(ac, dest, pitch, t, vel) { // reverse cymbal swell
-      const dur = 1.4;
-      const n = ac.createBufferSource(); n.buffer = Engine.noise(ac); n.loop = true;
-      const hp = ac.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 3500;
-      const g = ac.createGain();
-      g.gain.setValueAtTime(0.0004, t); g.gain.exponentialRampToValueAtTime(0.5 * vel, t + dur);
-      g.gain.linearRampToValueAtTime(0, t + dur + 0.04);
-      n.connect(hp); hp.connect(g); g.connect(dest);
-      n.start(t); n.stop(t + dur + 0.08);
-      return Engine._sfxHandle([n], g);
-    },
-    sfx_impact(ac, dest, pitch, t, vel) { // big low hit
-      const o = ac.createOscillator(); o.type = 'sine';
-      o.frequency.setValueAtTime(120, t); o.frequency.exponentialRampToValueAtTime(38, t + 0.5);
-      const og = ac.createGain(); og.gain.setValueAtTime(1.1 * vel, t); og.gain.exponentialRampToValueAtTime(0.001, t + 0.7);
-      const n = ac.createBufferSource(); n.buffer = Engine.noise(ac); n.loop = true;
-      const ng = ac.createGain(); ng.gain.setValueAtTime(0.5 * vel, t); ng.gain.exponentialRampToValueAtTime(0.001, t + 0.25);
-      const out = ac.createGain();
-      o.connect(og); og.connect(out); n.connect(ng); ng.connect(out); out.connect(dest);
-      o.start(t); o.stop(t + 0.75); n.start(t); n.stop(t + 0.3);
-      return Engine._sfxHandle([o, n], out);
-    },
-    sfx_zap(ac, dest, pitch, t, vel) { // laser
-      const o = ac.createOscillator(); o.type = 'sawtooth';
-      o.frequency.setValueAtTime(2400, t); o.frequency.exponentialRampToValueAtTime(180, t + 0.3);
-      const g = ac.createGain(); g.gain.setValueAtTime(0.4 * vel, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.34);
-      o.connect(g); g.connect(dest); o.start(t); o.stop(t + 0.36);
-      return Engine._sfxHandle([o], g);
-    },
-    sfx_coin(ac, dest, pitch, t, vel) { // game point / skill blips
-      const out = ac.createGain(); out.connect(dest);
-      [[988, 0], [1319, 0.08]].forEach(([hz, off]) => {
-        const o = ac.createOscillator(); o.type = 'square'; o.frequency.value = hz;
-        const g = ac.createGain(); g.gain.setValueAtTime(0.35 * vel, t + off); g.gain.exponentialRampToValueAtTime(0.001, t + off + 0.16);
-        o.connect(g); g.connect(out); o.start(t + off); o.stop(t + off + 0.18);
-      });
-      return Engine._sfxHandle([], out);
-    },
     sfx_downer(ac, dest, pitch, t, vel) { // downlifter
       const dur = 1.2;
       const n = ac.createBufferSource(); n.buffer = Engine.noise(ac); n.loop = true;
@@ -581,16 +538,6 @@ const Engine = {
       lp.frequency.setValueAtTime(8000, t); lp.frequency.exponentialRampToValueAtTime(200, t + dur);
       const g = ac.createGain(); g.gain.setValueAtTime(0.4 * vel, t); g.gain.linearRampToValueAtTime(0.02, t + dur);
       n.connect(lp); lp.connect(g); g.connect(dest); n.start(t); n.stop(t + dur + 0.05);
-      return Engine._sfxHandle([n], g);
-    },
-    sfx_whoosh(ac, dest, pitch, t, vel) { // transition whoosh
-      const dur = 0.55;
-      const n = ac.createBufferSource(); n.buffer = Engine.noise(ac); n.loop = true;
-      const bp = ac.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 1.5;
-      bp.frequency.setValueAtTime(600, t); bp.frequency.exponentialRampToValueAtTime(5000, t + dur);
-      const g = ac.createGain();
-      g.gain.setValueAtTime(0.001, t); g.gain.exponentialRampToValueAtTime(0.4 * vel, t + dur * 0.5); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
-      n.connect(bp); bp.connect(g); g.connect(dest); n.start(t); n.stop(t + dur + 0.05);
       return Engine._sfxHandle([n], g);
     }
   },
@@ -875,6 +822,15 @@ const Engine = {
   // ----- transport -----
 
   beatToTime(beat) { return this.startCtxTime + (beat - this.startBeat) * this.spb(); },
+  // Swing: delay notes that sit on an offbeat 8th by a fraction of an 8th note.
+  // Per-track (sw = track.swing). Only shifts note onsets, never the grid.
+  swingBeat(beat, sw) {
+    if (!sw || sw <= 0) return beat;
+    const eighth = beat * 2;                 // position measured in 8th notes
+    const idx = Math.round(eighth);
+    if (Math.abs(eighth - idx) < 0.02 && idx % 2 === 1) return beat + sw * 0.5;
+    return beat;
+  },
   currentBeat() {
     if (!UI.playing) return UI.playhead;
     return this.startBeat + (this.ctx.currentTime - this.startCtxTime) / this.spb();
@@ -894,8 +850,8 @@ const Engine = {
             return clipDest;
           };
           for (const n of c.notes) {
-            const b = c.start + n.start;
             if (n.start >= c.length) continue;
+            const b = this.swingBeat(c.start + n.start, t.swing);
             const durB = Math.min(n.length, c.length - n.start);
             const endB = b + durB;
             if (endB <= fromBeat + 1e-6) continue; // already finished
@@ -1129,6 +1085,73 @@ const Engine = {
     src.connect(this.master);
     src.start();
     src.stop(this.ctx.currentTime + Math.min(buffer.duration, 3));
+  },
+
+  // ----- real drum kit (bundled CC0 samples, decoded on first use) -----
+  DRUMKIT: {},
+  ensureDrumkit() {
+    if (this._drumkitReady) return Promise.resolve();
+    if (this._drumkitLoading) return this._drumkitLoading;
+    this.ensureCtx();
+    const names = ['kick', 'snare', 'clap', 'hat_closed', 'hat_open', 'tom'];
+    this._drumkitLoading = Promise.all(names.map(async (nm) => {
+      try {
+        const res = await fetch('assets/oneshots/' + nm + '.wav');
+        const buf = await res.arrayBuffer();
+        this.DRUMKIT[nm] = await this.ctx.decodeAudioData(buf);
+      } catch (e) { /* a missing piece just stays silent */ }
+    })).then(() => { this._drumkitReady = true; });
+    return this._drumkitLoading;
+  },
+  makeDrumkitVoice(ac, dest, pitch, t, vel = 0.9) {
+    const nm = DRUMKIT_MAP[((pitch % 12) + 12) % 12];
+    const buf = nm && this.DRUMKIT[nm];
+    if (!buf) { this.ensureDrumkit(); return { stop() {}, kill() {} }; } // load for next time
+    const src = ac.createBufferSource();
+    src.buffer = buf;
+    const g = ac.createGain();
+    g.gain.value = clamp(vel, 0, 1) * 0.9;
+    src.connect(g); g.connect(dest);
+    src.start(t);
+    return {
+      stop: () => {},  // a hit rings out on its own, like the synth kit
+      kill: () => { try { src.stop(); } catch (e) {} try { g.disconnect(); } catch (e) {} }
+    };
+  },
+
+  // hear a Loops-browser pattern before dragging it in; routed through its own
+  // bus so a second click can cut it instantly
+  auditionSample(sample) {
+    this.ensureCtx();
+    this.ctx.resume();
+    this.stopAudition();
+    // real-drum loops need their samples decoded before they will sound
+    if (sample.instrument === 'drumkit' && !this._drumkitReady) {
+      this.ensureDrumkit().then(() => this.auditionSample(sample));
+      return;
+    }
+    const ac = this.ctx;
+    const bus = ac.createGain();
+    bus.gain.value = 0.9;
+    bus.connect(this.master);
+    const spb = 60 / (S.bpm || 120);
+    const t0 = ac.currentTime + 0.06;
+    let endB = 0;
+    for (const n of sample.notes) {
+      const t = t0 + n.start * spb;
+      const v = this.makeVoice(ac, bus, sample.instrument, n.pitch, t, (n.vel ?? 0.9) * 0.9);
+      v.stop(t + n.length * spb);
+      endB = Math.max(endB, n.start + n.length);
+    }
+    const stopMs = (t0 + endB * spb + 0.35 - ac.currentTime) * 1000;
+    this._audition = { bus, timer: setTimeout(() => this.stopAudition(), stopMs) };
+  },
+  stopAudition() {
+    const a = this._audition;
+    if (!a) return;
+    clearTimeout(a.timer);
+    try { a.bus.disconnect(); } catch (e) {}  // cuts every voice fed through it
+    this._audition = null;
   },
 
   // ----- voice recording with count-in -----

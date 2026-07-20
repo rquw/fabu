@@ -49,6 +49,7 @@ function makeTrack(kind) {
     color: nextColor(),
     volume: 0.8,
     pan: 0,
+    swing: 0,    // 0..0.6 per-track swing (delays this track's offbeat 8ths)
     eq: { low: 0, mid: 0, high: 0 },
     mute: false,
     solo: false,
