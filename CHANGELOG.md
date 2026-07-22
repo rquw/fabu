@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.1.6
+- MIDI keyboards: plug one in and play (and record) any instrument track with it. Turn it on or off in Settings.
+- Sidechain "pump": a per-track slider in the mixer that ducks the track on every beat for that classic pumping groove.
+- Two real recorded instruments: a Grand Piano and a Vibraphone (genuine samples, not synth), in the instrument menu.
+- Compound clips: select clips across tracks, right-click Group into one (or Cmd G). They become a single block on a new track, non-destructive, ungroup any time (Cmd Shift G).
+- Drum patterns now open as a clean drum-lane editor: only the drums that actually play, each on a clearly labeled row. No more silent mystery keys.
+- Redesigned home menu: clear labeled cards so you can find everything at a glance.
+- Clips no longer overlap: drag one past another and it snaps to the nearest free spot; recording over something drops the take on its own lane.
+- Piano roll extends as you scroll, so you can write past the end of a pattern. It also has a playhead you can drag to scrub.
+- Quantize can line up the selected notes or all of them. Swing is now per-track, in the mixer.
+- Floating windows are resizable from the edges and corner.
+- The app now asks to save unsaved work before you go home or close it.
+- Cleaner scrollbars, and a bunch of layout fixes.
+
 ## 1.1.5
 - Real drums: a new Acoustic Kit made from genuine recorded samples (kick, snare, hats, clap, tom). Pick it on any drum track and program beats with real hits, or grab the new Acoustic loops from the Loops browser.
 - Piano roll gained a lot: choose a Key and scale to shade the notes that fit, a Chord button that drops full chords, snap-to-key, a velocity lane to shape how loud notes are, and a playhead you can see and drag to scrub.

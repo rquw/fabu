@@ -32,11 +32,12 @@ const App = {
     this.startAutosave();
     this.loadLibrary();
     Auth.init();
+    if (typeof MIDI !== 'undefined') MIDI.init();
     Sync.initCursors();
     // closing the app asks about unsaved changes
     if (window.electronAPI && window.electronAPI.onConfirmClose) {
       window.electronAPI.onConfirmClose(() => {
-        if (!UI.dirty) { window.electronAPI.confirmClose(); return; }
+        if (!UI.fileDirty) { window.electronAPI.confirmClose(); return; }
         this.confirmExit('close');
       });
     }
@@ -124,7 +125,7 @@ const App = {
     const done = () => {
       wrap.remove();
       if (kind === 'close') window.electronAPI.confirmClose();
-      else { UI.dirty = false; this.checkAutosave(); this.showHome(); }
+      else { UI.dirty = false; UI.fileDirty = false; this.checkAutosave(); this.showHome(); }
     };
     wrap.querySelector('#exSave').addEventListener('click', async () => {
       const ok = await this.save();
@@ -136,7 +137,7 @@ const App = {
   },
 
   goHome() {
-    if (UI.dirty) { this.confirmExit('home'); return; }
+    if (UI.fileDirty) { this.confirmExit('home'); return; }
     this.checkAutosave();
     this.showHome();
   },
@@ -283,6 +284,7 @@ const App = {
     UI.selClipId = null;
     UI.selTrackId = null;
     UI.dirty = false;
+    UI.fileDirty = false;
     this.currentPath = null;
     $('#projName').value = 'Untitled';
     if (Engine.ctx) { Engine.rebuildTracks(); Engine.updateAllTracks(); }
@@ -331,6 +333,7 @@ const App = {
     UI.selClipIds = new Set();
     UI.selTrackId = null;
     UI.dirty = true;
+    UI.fileDirty = false;   // freshly loaded example; editing it will mark it unsaved
     this.currentPath = null;
     $('#projName').value = tr('demo_name', 'Example song');
     $('#bpmInput').value = S.bpm;
@@ -749,6 +752,9 @@ const App = {
       f.track.clips.splice(f.track.clips.indexOf(f.clip), 1);
       if (PianoRoll.clipId === f.clip.id) PianoRoll.close();
     }
+    // a group track left empty by deleting its group clip has no purpose
+    S.tracks = S.tracks.filter(t => t.kind !== 'group' || t.clips.length);
+    Engine.rebuildTracks();
     this.selectClip(null);
     Timeline.render();
     Windows.refreshAll();
@@ -772,6 +778,76 @@ const App = {
     Timeline.render();
     this.selectClipSet(newIds);
     toast(found.length > 1 ? tr('toast_clips_duplicated', '{n} clips duplicated', { n: found.length }) : tr('toast_clip_duplicated', 'Clip duplicated'));
+  },
+
+  // ---------- groups (compound clips) ----------
+
+  // bundle the selected clips (across tracks) into one group clip on a new track.
+  // Non-destructive: the originals are kept inside and restored on ungroup.
+  groupSelectedClips() {
+    const items = [...UI.selClipIds].map(getClip).filter(Boolean);
+    if (items.length < 2) { toast(tr('toast_group_need2', 'Select at least two clips to group')); return; }
+    if (items.some(it => it.clip.kind === 'group')) { toast(tr('toast_group_nested', 'You cannot put a group inside a group yet')); return; }
+    Undo.push('Group clips');
+    const start = Math.min(...items.map(it => it.clip.start));
+    const end = Math.max(...items.map(it => it.clip.start + clipBeats(it.clip)));
+    const children = items.map(it => ({
+      origTrackId: it.track.id,
+      origTrackName: it.track.name,
+      origTrackKind: it.track.kind,
+      origInstrument: it.track.instrument,
+      origColor: it.track.color,
+      clip: Object.assign(JSON.parse(JSON.stringify(it.clip)), { start: it.clip.start - start })
+    }));
+    for (const it of items) it.track.clips.splice(it.track.clips.indexOf(it.clip), 1);
+    const gt = makeTrack('group');
+    gt.name = tr('group_track', 'Group');
+    gt.color = '#7d8bb0';   // a distinct slate so groups read as their own thing
+    const group = {
+      id: uid('clip'), kind: 'group', name: tr('group_name', 'Group'), by: authorName(),
+      start, length: Math.max(0.25, end - start), children
+    };
+    gt.clips.push(group);
+    S.tracks.push(gt);
+    Engine.rebuildTracks();
+    Timeline.render();
+    Windows.refreshAll();
+    KeysPanel.refreshTracks();
+    this.selectClip(group.id);
+    if (UI.playing) Engine.liveEdit();
+    toast(tr('toast_grouped', 'Grouped {n} clips', { n: items.length }), 'green');
+  },
+
+  // undo a group: put every child back on its original track, drop the group
+  ungroupClip(clipId) {
+    const f = getClip(clipId);
+    if (!f || f.clip.kind !== 'group') return;
+    const group = f.clip, gt = f.track;
+    Undo.push('Ungroup');
+    const restored = [];
+    for (const child of group.children) {
+      const clip = Object.assign(JSON.parse(JSON.stringify(child.clip)), { start: group.start + (child.clip.start || 0) });
+      let track = getTrack(child.origTrackId);
+      if (!track || track.kind !== child.origTrackKind) {
+        track = makeTrack(child.origTrackKind || 'midi');
+        track.name = child.origTrackName || track.name;
+        if (child.origInstrument) track.instrument = child.origInstrument;
+        if (child.origColor) track.color = child.origColor;
+        S.tracks.push(track);
+      }
+      clip.start = Timeline.nearestFreeStart(track, clipBeats(clip), clip.start, null);
+      track.clips.push(clip);
+      restored.push(clip.id);
+    }
+    gt.clips.splice(gt.clips.indexOf(group), 1);
+    if (!gt.clips.length && gt.kind === 'group') S.tracks.splice(S.tracks.indexOf(gt), 1);
+    Engine.rebuildTracks();
+    Timeline.render();
+    Windows.refreshAll();
+    KeysPanel.refreshTracks();
+    this.selectClipSet(restored);
+    if (UI.playing) Engine.liveEdit();
+    toast(tr('toast_ungrouped', 'Ungrouped'), 'green');
   },
 
   // slice the selected clip in two at the playhead
@@ -883,7 +959,7 @@ const App = {
     }
     const clip = {
       id: uid('clip'), kind: 'midi', name: preset.name, by: authorName(),
-      start: beat, length: preset.length,
+      start: Timeline.firstFreeStart(track, preset.length, beat, null), length: preset.length,
       notes: preset.notes.map(n => ({ id: uid('note'), pitch: n.pitch, start: n.start, length: n.length, vel: n.vel }))
     };
     track.clips.push(clip);
@@ -1013,8 +1089,9 @@ const App = {
         id: uid('clip'), kind: 'audio', name, by: authorName(),
         start: at, sampleId: id, fadeIn: 0, fadeOut: 0, pitch: 0, gain: 1
       };
+      clip.start = Timeline.firstFreeStart(track, clipBeats(clip), at, null);  // no overlap
       track.clips.push(clip);
-      at += clipBeats(clip);
+      at = clip.start + clipBeats(clip);
     }
     Timeline.render();
     Windows.refreshAll();
@@ -1059,6 +1136,7 @@ const App = {
       });
       if (res.ok) {
         UI.dirty = false;
+        UI.fileDirty = false;
         this.currentPath = res.path;
         $('#projName').value = res.name.replace(/\.fab$/i, '');
         this.addRecent(res.path, res.name);
@@ -1068,6 +1146,7 @@ const App = {
     } else {
       this.browserDownload(new Blob([json], { type: 'application/json' }), fname);
       UI.dirty = false;
+      UI.fileDirty = false;
       toast(tr('toast_saved', 'Saved {name}', { name: fname }), 'green');
       return true;
     }
@@ -1121,6 +1200,7 @@ const App = {
       UI.selClipId = null;
       UI.selTrackId = null;
       UI.dirty = false;
+      UI.fileDirty = false;
       this.currentPath = filePath;
       $('#projName').value = name;
       if (filePath) this.addRecent(filePath, name);
@@ -1303,7 +1383,7 @@ const App = {
       }
     });
 
-    $('#projName').addEventListener('change', () => { UI.dirty = true; });
+    $('#projName').addEventListener('change', () => { UI.dirty = true; UI.fileDirty = true; });
   },
 
   // vertical drag on a number field, cross-platform. Overlay captures the drag
@@ -1366,6 +1446,8 @@ const App = {
         if (k === 'e') { e.preventDefault(); this.export(); return; }
         if (k === 'd') { e.preventDefault(); this.duplicateClip(); return; }
         if (k === 'b') { e.preventDefault(); this.splitSelectedClip(); return; }
+        if (k === 'g' && !e.shiftKey) { e.preventDefault(); this.groupSelectedClips(); return; }
+        if (k === 'g' && e.shiftKey) { e.preventDefault(); const g = [...UI.selClipIds].map(getClip).find(x => x && x.clip.kind === 'group'); if (g) this.ungroupClip(g.clip.id); return; }
         if (k === 'c') { e.preventDefault(); if (!PianoRoll.copySelected(false)) this.copyClip(false); return; }
         if (k === 'x') { e.preventDefault(); if (!PianoRoll.copySelected(true)) this.copyClip(true); return; }
         if (k === 'v') { e.preventDefault(); if (!PianoRoll.paste()) this.pasteClip(); return; }

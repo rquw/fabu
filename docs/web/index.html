@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>fabu</title>
-<link rel="stylesheet" href="styles.css?v=25">
+<link rel="stylesheet" href="styles.css?v=26">
 </head>
 <body>
 
@@ -162,27 +162,27 @@
         <div class="home-tag" data-i18n="tagline">make music.</div>
       </div>
       <div class="home-actions">
-        <button id="homeNew" class="home-act">
-          <svg class="ic"><use href="#i-plus"/></svg>
-          <span data-i18n="new_project">New project</span>
-        </button>
-        <button id="homeContinue" class="home-act ghost hidden">
+        <button id="homeContinue" class="home-go hidden">
           <svg class="ic"><use href="#i-undo"/></svg>
-          <span data-i18n="home_continue">Continue</span>
+          <span class="hc-txt"><span class="hc-title" data-i18n="home_continue">Continue</span><span class="hc-sub" data-i18n="hc_continue_sub">Pick up where you left off</span></span>
         </button>
-        <button id="homeDemo" class="home-act ghost">
-          <svg class="ic"><use href="#i-note"/></svg>
-          <span data-i18n="home_example">Open example</span>
+        <button id="homeNew" class="home-go primary">
+          <svg class="ic"><use href="#i-plus"/></svg>
+          <span class="hc-txt"><span class="hc-title" data-i18n="new_project">New project</span><span class="hc-sub" data-i18n="hc_new_sub">Start something from scratch</span></span>
         </button>
-        <button id="homeOpen" class="home-act ghost">
+        <button id="homeOpen" class="home-go">
           <svg class="ic"><use href="#i-folder"/></svg>
-          <span data-i18n="open_a_file">Open a file</span>
+          <span class="hc-txt"><span class="hc-title" data-i18n="open_a_file">Open a file</span><span class="hc-sub" data-i18n="hc_open_sub">Load a saved project</span></span>
         </button>
-        <button id="homeMp" class="home-act ghost">
+        <button id="homeMp" class="home-go">
           <svg class="ic"><use href="#i-users"/></svg>
-          <span data-i18n="mp_title">Multiplayer</span>
+          <span class="hc-txt"><span class="hc-title" data-i18n="mp_title">Multiplayer</span><span class="hc-sub" data-i18n="hc_mp_sub">Make music with a friend</span></span>
         </button>
       </div>
+      <button id="homeDemo" class="home-example">
+        <svg class="ic"><use href="#i-note"/></svg>
+        <span data-i18n="home_example_link">New here? Open the example song</span>
+      </button>
     </div>
     <div class="home-recent">
       <div class="home-recent-head" data-i18n="recent_projects">Recent Projects</div>
@@ -199,21 +199,22 @@
 <div id="toasts"></div>
 <div id="tooltip" class="hidden"></div>
 
-<script src="js/vendor/lame.min.js?v=25"></script>
-<script src="js/vendor/WasmMediaEncoder.min.js?v=25"></script>
-<script src="js/vendor/ogg.wasm.js?v=25"></script>
-<script src="js/util.js?v=25"></script>
-<script src="js/state.js?v=25"></script>
-<script src="js/audio.js?v=25"></script>
-<script src="js/windows.js?v=25"></script>
-<script src="js/timeline.js?v=25"></script>
-<script src="js/pianoroll.js?v=25"></script>
-<script src="js/automation.js?v=25"></script>
-<script src="js/sampler.js?v=25"></script>
-<script src="js/auth.js?v=25"></script>
-<script src="js/app.js?v=25"></script>
-<script src="js/tutor.js?v=25"></script>
-<script src="js/sync.js?v=25"></script>
-<script src="js/webnudge.js?v=25"></script>
+<script src="js/vendor/lame.min.js?v=26"></script>
+<script src="js/vendor/WasmMediaEncoder.min.js?v=26"></script>
+<script src="js/vendor/ogg.wasm.js?v=26"></script>
+<script src="js/util.js?v=26"></script>
+<script src="js/state.js?v=26"></script>
+<script src="js/audio.js?v=26"></script>
+<script src="js/windows.js?v=26"></script>
+<script src="js/timeline.js?v=26"></script>
+<script src="js/pianoroll.js?v=26"></script>
+<script src="js/automation.js?v=26"></script>
+<script src="js/sampler.js?v=26"></script>
+<script src="js/auth.js?v=26"></script>
+<script src="js/app.js?v=26"></script>
+<script src="js/midi.js?v=26"></script>
+<script src="js/tutor.js?v=26"></script>
+<script src="js/sync.js?v=26"></script>
+<script src="js/webnudge.js?v=26"></script>
 </body>
 </html>

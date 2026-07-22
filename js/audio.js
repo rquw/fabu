@@ -10,8 +10,17 @@ const INSTRUMENTS = {
   bass:  'Bass',
   pluck: 'Pluck',
   bell:  'Bell',
+  rpiano: 'Grand Piano',
+  rvibes: 'Vibraphone',
   drums: 'Drum Kit',
   drumkit: 'Acoustic Kit'
+};
+
+// real recorded melodic instruments (bundled CC0 MP3s in assets/instr), played
+// multi-zone: pick the sample whose root is nearest the note, then pitch-shift a little
+const MELODIC = {
+  rpiano: { name: 'Grand Piano', attack: 0.004, release: 0.18, zones: [{ file: 'piano_c2', root: 36 }, { file: 'piano_c4', root: 60 }, { file: 'piano_c6', root: 84 }] },
+  rvibes: { name: 'Vibraphone', attack: 0.003, release: 0.4, zones: [{ file: 'vibes_c3', root: 48 }, { file: 'vibes_c5', root: 72 }] }
 };
 
 // pitch-class -> bundled real drum sample (assets/oneshots). Same layout as the
@@ -133,9 +142,10 @@ const Engine = {
     eqHigh.type = 'highshelf'; eqHigh.frequency.value = 4500;
     const pan = ac.createStereoPanner();
     const gain = ac.createGain();
+    const sc = ac.createGain();   // sidechain "pump" ducking (1 = no ducking)
     input.connect(eqLow); eqLow.connect(eqMid); eqMid.connect(eqHigh);
-    eqHigh.connect(pan); pan.connect(gain); gain.connect(dest);
-    const chain = { input, eqLow, eqMid, eqHigh, pan, gain };
+    eqHigh.connect(pan); pan.connect(gain); gain.connect(sc); sc.connect(dest);
+    const chain = { input, eqLow, eqMid, eqHigh, pan, gain, sc };
     this.applyParams(chain, track);
     return chain;
   },
@@ -162,6 +172,7 @@ const Engine = {
       this.chains.set(t.id, this.buildChain(this.ctx, this.master, t));
     }
     if (S.tracks.some(t => t.instrument === 'drumkit')) this.ensureDrumkit();
+    if (S.tracks.some(t => MELODIC[t.instrument])) this.ensureMelodic();
   },
 
   updateTrack(track) {
@@ -214,6 +225,37 @@ const Engine = {
     }
   },
 
+  // sidechain "pump": duck the track on every beat then let it swell back,
+  // the classic compressor-pumping sound, tempo-synced (no real audio keying)
+  scheduleSidechain(chain, track, startBeat, startTime, spb) {
+    const sc = chain.sc;
+    if (!sc) return;
+    try { sc.gain.cancelScheduledValues(startTime); } catch (e) {}
+    const amt = track.sidechain || 0;
+    if (amt <= 0) { sc.gain.setValueAtTime(1, startTime); return; }
+    const low = Math.max(0.02, 1 - amt);
+    const end = Math.max(songEndBeat() + 8, startBeat + 64);
+    sc.gain.setValueAtTime(1, startTime);
+    for (let b = Math.ceil(startBeat - 1e-6); b <= end; b++) {
+      const t = startTime + (b - startBeat) * spb;
+      if (t < startTime) continue;
+      sc.gain.setValueAtTime(low, t);                    // duck on the beat
+      sc.gain.linearRampToValueAtTime(1, t + spb * 0.9); // swell back before the next
+    }
+  },
+  scheduleAllSidechain(startBeat, startTime) {
+    const spb = this.spb();
+    for (const t of S.tracks) {
+      const chain = this.chains.get(t.id);
+      if (chain) this.scheduleSidechain(chain, t, startBeat, startTime, spb);
+    }
+  },
+  rescheduleSidechain(track) {
+    if (!UI.playing || !this.ctx) return;
+    const chain = this.chains.get(track.id);
+    if (chain) this.scheduleSidechain(chain, track, this.currentBeat(), this.ctx.currentTime + 0.02, this.spb());
+  },
+
   // live re-apply after editing a track's automation while playing
   rescheduleAutomation(track) {
     if (!UI.playing || !this.ctx) return;
@@ -228,6 +270,7 @@ const Engine = {
       for (const ap of [c.gain.gain, c.eqLow.gain, c.eqMid.gain, c.eqHigh.gain, c.pan.pan]) {
         try { ap.cancelScheduledValues(now); } catch (e) {}
       }
+      if (c.sc) { try { c.sc.gain.cancelScheduledValues(now); c.sc.gain.setValueAtTime(1, now); } catch (e) {} }
       const t = getTrack(id);
       if (t) this.applyParams(c, t);
     }
@@ -305,6 +348,7 @@ const Engine = {
     if (this.SFX && this.SFX[instr]) return this.SFX[instr](ac, dest, pitch, t, vel);
     if (instr === 'drums') return this.makeDrum(ac, dest, pitch, t, vel);
     if (instr === 'drumkit') return this.makeDrumkitVoice(ac, dest, pitch, t, vel);
+    if (MELODIC[instr]) return this.makeMelodicVoice(ac, dest, instr, pitch, t, vel, noAttack);
     if (instr === 'keys') return this.makePiano(ac, dest, pitch, t, vel, noAttack);
 
     const f = midiToFreq(pitch);
@@ -836,50 +880,62 @@ const Engine = {
     return this.startBeat + (this.ctx.currentTime - this.startCtxTime) / this.spb();
   },
 
+  // schedule one clip (midi or audio) playing on `t`'s chain into `ev`
+  collectClipEvents(ev, c, t, fromBeat) {
+    if (c.kind === 'midi') {
+      let clipDest = null; // one shared per-clip fx chain, built at play time
+      const getDest = () => {
+        if (!clipDest) {
+          clipDest = this.clipFxDest(this.ctx, this.trackInput(t.id), c, this.rev && this.rev.pre);
+          if (clipDest !== this.trackInput(t.id)) this.live.add({ kill: () => { try { clipDest.disconnect(); } catch (e) {} } });
+        }
+        return clipDest;
+      };
+      for (const n of c.notes) {
+        if (n.start >= c.length) continue;
+        const b = this.swingBeat(c.start + n.start, t.swing);
+        const durB = Math.min(n.length, c.length - n.start);
+        const endB = b + durB;
+        if (endB <= fromBeat + 1e-6) continue; // already finished
+        const startBeat = Math.max(b, fromBeat);
+        const remain = endB - startBeat;
+        const midNote = startBeat > b + 1e-6; // seeked INTO this note
+        ev.push({
+          beat: startBeat,
+          fn: (time) => {
+            const v = this.makeVoice(this.ctx, getDest(), t.instrument, n.pitch + (c.pitch || 0), time, (n.vel ?? 0.9) * (c.gain ?? 1), midNote);
+            const end = time + remain * this.spb();
+            v.stop(end);
+            this.registerVoice(v, end);
+          }
+        });
+      }
+    } else {
+      const lenB = clipBeats(c);
+      if (c.start + lenB <= fromBeat + 1e-6) return;
+      if (c.start >= fromBeat - 1e-6) {
+        ev.push({ beat: c.start, fn: (time) => this.scheduleAudioClip(this.ctx, this.trackInput(t.id), c, time, 0) });
+      } else {
+        const outOff = (fromBeat - c.start) * this.spb();
+        ev.push({ beat: fromBeat, fn: (time) => this.scheduleAudioClip(this.ctx, this.trackInput(t.id), c, time, outOff) });
+      }
+    }
+  },
+
   collectEvents(fromBeat) {
     const ev = [];
     for (const t of S.tracks) {
       for (const c of t.clips) {
-        if (c.kind === 'midi') {
-          let clipDest = null; // one shared per-clip fx chain, built at play time
-          const getDest = () => {
-            if (!clipDest) {
-              clipDest = this.clipFxDest(this.ctx, this.trackInput(t.id), c, this.rev && this.rev.pre);
-              if (clipDest !== this.trackInput(t.id)) this.live.add({ kill: () => { try { clipDest.disconnect(); } catch (e) {} } });
-            }
-            return clipDest;
-          };
-          for (const n of c.notes) {
-            if (n.start >= c.length) continue;
-            const b = this.swingBeat(c.start + n.start, t.swing);
-            const durB = Math.min(n.length, c.length - n.start);
-            const endB = b + durB;
-            if (endB <= fromBeat + 1e-6) continue; // already finished
-            // a note already sounding at the seek point starts NOW, shortened,
-            // so long/held notes aren't silent when you drop the playhead into them
-            const startBeat = Math.max(b, fromBeat);
-            const remain = endB - startBeat;
-            const midNote = startBeat > b + 1e-6; // seeked INTO this note
-            ev.push({
-              beat: startBeat,
-              fn: (time) => {
-                const v = this.makeVoice(this.ctx, getDest(), t.instrument, n.pitch + (c.pitch || 0), time, (n.vel ?? 0.9) * (c.gain ?? 1), midNote);
-                const end = time + remain * this.spb();
-                v.stop(end);
-                this.registerVoice(v, end);
-              }
-            });
+        if (c.kind === 'group') {
+          // play each child at its absolute position through its original track,
+          // so a grouped drum pattern still sounds like drums, etc.
+          for (const child of c.children) {
+            const ot = getTrack(child.origTrackId) || t;
+            const abs = Object.assign({}, child.clip, { start: c.start + (child.clip.start || 0) });
+            this.collectClipEvents(ev, abs, ot, fromBeat);
           }
         } else {
-          const lenB = clipBeats(c);
-          if (c.start + lenB <= fromBeat + 1e-6) continue;
-          if (c.start >= fromBeat - 1e-6) {
-            ev.push({ beat: c.start, fn: (time) => this.scheduleAudioClip(this.ctx, this.trackInput(t.id), c, time, 0) });
-          } else {
-            // playhead starts inside this clip
-            const outOff = (fromBeat - c.start) * this.spb();
-            ev.push({ beat: fromBeat, fn: (time) => this.scheduleAudioClip(this.ctx, this.trackInput(t.id), c, time, outOff) });
-          }
+          this.collectClipEvents(ev, c, t, fromBeat);
         }
       }
     }
@@ -898,6 +954,7 @@ const Engine = {
     this.evIdx = 0;
     this.nextClickBeat = Math.ceil(this.startBeat - 1e-6);
     this.scheduleAllAutomation(this.startBeat, this.startCtxTime);
+    this.scheduleAllSidechain(this.startBeat, this.startCtxTime);
     this.schedTimer = setInterval(() => this.schedTick(), 25);
     this.schedTick();
     App.onTransport();
@@ -1062,9 +1119,27 @@ const Engine = {
     this.midiRec = null;
     KeysPanel.syncRecButton();
     if (mr.clip) {
+      // if the take overlaps clips already on the track, move it to its own lane
+      // (keeps the take exactly where it was played, without clobbering them)
+      const track = getTrack(mr.trackId);
+      const takeEnd = mr.clip.start + mr.clip.length;
+      const overlaps = track && track.clips.some(c => c !== mr.clip &&
+        c.start < takeEnd - 1e-6 && c.start + clipBeats(c) > mr.clip.start + 1e-6);
+      if (overlaps) {
+        track.clips.splice(track.clips.indexOf(mr.clip), 1);
+        const nt = makeTrack('midi');
+        nt.instrument = track.instrument;
+        nt.name = track.name + ' take';
+        nt.clips.push(mr.clip);
+        S.tracks.push(nt);
+        this.rebuildTracks();
+        KeysPanel.refreshTracks();
+        toast(tr('toast_take_new_lane', 'Take added on a new lane so it does not overlap'), 'green');
+      } else {
+        toast(tr('toast_recorded_notes', 'Recorded {n} notes', { n: mr.clip.notes.length }), 'green');
+      }
+      Timeline.render();
       App.selectClip(mr.clip.id);
-      toast(tr('toast_recorded_notes', 'Recorded {n} notes', { n: mr.clip.notes.length }), 'green');
-      setHint(tr('hint_take_added', 'Take added. Double-click it to edit the notes.'));
     } else {
       toast(tr('toast_nothing_recorded', 'Nothing recorded'));
     }
@@ -1115,6 +1190,51 @@ const Engine = {
     src.start(t);
     return {
       stop: () => {},  // a hit rings out on its own, like the synth kit
+      kill: () => { try { src.stop(); } catch (e) {} try { g.disconnect(); } catch (e) {} }
+    };
+  },
+
+  // ----- real melodic instruments (bundled CC0 samples, multi-zone) -----
+  MELODICBUF: {},
+  ensureMelodic() {
+    if (this._melodicReady) return Promise.resolve();
+    if (this._melodicLoading) return this._melodicLoading;
+    this.ensureCtx();
+    const files = [...new Set(Object.values(MELODIC).flatMap(m => m.zones.map(z => z.file)))];
+    this._melodicLoading = Promise.all(files.map(async (fn) => {
+      try {
+        const res = await fetch('assets/instr/' + fn + '.mp3');
+        const buf = await res.arrayBuffer();
+        this.MELODICBUF[fn] = await this.ctx.decodeAudioData(buf);
+      } catch (e) { /* a missing zone just stays silent */ }
+    })).then(() => { this._melodicReady = true; });
+    return this._melodicLoading;
+  },
+  makeMelodicVoice(ac, dest, instr, pitch, t, vel = 0.9, noAttack = false) {
+    const m = MELODIC[instr];
+    if (!m) return { stop() {}, kill() {} };
+    let zone = m.zones[0], best = 1e9;
+    for (const z of m.zones) { const d = Math.abs(pitch - z.root); if (d < best) { best = d; zone = z; } }
+    const buf = this.MELODICBUF[zone.file];
+    if (!buf) { this.ensureMelodic(); return { stop() {}, kill() {} }; }
+    const g = ac.createGain(); g.connect(dest);
+    const src = ac.createBufferSource(); src.buffer = buf;
+    src.playbackRate.value = Math.pow(2, (pitch - zone.root) / 12);
+    src.connect(g);
+    const A = noAttack ? 0.02 : (m.attack ?? 0.005);
+    const R = m.release ?? 0.15;
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(0.92 * vel, t + A);
+    const naturalEnd = t + buf.duration / src.playbackRate.value;
+    src.start(t);
+    try { src.stop(naturalEnd + 0.02); } catch (e) {}
+    return {
+      stop: (when) => {
+        const w = Math.max(when, ac.currentTime);
+        g.gain.cancelScheduledValues(w);
+        g.gain.setTargetAtTime(0, w, Math.max(0.01, R / 4));
+        try { src.stop(Math.min(naturalEnd + 0.02, w + R + 0.2)); } catch (e) {}
+      },
       kill: () => { try { src.stop(); } catch (e) {} try { g.disconnect(); } catch (e) {} }
     };
   },
@@ -1264,11 +1384,17 @@ const Engine = {
         S.tracks.push(track);
         this.rebuildTracks();
       }
-      track.clips.push({
+      const clip = {
         id: uid('clip'), kind: 'audio', name: Samples[id].name, by: authorName(),
         start: this.recStartBeat, sampleId: id,
         fadeIn: 0, fadeOut: 0, pitch: 0, gain: 1
-      });
+      };
+      // don't clobber existing audio on this lane: give the take its own lane
+      const cEnd = clip.start + clipBeats(clip);
+      if (track.clips.some(c => c.start < cEnd - 1e-6 && c.start + clipBeats(c) > clip.start + 1e-6)) {
+        track = makeTrack('audio'); track.name = 'Voice'; S.tracks.push(track); this.rebuildTracks();
+      }
+      track.clips.push(clip);
       Timeline.render();
       Windows.refreshAll();
       toast(tr('toast_recording_added', 'Recording added'), 'green');

@@ -27,6 +27,20 @@ function instrLabel(k) {
 // translated drum-row name for a pitch class, or null if it has no name
 const DRUM_LABEL_KEYS = { 0: 'drum_kick', 2: 'drum_snare', 4: 'drum_clap', 6: 'drum_hat', 9: 'drum_tom', 10: 'drum_ophat' };
 function isDrumInstr(i) { return i === 'drums' || i === 'drumkit'; }
+// The drum lanes the piano roll shows for a kit: only sounds that actually play,
+// each labeled, top to bottom. The synth kit has no tom (pc 9 = open hat there).
+function drumRowsFor(instrument) {
+  const all = [
+    { pc: 10, key: 'drum_ophat' },
+    { pc: 6, key: 'drum_hat' },
+    { pc: 9, key: 'drum_tom' },
+    { pc: 4, key: 'drum_clap' },
+    { pc: 2, key: 'drum_snare' },
+    { pc: 0, key: 'drum_kick' }
+  ];
+  const rows = instrument === 'drumkit' ? all : all.filter(r => r.pc !== 9);
+  return rows.map(r => ({ pitch: 60 + r.pc, label: tr(r.key, r.key.replace('drum_', '')) }));
+}
 function drumLabel(pc) {
   const k = DRUM_LABEL_KEYS[pc];
   return k ? tr(k, k.replace('drum_', '')) : null;

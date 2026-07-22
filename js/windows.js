@@ -46,8 +46,40 @@ const Windows = {
     });
 
     const rec = { el, body: el.querySelector('.fwin-body'), refresh: null };
+    this._bindResize(el, rec);
     this.wins.set(id, rec);
     return rec;
+  },
+
+  // drag the right edge, bottom edge, or corner to resize a window
+  _bindResize(el, rec) {
+    const mk = (cls, mode) => {
+      const h = document.createElement('div');
+      h.className = 'fwin-rz ' + cls;
+      el.appendChild(h);
+      h.addEventListener('mousedown', (e) => {
+        e.preventDefault(); e.stopPropagation();
+        el.style.zIndex = ++this.zTop;
+        const sx = e.clientX, sy = e.clientY, sw = el.offsetWidth, sh = el.offsetHeight;
+        el.classList.add('resizing');
+        el.style.maxHeight = 'none';   // let the user size it freely
+        const move = (ev) => {
+          if (mode !== 'b') el.style.width = Math.max(260, sw + (ev.clientX - sx)) + 'px';
+          if (mode !== 'r') el.style.height = Math.max(150, sh + (ev.clientY - sy)) + 'px';
+        };
+        const up = () => {
+          el.classList.remove('resizing');
+          window.removeEventListener('mousemove', move);
+          window.removeEventListener('mouseup', up);
+          if (rec.refresh) rec.refresh();
+        };
+        window.addEventListener('mousemove', move);
+        window.addEventListener('mouseup', up);
+      });
+    };
+    mk('rz-r', 'r');   // right edge  -> width
+    mk('rz-b', 'b');   // bottom edge -> height
+    mk('rz-c', 'c');   // corner      -> both
   },
 
   close(id) {
@@ -303,6 +335,19 @@ const Windows = {
       strip.appendChild(swRow);
       setSw(t.swing || 0);
       strip.appendChild(swVal);
+
+      // per-track sidechain "pump": ducks the track on every beat
+      const pumpRow = document.createElement('div');
+      pumpRow.className = 'mix-row';
+      pumpRow.innerHTML = `<span class="mix-lbl">${tr('mix_pump', 'PUMP')}</span>`;
+      const pumpVal = document.createElement('div');
+      pumpVal.className = 'strip-db';
+      const setPump = (v) => { pumpVal.textContent = Math.round(v * 100) + '%'; };
+      this.mixSlider(pumpRow, 0, 1, 0.02, t.sidechain || 0, tr('tip_pump', 'Sidechain "{name}": ducks it on every beat for a pumping groove', { name: t.name }),
+        (v) => { t.sidechain = v; setPump(v); Engine.rescheduleSidechain(t); }, tr('act_change_pump', 'Pump'), 'pump:' + t.id);
+      strip.appendChild(pumpRow);
+      setPump(t.sidechain || 0);
+      strip.appendChild(pumpVal);
 
       const ms = document.createElement('div');
       ms.className = 'strip-ms';
@@ -599,6 +644,20 @@ const Windows = {
       mkCheck(tr('set_eco', 'Reduce CPU load (weaker computers)'), Engine.ecoMode(),
         tr('tip_eco', 'Turns off the room reverb and limits voices so playback stays smooth.'),
         (v) => { Engine.setEco(v); toast(tr(v ? 'toast_eco_on' : 'toast_eco_off', 'CPU saver ' + (v ? 'on' : 'off'))); });
+
+      // MIDI keyboard input
+      if (typeof MIDI !== 'undefined' && MIDI.supported()) {
+        mkCheck(tr('set_midi', 'MIDI keyboard input'), MIDI.enabled,
+          tr('tip_midi', 'Play and record instruments from a connected MIDI keyboard.'),
+          (v) => { MIDI.setEnabled(v); w.refresh(); });
+        const midiInfo = document.createElement('div');
+        midiInfo.style.cssText = 'font-size:11px;color:var(--faint);margin:-4px 0 8px 26px';
+        const devs = MIDI.deviceNames();
+        midiInfo.textContent = !MIDI.enabled ? tr('set_midi_off', 'Turned off.')
+          : devs.length ? tr('set_midi_devices', 'Connected: {list}', { list: devs.join(', ') })
+          : tr('set_midi_none', 'No MIDI keyboard detected. Plug one in and it appears here.');
+        w.body.appendChild(midiInfo);
+      }
 
       const r = document.createElement('div');
       r.className = 'frow';
