@@ -100,7 +100,7 @@ const Timeline = {
         Undo.push('New pattern');
         const clip = {
           id: uid('clip'), kind: 'midi', name: 'Pattern', by: authorName(),
-          start: beat, length: 4, notes: []
+          start: this.firstFreeStart(track, 4, beat, null), length: 4, notes: []
         };
         track.clips.push(clip);
         this.render();
@@ -124,6 +124,49 @@ const Timeline = {
   totalBeats() {
     const viewportBeats = Math.ceil(this.scroller.clientWidth / UI.zoom);
     return Math.max(songEndBeat() + 32, viewportBeats + 8, 64);
+  },
+
+  // the free span [left, right) on a track that `clip` can occupy without
+  // overlapping its neighbours, classified by the clip's original position
+  laneBounds(track, clip, origStart, origEnd) {
+    let left = 0, right = Infinity;
+    for (const o of track.clips) {
+      if (o === clip) continue;
+      const oS = o.start, oE = o.start + clipBeats(o);
+      if (oE <= origStart + 1e-6) left = Math.max(left, oE);
+      else if (oS >= origEnd - 1e-6) right = Math.min(right, oS);
+    }
+    return { left, right };
+  },
+  // the free start closest to `desired` (searching both directions) where a clip
+  // of `len` beats fits without overlapping — used to snap a dragged clip on drop
+  nearestFreeStart(track, len, desired, ignore) {
+    desired = Math.max(0, desired);
+    const overlaps = (s) => track.clips.some(c => c !== ignore &&
+      s < c.start + clipBeats(c) - 1e-6 && s + len > c.start + 1e-6);
+    if (!overlaps(desired)) return desired;
+    const cands = [0];
+    for (const c of track.clips) {
+      if (c === ignore) continue;
+      cands.push(c.start + clipBeats(c));   // butt to its right
+      cands.push(c.start - len);            // butt to its left
+    }
+    const valid = cands.map(s => Math.max(0, s)).filter(s => !overlaps(s));
+    valid.sort((a, b) => Math.abs(a - desired) - Math.abs(b - desired));
+    return valid.length ? valid[0] : desired;
+  },
+  // first start >= `from` on `track` where a clip of `len` beats fits with no overlap
+  firstFreeStart(track, len, from, ignore) {
+    const spans = track.clips
+      .filter(c => c !== ignore)
+      .map(c => [c.start, c.start + clipBeats(c)])
+      .sort((a, b) => a[0] - b[0]);
+    let start = Math.max(0, from);
+    for (const [s, e] of spans) {
+      if (start + len <= s + 1e-6) break;   // fits before this clip
+      if (start < e) start = e;             // pushed past it
+    }
+    return start;
   },
 
   // ---------- full render ----------
@@ -287,6 +330,7 @@ const Timeline = {
           if (!S.instruments[id] && LIB[id]) S.instruments[id] = JSON.parse(JSON.stringify(LIB[id]));
           t.instrument = id;
           if (id === 'drumkit') Engine.ensureDrumkit();
+          if (typeof MELODIC !== 'undefined' && MELODIC[id]) Engine.ensureMelodic();
           toast(tr('toast_instr_changed', '{name} to {instr}', { name: t.name, instr: instrLabel(id) }));
           this.render();
           KeysPanel.refreshTracks();
@@ -309,7 +353,7 @@ const Timeline = {
       } else {
         const k = document.createElement('span');
         k.className = 'tkind';
-        k.textContent = tr('track_audio', 'AUDIO');
+        k.textContent = t.kind === 'group' ? tr('track_group', 'GROUP') : tr('track_audio', 'AUDIO');
         mid.appendChild(k);
       }
       const mBtn = document.createElement('button');
@@ -374,7 +418,7 @@ const Timeline = {
 
   buildClip(clip, track) {
     const el = document.createElement('div');
-    el.className = 'clip' + (UI.selClipIds.has(clip.id) ? ' sel' : '');
+    el.className = 'clip' + (clip.kind === 'group' ? ' group' : '') + (UI.selClipIds.has(clip.id) ? ' sel' : '');
     el.dataset.clipId = clip.id;
     const lenB = clipBeats(clip);
     el.style.left = (clip.start * UI.zoom) + 'px';
@@ -401,9 +445,17 @@ const Timeline = {
       fxb.dataset.tip = clip.fx.map(f => fxName(f.type)).join(', ');
       el.appendChild(fxb);
     }
+    if (clip.kind === 'group') {
+      const gb = document.createElement('div');
+      gb.className = 'clip-group-badge';
+      gb.textContent = '▦ ' + (clip.children ? clip.children.length : 0);
+      gb.dataset.tip = tr('tip_group_badge', 'Grouped clips. Right-click to ungroup.');
+      el.appendChild(gb);
+    }
 
     // effects from the browser can be dropped straight onto the clip
     el.addEventListener('dragover', (e) => {
+      if (clip.kind === 'group') return;   // groups are containers, not fx targets
       if (![...e.dataTransfer.types].includes('text/fabu-fx')) return;
       e.preventDefault();
       e.stopPropagation();
@@ -435,6 +487,7 @@ const Timeline = {
     el.addEventListener('mousedown', (e) => this.clipMouseDown(e, clip, track, el));
     el.addEventListener('dblclick', (e) => {
       e.stopPropagation();
+      if (clip.kind === 'group') { App.selectClip(clip.id); return; }
       if (clip.kind === 'midi') PianoRoll.open(clip.id);
       else { App.selectClip(clip.id); Windows.openInspector(); }
     });
@@ -462,18 +515,24 @@ const Timeline = {
       b.addEventListener('click', () => { m.remove(); fn(); });
       m.appendChild(b);
     };
-    if (clip.kind === 'midi') add(tr('menu_pianoroll', 'Open piano roll'), () => PianoRoll.open(clip.id));
-    add(tr('menu_settings', 'Clip settings'), () => Windows.openInspector());
-    if (clip.fx && clip.fx.length) {
-      const b = document.createElement('button');
-      b.className = 'ctx-item fx';
-      b.textContent = tr('menu_edit_fx', 'Edit effects');
-      b.addEventListener('click', () => { m.remove(); App.openFxEditor(clip.id); });
-      m.appendChild(b);
+    if (clip.kind === 'group') {
+      add(tr('menu_ungroup', 'Ungroup'), () => App.ungroupClip(clip.id));
+      add(tr('insp_delete', 'Delete group'), () => App.deleteSelectedClip(), true);
+    } else {
+      if (clip.kind === 'midi') add(tr('menu_pianoroll', 'Open piano roll'), () => PianoRoll.open(clip.id));
+      add(tr('menu_settings', 'Clip settings'), () => Windows.openInspector());
+      if (clip.fx && clip.fx.length) {
+        const b = document.createElement('button');
+        b.className = 'ctx-item fx';
+        b.textContent = tr('menu_edit_fx', 'Edit effects');
+        b.addEventListener('click', () => { m.remove(); App.openFxEditor(clip.id); });
+        m.appendChild(b);
+      }
+      if (UI.selClipIds.size >= 2) add(tr('menu_group', 'Group into one'), () => App.groupSelectedClips());
+      add(tr('insp_duplicate', 'Duplicate'), () => App.duplicateClip());
+      add(tr('insp_split', 'Split at playhead'), () => App.splitSelectedClip());
+      add(tr('insp_delete', 'Delete'), () => App.deleteSelectedClip(), true);
     }
-    add(tr('insp_duplicate', 'Duplicate'), () => App.duplicateClip());
-    add(tr('insp_split', 'Split at playhead'), () => App.splitSelectedClip());
-    add(tr('insp_delete', 'Delete'), () => App.deleteSelectedClip(), true);
     document.body.appendChild(m);
     m.style.left = Math.min(x, window.innerWidth - m.offsetWidth - 8) + 'px';
     m.style.top = Math.min(y, window.innerHeight - m.offsetHeight - 8) + 'px';
@@ -496,6 +555,34 @@ const Timeline = {
     const ctx = cv.getContext('2d');
     ctx.scale(dpr, dpr);
     ctx.clearRect(0, 0, w, h);
+
+    if (clip.kind === 'group') {
+      // a faux waveform built from the density of the grouped material, so it
+      // reads like a bounced audio block
+      const len = clip.length || 1;
+      const buckets = new Array(w).fill(0);
+      for (const child of clip.children || []) {
+        const cs = child.clip.start || 0;
+        if (child.clip.kind === 'midi' && child.clip.notes) {
+          for (const n of child.clip.notes) {
+            const x0 = Math.max(0, Math.floor(((cs + n.start) / len) * w));
+            const x1 = Math.min(w, Math.ceil(((cs + n.start + Math.max(0.05, n.length)) / len) * w));
+            for (let x = x0; x < x1; x++) buckets[x] = Math.max(buckets[x], n.vel ?? 0.9);
+          }
+        } else {
+          const x0 = Math.max(0, Math.floor((cs / len) * w));
+          const x1 = Math.min(w, Math.ceil(((cs + clipBeats(child.clip)) / len) * w));
+          for (let x = x0; x < x1; x++) buckets[x] = Math.max(buckets[x], 0.7);
+        }
+      }
+      const mid = h / 2;
+      ctx.fillStyle = 'rgba(0,0,0,0.5)';
+      for (let x = 0; x < w; x++) {
+        const bh = buckets[x] * mid * 0.88;
+        ctx.fillRect(x, mid - bh - 0.5, 1, bh * 2 + 1);
+      }
+      return;
+    }
 
     if (clip.kind === 'audio') {
       const s = Samples[clip.sampleId];
@@ -642,6 +729,10 @@ const Timeline = {
       if (mode === 'right') {
         if (clip.kind === 'midi') {
           clip.length = Math.max(S.snap || 0.25, snapBeat(orig.length + dxBeats, S.snap));
+          if (!group.length) {   // don't grow into the next clip on this track
+            const { right } = this.laneBounds(getClip(clip.id).track, clip, orig.start, orig.start + orig.length);
+            if (right !== Infinity) clip.length = Math.min(clip.length, Math.max(S.snap || 0.25, right - clip.start));
+          }
         } else {
           const endBeat = snapBeat(orig.start + orig.length + dxBeats, S.snap);
           const lenB = Math.max(0.1, endBeat - clip.start);
@@ -670,7 +761,9 @@ const Timeline = {
           clip.dur = orig.dur - d * spb * rate;
         }
       } else {
-        clip.start = snapBeat(orig.start + dxBeats, S.snap);
+        // drag freely (can pass over other clips); it snaps to the nearest free
+        // slot on drop, so you can move a clip past its neighbours
+        clip.start = Math.max(0, snapBeat(orig.start + dxBeats, S.snap));
         // vertical move between tracks of the same kind (single clip only)
         if (!group.length) {
           const laneIdx = clamp(
@@ -702,6 +795,11 @@ const Timeline = {
       window.removeEventListener('mouseup', up);
       if (typeof Sync !== 'undefined') Sync.setLock(clipLock, false);
       if (moved) {
+        // snap to the nearest free slot so a single clip never lands overlapping
+        if (!group.length) {
+          const track = getClip(clip.id).track;
+          clip.start = this.nearestFreeStart(track, clipBeats(clip), clip.start, clip);
+        }
         this.render();
         Windows.refreshAll();
         PianoRoll.onStateRestore();

@@ -31,7 +31,8 @@ const UI = {
   keysOctave: 4,
   keysTrackId: null,
   clipboard: null,      // { type:'clip'|'notes', data }
-  dirty: false
+  dirty: false,         // changed since last autosave (autosave clears this)
+  fileDirty: false      // changed since last save to a FILE (only a real save/new/load clears this)
 };
 
 // Decoded audio lives here, referenced by sampleId from clips.
@@ -50,6 +51,7 @@ function makeTrack(kind) {
     volume: 0.8,
     pan: 0,
     swing: 0,    // 0..0.6 per-track swing (delays this track's offbeat 8ths)
+    sidechain: 0, // 0..1 tempo-synced "pump" ducking on every beat
     eq: { low: 0, mid: 0, high: 0 },
     mute: false,
     solo: false,
@@ -117,6 +119,7 @@ function audioClipBeats(clip) {
 }
 
 function clipBeats(clip) {
+  if (clip.kind === 'group') return clip.length;
   return clip.kind === 'midi' ? clip.length : audioClipBeats(clip);
 }
 
@@ -141,6 +144,7 @@ const Undo = {
     if (this.undoStack.length > this.max) this.undoStack.shift();
     this.redoStack.length = 0;
     UI.dirty = true;
+    UI.fileDirty = true;
     updateUndoButtons();
   },
 

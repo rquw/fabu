@@ -227,6 +227,7 @@ const Automation = {
 
   commit() {
     UI.dirty = true;
+    UI.fileDirty = true;
     this.redraw();
     const t = this.track();
     if (t) Engine.rescheduleAutomation(t);

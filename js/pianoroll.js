@@ -18,10 +18,15 @@ const PianoRoll = {
   GRID_H: 336,
   VEL_H: 58,          // velocity lane height
   RULER_H: 16,        // seek ruler height
+  DRUM_ROW_H: 24,     // taller rows in drum-lane mode
+  _rowMap: null,      // drum mode: pitches top->bottom (null = chromatic)
+  _rowMeta: null,     // drum mode: [{pitch,label}]
+  _rh: 14,            // active row height (rowH chromatic, DRUM_ROW_H drums)
   velCv: null,
   rulerCv: null,
   inner: null,
   playEl: null,
+  _viewBeats: 0,      // grows as you scroll past the pattern end
 
   // key helper (session preference, remembered across projects)
   keyRoot: 0,         // 0..11 (C..B)
@@ -58,21 +63,23 @@ const PianoRoll = {
     this.clipId = clipId;
     this.selNoteId = null;
     this.selNoteIds = new Set();
+    this._viewBeats = 0;
     const f = this.clip();
     if (!f) return;
 
     const w = Windows.create('proll', tr('win_pianoroll', 'Piano roll: {name}', { name: f.clip.name || 'Pattern' }), 'i-note',
-      { x: Math.max(20, window.innerWidth / 2 - 420), y: 120 });
+      { x: Math.max(20, window.innerWidth / 2 - 420), y: 120, width: 860 });
     w.body.classList.add('proll-body');
 
     this.loadPrefs();
 
+    const drumTrack = isDrumInstr(f.track.instrument);
     const tools = document.createElement('div');
     tools.className = 'proll-tools';
     const rootOpts = NOTE_NAMES.map((nm, i) => `<option value="${i}"${i === this.keyRoot ? ' selected' : ''}>${nm}</option>`).join('');
     const scaleOpts = Object.keys(SCALES).map(id => `<option value="${id}"${id === this.keyScale ? ' selected' : ''}>${scaleName(id)}</option>`).join('');
-    tools.innerHTML = `
-      <span class="pt-track" style="color:${f.track.color}">${f.track.name}</span>
+    // the key/scale/chord helper is meaningless on drum lanes, so hide it there
+    const keyGroup = drumTrack ? '' : `
       <div class="pt-group pt-key">
         <label>${tr('proll_key', 'KEY')}</label>
         <select id="pkRoot" data-tip="${tr('tip_key_root', 'Song key')}">${rootOpts}</select>
@@ -80,7 +87,10 @@ const PianoRoll = {
         <button id="pkScaleOn" class="pt-toggle" data-tip="${tr('tip_scale_show', 'Shade the notes that fit the key')}">${tr('proll_highlight', 'Highlight')}</button>
         <button id="pkSnapScale" class="pt-toggle" data-tip="${tr('tip_scale_snap', 'Pull drawn notes onto the key')}">${tr('proll_tokey', 'To key')}</button>
         <button id="pkChord" class="pt-toggle" data-tip="${tr('tip_chord', 'Click drops a full chord in the key')}">${tr('proll_chord', 'Chord')}</button>
-      </div>
+      </div>`;
+    tools.innerHTML = `
+      <span class="pt-track" style="color:${f.track.color}">${f.track.name}</span>
+      ${keyGroup}
       <span class="pt-spacer"></span>
       <div class="pt-group">
         <svg class="ic dim" style="width:13px;height:13px"><use href="#i-magnet"/></svg>
@@ -105,16 +115,18 @@ const PianoRoll = {
       this.snap = parseFloat(e.target.value);
       toast(tr('toast_proll_snap', 'Piano roll snap: {v}', { v: this.snap ? snapLabel(this.snap) : tr('word_off', 'off') }));
     });
-    q('#pkRoot').addEventListener('change', (e) => { this.keyRoot = parseInt(e.target.value, 10); this.savePrefs(); this.redraw(); });
-    q('#pkScale').addEventListener('change', (e) => { this.keyScale = e.target.value; this.savePrefs(); this.redraw(); });
-    const wireToggle = (sel, prop) => {
-      const b = q(sel);
-      b.classList.toggle('on', this[prop]);
-      b.addEventListener('click', () => { this[prop] = !this[prop]; b.classList.toggle('on', this[prop]); this.savePrefs(); this.redraw(); });
-    };
-    wireToggle('#pkScaleOn', 'scaleOn');
-    wireToggle('#pkSnapScale', 'snapScale');
-    wireToggle('#pkChord', 'chordMode');
+    if (!drumTrack) {
+      q('#pkRoot').addEventListener('change', (e) => { this.keyRoot = parseInt(e.target.value, 10); this.savePrefs(); this.redraw(); });
+      q('#pkScale').addEventListener('change', (e) => { this.keyScale = e.target.value; this.savePrefs(); this.redraw(); });
+      const wireToggle = (sel, prop) => {
+        const b = q(sel);
+        b.classList.toggle('on', this[prop]);
+        b.addEventListener('click', () => { this[prop] = !this[prop]; b.classList.toggle('on', this[prop]); this.savePrefs(); this.redraw(); });
+      };
+      wireToggle('#pkScaleOn', 'scaleOn');
+      wireToggle('#pkSnapScale', 'snapScale');
+      wireToggle('#pkChord', 'chordMode');
+    }
     q('#pkQuantSel').addEventListener('click', () => this.quantize('sel'));
     q('#pkQuantAll').addEventListener('click', () => this.quantize('all'));
 
@@ -133,7 +145,7 @@ const PianoRoll = {
     leftCol.append(rulerSpacer, this.keysCv, velLabel);
 
     this.wrap = document.createElement('div');
-    this.wrap.style.cssText = 'overflow-x:auto;overflow-y:hidden;max-width:780px';
+    this.wrap.style.cssText = 'overflow-x:auto;overflow-y:hidden;flex:1;min-width:0';
     this.inner = document.createElement('div');
     this.inner.style.cssText = 'position:relative';
     this.rulerCv = document.createElement('canvas');
@@ -146,6 +158,14 @@ const PianoRoll = {
     this.playEl.className = 'proll-playhead';
     this.inner.append(this.rulerCv, this.gridCv, this.velCv, this.playEl);
     this.wrap.append(this.inner);
+    // scrolling toward the right edge reveals more empty bars to write into
+    this.wrap.addEventListener('scroll', () => {
+      const w = this.wrap;
+      if (w.scrollLeft + w.clientWidth > this.gridWidth() - 160) {
+        this._viewBeats = Math.ceil((this.gridWidth() / this.pxb) + 8);
+        this.redraw();
+      }
+    });
     row.append(leftCol, this.wrap);
     w.body.appendChild(row);
 
@@ -176,10 +196,35 @@ const PianoRoll = {
 
   gridWidth() {
     const f = this.clip();
-    return Math.max(384, (f ? f.clip.length : 4) * this.pxb);
+    const len = f ? f.clip.length : 4;
+    // always keep a couple of empty bars past the end so you can scroll further
+    // and write there; _viewBeats grows as you scroll toward the edge
+    const beats = Math.max(len + 8, this._viewBeats || 0);
+    return Math.max(384, beats * this.pxb);
   },
-  yToPitch(y) { return this.topPitch - Math.floor(y / this.rowH); },
-  pitchToY(p) { return (this.topPitch - p) * this.rowH; },
+  // drum tracks use a fixed set of labeled lanes; melodic tracks are chromatic
+  setupRows() {
+    const f = this.clip();
+    if (f && isDrumInstr(f.track.instrument)) {
+      this._rowMeta = drumRowsFor(f.track.instrument);
+      this._rowMap = this._rowMeta.map(r => r.pitch);
+      this._rh = this.DRUM_ROW_H;
+    } else {
+      this._rowMeta = null; this._rowMap = null; this._rh = this.rowH;
+    }
+  },
+  gridH() { return this._rowMap ? this._rowMap.length * this._rh : this.GRID_H; },
+  yToPitch(y) {
+    if (this._rowMap) return this._rowMap[clamp(Math.floor(y / this._rh), 0, this._rowMap.length - 1)];
+    return this.topPitch - Math.floor(y / this.rowH);
+  },
+  pitchToY(p) {
+    if (this._rowMap) {
+      const i = this._rowMap.findIndex(rp => rp % 12 === ((p % 12) + 12) % 12);
+      return i < 0 ? -9999 : i * this._rh;
+    }
+    return (this.topPitch - p) * this.rowH;
+  },
   xToBeat(x) { return x / this.pxb; },
 
   noteAt(x, y) {
@@ -187,10 +232,12 @@ const PianoRoll = {
     if (!f) return null;
     const pitch = this.yToPitch(y);
     const beat = this.xToBeat(x);
+    const drum = !!this._rowMap;
     // topmost drawn last wins
     for (let i = f.clip.notes.length - 1; i >= 0; i--) {
       const n = f.clip.notes[i];
-      if (n.pitch === pitch && beat >= n.start && beat <= n.start + n.length) return n;
+      const hit = drum ? (n.pitch % 12 === pitch % 12) : (n.pitch === pitch);
+      if (hit && beat >= n.start && beat <= n.start + n.length) return n;
     }
     return null;
   },
@@ -200,11 +247,12 @@ const PianoRoll = {
   redraw() {
     const f = this.clip();
     if (!f || !this.gridCv) return;
+    this.setupRows();
     const dpr = window.devicePixelRatio || 1;
     const W = this.gridWidth();
-    const H = this.GRID_H;
-    const rows = Math.floor(H / this.rowH);
-    const bottomPitch = this.topPitch - rows + 1;
+    const rh = this._rh;
+    const H = this.gridH();
+    const isDrums = !!this._rowMap;
 
     // --- keys column ---
     const kc = this.keysCv;
@@ -212,19 +260,25 @@ const PianoRoll = {
     kc.style.width = this.KEYS_W + 'px'; kc.style.height = H + 'px';
     const kx = kc.getContext('2d');
     kx.scale(dpr, dpr);
-    const isDrums = isDrumInstr(f.track.instrument);
-    for (let p = this.topPitch; p >= bottomPitch; p--) {
-      const y = this.pitchToY(p);
-      const black = [1, 3, 6, 8, 10].includes(p % 12);
-      kx.fillStyle = black ? '#232839' : '#e9ebf4';
-      kx.fillRect(0, y, this.KEYS_W, this.rowH - 0.5);
-      kx.fillStyle = black ? '#69708c' : '#3a3f55';
-      kx.font = '600 9px -apple-system, sans-serif';
-      const dName = isDrums ? drumLabel(p % 12) : null;
-      if (dName) {
-        kx.fillText(dName, 4, y + 10);
-      } else if (p % 12 === 0) {
-        kx.fillText(noteName(p), 4, y + 10);
+    kx.font = '600 9px -apple-system, sans-serif';
+    if (isDrums) {
+      for (let i = 0; i < this._rowMeta.length; i++) {
+        const y = i * rh;
+        kx.fillStyle = i % 2 ? '#20242f' : '#262b38';
+        kx.fillRect(0, y, this.KEYS_W, rh - 0.5);
+        kx.fillStyle = '#c7ccdb';
+        kx.fillText(this._rowMeta[i].label, 4, y + rh / 2 + 3);
+      }
+    } else {
+      const rows = Math.floor(H / rh);
+      const bottomPitch = this.topPitch - rows + 1;
+      for (let p = this.topPitch; p >= bottomPitch; p--) {
+        const y = this.pitchToY(p);
+        const black = [1, 3, 6, 8, 10].includes(p % 12);
+        kx.fillStyle = black ? '#232839' : '#e9ebf4';
+        kx.fillRect(0, y, this.KEYS_W, rh - 0.5);
+        kx.fillStyle = black ? '#69708c' : '#3a3f55';
+        if (p % 12 === 0) kx.fillText(noteName(p), 4, y + 10);
       }
     }
 
@@ -236,53 +290,64 @@ const PianoRoll = {
     g.scale(dpr, dpr);
     g.fillStyle = '#161927';
     g.fillRect(0, 0, W, H);
-    const showScale = this.scaleOn && !isDrums;
-    for (let p = this.topPitch; p >= bottomPitch; p--) {
-      const y = this.pitchToY(p);
-      if ([1, 3, 6, 8, 10].includes(p % 12)) {
-        g.fillStyle = 'rgba(0,0,0,0.22)';
-        g.fillRect(0, y, W, this.rowH);
+    if (isDrums) {
+      for (let i = 0; i < this._rowMeta.length; i++) {
+        const y = i * rh;
+        if (i % 2) { g.fillStyle = 'rgba(255,255,255,0.03)'; g.fillRect(0, y, W, rh); }
+        g.fillStyle = 'rgba(255,255,255,0.06)';
+        g.fillRect(0, y + rh - 1, W, 1);   // row separator
       }
-      if (showScale) {
-        if (((p - this.keyRoot) % 12 + 12) % 12 === 0) {
-          g.fillStyle = 'rgba(224,122,63,0.16)';           // the root note, strongest
-          g.fillRect(0, y, W, this.rowH);
-        } else if (inScale(p, this.keyRoot, this.keyScale)) {
-          g.fillStyle = 'rgba(86,182,166,0.08)';           // other in-key notes
-          g.fillRect(0, y, W, this.rowH);
-        } else {
-          g.fillStyle = 'rgba(0,0,0,0.28)';                // dim out-of-key rows
-          g.fillRect(0, y, W, this.rowH);
+    } else {
+      const rows = Math.floor(H / rh);
+      const bottomPitch = this.topPitch - rows + 1;
+      const showScale = this.scaleOn;
+      for (let p = this.topPitch; p >= bottomPitch; p--) {
+        const y = this.pitchToY(p);
+        if ([1, 3, 6, 8, 10].includes(p % 12)) {
+          g.fillStyle = 'rgba(0,0,0,0.22)';
+          g.fillRect(0, y, W, rh);
         }
-      }
-      if (p % 12 === 0) {
-        g.fillStyle = 'rgba(255,255,255,0.09)';
-        g.fillRect(0, y + this.rowH - 1, W, 1);
+        if (showScale) {
+          if (((p - this.keyRoot) % 12 + 12) % 12 === 0) { g.fillStyle = 'rgba(224,122,63,0.16)'; g.fillRect(0, y, W, rh); }
+          else if (inScale(p, this.keyRoot, this.keyScale)) { g.fillStyle = 'rgba(86,182,166,0.08)'; g.fillRect(0, y, W, rh); }
+          else { g.fillStyle = 'rgba(0,0,0,0.28)'; g.fillRect(0, y, W, rh); }
+        }
+        if (p % 12 === 0) { g.fillStyle = 'rgba(255,255,255,0.09)'; g.fillRect(0, y + rh - 1, W, 1); }
       }
     }
     const sub = this.snap || 0.25;
-    for (let b = 0; b <= f.clip.length + 0.001; b += sub) {
+    const totalBeats = W / this.pxb;
+    for (let b = 0; b <= totalBeats + 0.001; b += sub) {
       const x = b * this.pxb;
       const isBar = Math.abs(b % 4) < 1e-6;
       const isBeat = Math.abs(b % 1) < 1e-6;
       g.fillStyle = isBar ? 'rgba(255,255,255,0.16)' : isBeat ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.03)';
       g.fillRect(x, 0, 1, H);
     }
+    // shade the area past the pattern end so you can see where it stops (drawing
+    // a note out there extends the pattern automatically)
+    const endX = f.clip.length * this.pxb;
+    if (endX < W) {
+      g.fillStyle = 'rgba(0,0,0,0.34)';
+      g.fillRect(endX, 0, W - endX, H);
+      g.fillStyle = 'rgba(224,122,63,0.5)';
+      g.fillRect(endX, 0, 1, H);
+    }
 
     // notes
     for (const n of f.clip.notes) {
       const y = this.pitchToY(n.pitch);
-      if (y < -this.rowH || y > H) continue;
+      if (y < -rh || y > H) continue;
       const x = n.start * this.pxb;
       const nw = Math.max(4, n.length * this.pxb - 1);
       const sel = this.selNoteIds.has(n.id);
       g.fillStyle = sel ? '#ffffff' : f.track.color;
       g.beginPath();
-      g.roundRect(x, y + 1, nw, this.rowH - 2.5, 3);
+      g.roundRect(x, y + 1, nw, rh - 2.5, 3);
       g.fill();
       g.fillStyle = 'rgba(0,0,0,0.35)';
-      g.fillRect(x + nw - 3, y + 2, 2, this.rowH - 5);
-      if (nw > 34) {
+      g.fillRect(x + nw - 3, y + 2, 2, rh - 5);
+      if (nw > 34 && !isDrums) {
         g.fillStyle = 'rgba(0,0,0,0.6)';
         g.font = '700 9px -apple-system, sans-serif';
         g.fillText(noteName(n.pitch), x + 4, y + 10.5);
@@ -318,8 +383,7 @@ const PianoRoll = {
     x.fillStyle = '#1b1e2b';
     x.fillRect(0, 0, W, H);
     x.font = '600 8.5px -apple-system, sans-serif'; x.textBaseline = 'middle';
-    const f = this.clip();
-    const beats = f ? f.clip.length : 4;
+    const beats = W / this.pxb;
     for (let b = 0; b <= beats + 0.001; b++) {
       const px = b * this.pxb;
       const isBar = b % 4 === 0;
@@ -404,6 +468,7 @@ const PianoRoll = {
     const gc = this.gridCv;
 
     gc.addEventListener('wheel', (e) => {
+      if (this._rowMap) return;   // drum lanes are fixed; nothing to scroll to
       if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
         e.preventDefault();
         this.topPitch = clamp(this.topPitch - Math.sign(e.deltaY) * 2, 40, 118);
@@ -454,7 +519,7 @@ const PianoRoll = {
           const hits = new Set(preSel);
           for (const nn of f.clip.notes) {
             const nx = nn.start * this.pxb, nw = Math.max(4, nn.length * this.pxb), ny = this.pitchToY(nn.pitch);
-            if (nx < R && nx + nw > L && ny < B && ny + this.rowH > T) hits.add(nn.id);
+            if (nx < R && nx + nw > L && ny < B && ny + this._rh > T) hits.add(nn.id);
           }
           this.selNoteIds = hits; this.selNoteId = [...hits].pop() || null;
           this.redraw();
@@ -487,7 +552,8 @@ const PianoRoll = {
         // add note (or a whole chord in chord mode)
         const isDrums = isDrumInstr(f.track.instrument);
         const beat = this.snap ? Math.floor(this.xToBeat(x) / this.snap) * this.snap : this.xToBeat(x);
-        const start = clamp(beat, 0, Math.max(0, f.clip.length - 0.05));
+        // no upper clamp: writing past the end grows the pattern (extendClipIfNeeded)
+        const start = Math.max(0, beat);
         let pitch = this.yToPitch(y);
         if (this.snapScale && !isDrums) pitch = nearestInScale(pitch, this.keyRoot, this.keyScale);
 
@@ -538,7 +604,8 @@ const PianoRoll = {
         } else {
           const raw = orig.start + dx;
           n.start = Math.max(0, this.snap ? Math.round(raw / this.snap) * this.snap : raw);
-          n.pitch = clamp(orig.pitch - dy, 12, 120);
+          // drum notes stay on their lane; melodic notes move in pitch
+          n.pitch = this._rowMap ? orig.pitch : clamp(orig.pitch - dy, 12, 120);
           if (this.snapScale && !isDrumInstr(f.track.instrument)) n.pitch = nearestInScale(n.pitch, this.keyRoot, this.keyScale);
           if (n.pitch !== lastPreview) {
             Engine.previewNote(f.track, n.pitch, 0.15);

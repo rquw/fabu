@@ -454,9 +454,11 @@ input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.2); }
   min-width: 260px;
   max-height: calc(100vh - 120px);
   animation: winIn 0.15s var(--ease);
-  overflow: hidden;
+  overflow: visible;   /* so edge resize handles aren't clipped */
   transition: opacity 0.12s var(--ease);
 }
+.fwin-head { border-radius: calc(var(--radius) - 1px) calc(var(--radius) - 1px) 0 0; }
+.fwin-body { border-radius: 0 0 calc(var(--radius) - 1px) calc(var(--radius) - 1px); }
 .fwin.dragging { opacity: 0.62; }
 @keyframes winIn {
   from { opacity: 0; transform: translateY(8px); }
@@ -483,7 +485,16 @@ input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.2); }
 }
 .fwin-close:hover { color: #fff; background: var(--red); border-color: var(--red); }
 .fwin-close .ic { width: 14px; height: 14px; color: currentColor; }
-.fwin-body { padding: 12px; overflow: auto; }
+.fwin-body { padding: 12px; overflow: auto; flex: 1 1 auto; min-height: 0; }
+.fwin.resizing { user-select: none; }
+.fwin-rz { position: absolute; z-index: 3; }
+.fwin-rz.rz-r { top: 8px; right: -3px; width: 8px; bottom: 12px; cursor: ew-resize; }
+.fwin-rz.rz-b { left: 8px; bottom: -3px; height: 8px; right: 12px; cursor: ns-resize; }
+.fwin-rz.rz-c { right: -2px; bottom: -2px; width: 16px; height: 16px; cursor: nwse-resize; }
+.fwin-rz.rz-c::after {
+  content: ''; position: absolute; right: 3px; bottom: 3px; width: 7px; height: 7px;
+  border-right: 2px solid var(--faint); border-bottom: 2px solid var(--faint); border-bottom-right-radius: 2px;
+}
 
 .samp-scroll { max-height: 54vh; overflow-y: auto; overflow-x: hidden; }
 
@@ -819,7 +830,11 @@ kbd {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--bg);
+  /* warm, cohesive glow instead of a flat black void */
+  background:
+    radial-gradient(1200px 700px at 50% -10%, rgba(224, 122, 63, 0.10), transparent 60%),
+    radial-gradient(900px 600px at 50% 115%, rgba(216, 161, 58, 0.06), transparent 60%),
+    var(--bg);
   animation: homeIn 0.24s var(--ease);
 }
 /* slow, softly drifting blurred colour blobs for a living background */
@@ -835,13 +850,14 @@ kbd {
 #home::before {
   width: 46vw; height: 46vw; max-width: 620px; max-height: 620px;
   top: -12vh; right: -6vw;
-  background: radial-gradient(circle, rgba(224, 122, 63, 0.42), transparent 68%);
+  background: radial-gradient(circle, rgba(224, 122, 63, 0.40), transparent 68%);
   animation: blobDriftA 26s ease-in-out infinite alternate;
 }
 #home::after {
   width: 44vw; height: 44vw; max-width: 560px; max-height: 560px;
   bottom: -16vh; left: -6vw;
-  background: radial-gradient(circle, rgba(86, 182, 166, 0.30), transparent 68%);
+  /* warm amber, not teal — fabu's palette has no green */
+  background: radial-gradient(circle, rgba(216, 138, 74, 0.26), transparent 68%);
   animation: blobDriftB 32s ease-in-out infinite alternate;
 }
 @keyframes blobDriftA {
@@ -894,32 +910,37 @@ kbd {
 }
 .home-tag { font-size: 14px; color: var(--dim); font-weight: 500; margin-left: 3px; }
 
-.home-actions { display: flex; gap: 10px; flex-wrap: wrap; }
-.home-act {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 11px 18px;
-  border-radius: 10px;
-  border: 1px solid var(--accent);
-  background: var(--accent);
-  color: #fff;
-  font-size: 13px;
-  font-weight: 700;
-  white-space: nowrap;
-  cursor: pointer;
-  transition: transform 0.12s var(--ease), background 0.14s var(--ease), border-color 0.14s var(--ease);
-}
-.home-act .ic { width: 16px; height: 16px; flex-shrink: 0; }
-.home-act:hover { background: #eb8b52; }
-.home-act:active { transform: translateY(1px); }
-#homeNew:hover { transform: scale(1.05); }
-.home-act.ghost {
-  background: transparent;
-  border-color: var(--line);
+/* labeled action cards — every option is clear at a glance, ordered by how
+   often you reach for it (New / Open / Multiplayer), example de-emphasized */
+.home-actions { display: flex; gap: 12px; flex-wrap: wrap; }
+.home-go {
+  display: flex; align-items: center; gap: 13px; text-align: left;
+  width: 230px; padding: 15px 17px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--panel);
   color: var(--text);
+  cursor: pointer;
+  transition: transform 0.14s var(--ease), background 0.14s var(--ease), border-color 0.14s var(--ease);
 }
-.home-act.ghost:hover { border-color: var(--dim); background: var(--panel); }
+.home-go:hover { transform: translateY(-2px); border-color: var(--accent); background: var(--panel2); }
+.home-go:active { transform: translateY(0); }
+.home-go .ic { width: 22px; height: 22px; flex-shrink: 0; color: var(--accent); }
+.hc-txt { display: flex; flex-direction: column; min-width: 0; }
+.hc-title { font-size: 14px; font-weight: 700; }
+.hc-sub { font-size: 11.5px; color: var(--dim); margin-top: 2px; }
+.home-go.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.home-go.primary .ic { color: #fff; }
+.home-go.primary .hc-sub { color: rgba(255, 255, 255, 0.82); }
+.home-go.primary:hover { background: #eb8b52; }
+.home-example {
+  display: inline-flex; align-items: center; gap: 7px; margin-top: 4px;
+  background: none; border: none; cursor: pointer;
+  color: var(--faint); font-size: 12.5px; font-weight: 600;
+  transition: color 0.14s var(--ease);
+}
+.home-example:hover { color: var(--accent); }
+.home-example .ic { width: 15px; height: 15px; }
 
 .home-recent-head {
   font-size: 12px;
@@ -1461,6 +1482,14 @@ input[type="range"].locked { opacity: 0.45; filter: saturate(0.4); }
   font-size: 9px; font-weight: 800; letter-spacing: 0.3px;
   pointer-events: auto;
 }
+.clip.group { border-style: dashed; }
+.clip-group-badge {
+  position: absolute; right: 3px; bottom: 3px;
+  padding: 0 5px; border-radius: 5px;
+  background: rgba(0, 0, 0, 0.5); color: #dfe6f5;
+  font-size: 9px; font-weight: 800;
+  pointer-events: none;
+}
 .ctx-item.fx { color: #ffd35e; }
 .fx-sec { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); }
 .fx-sec-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; font-weight: 700; font-size: 13px; }
@@ -1469,7 +1498,7 @@ input[type="range"].locked { opacity: 0.45; filter: saturate(0.4); }
 /* ---- visual EQ in the mixer ---- */
 .eq-canvas { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--bg2); cursor: ns-resize; }
 .eq-canvas canvas { display: block; }
-.eq-dots { display: flex; align-items: center; justify-content: center; gap: 6px; margin-top: 5px; font-size: 9px; color: var(--faint); font-weight: 700; }
+.eq-dots { display: flex; align-items: center; justify-content: space-around; gap: 6px; margin-top: 5px; width: 300px; max-width: 100%; font-size: 9px; color: var(--faint); font-weight: 700; }
 
 /* ---- recent-project cards: listen / edit halves ---- */
 .home-card-art { position: relative; }
