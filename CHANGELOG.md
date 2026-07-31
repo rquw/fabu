@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.0
+- Multiplayer security: the host now checks every change that comes in and undoes anything that breaks the room rules. Before this, the rules only ran on the other person's computer, so a modified app could ignore them. Someone who is removed is now really removed, even if their app pretends otherwise.
+- Accounts: the signed-in name updates properly. It no longer keeps showing the old username after logging out, logging in as someone else, or having the name changed.
+- Clearer sign-in messages: "Username already taken", "Wrong password", and "No account called X. Want to create one?" with a button that takes you straight to registering.
+- Usernames are checked against a profanity list.
+
 ## 1.1.9
 - Five new instruments: Upright Piano, Glockenspiel and Harp (real recordings), plus an 808 Bass and a Warm Pad. The instrument menu now has a Strings group too.
 - Loop a section: shift-drag the ruler (or press L) to repeat part of your song while you work on it.

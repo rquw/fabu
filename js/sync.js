@@ -25,6 +25,7 @@ const Sync = {
   pendingReqs: [],    // host only: [{id, name, ts}]
   pendingAudio: [],   // host only: [{reqId, from, name, sample, place, buffer, ts}]
   selPlayers: new Set(), // host only: shift-selected player ids (for kick-all-except)
+  kicked: new Set(),  // host only: ids we removed; their messages are ignored from then on
   history: [],        // host only: [{ ts, name, action, what }] notable room activity
   bans: {},           // host only: name -> untilTs
   locks: new Map(),   // key -> { id, name, ts }
@@ -148,7 +149,7 @@ const Sync = {
     this.me = { id: uid('p'), name: (Auth && Auth.user) || 'anon', joinTs: Date.now() };
     this.me.color = hashColor(this.me.name);
     this.peers.clear(); this.locks.clear(); this.cursors.clear();
-    this.pendingReqs = []; this.pendingAudio = []; this.sharedSamples.clear(); this.lastSent = '';
+    this.pendingReqs = []; this.pendingAudio = []; this.kicked = new Set(); this.sharedSamples.clear(); this.lastSent = '';
     this.rev = 0; this.pending = null;
     this.setStatus('connecting');
 
@@ -309,9 +310,19 @@ const Sync = {
   // ---------- message handling ----------
 
   onMessage(m) {
+    // a kicked client that simply ignores the kick still gets ignored here
+    if (this.isHost && m.id && this.kicked && this.kicked.has(m.id)) return;
+    if (this.isHost && m.from && this.kicked && this.kicked.has(m.from)) return;
     switch (m.type) {
-      case 'state':
+      case 'state': {
         if (!this.admitted) return;
+        // The host is the authority on the project. Without this any client —
+        // including a modified one that skips its own permission checks — could
+        // broadcast whatever it liked and everyone would apply it.
+        if (this.isHost) {
+          const why = this.judgeState(m);
+          if (why) { this.rejectState(m, why); return; }
+        }
         // a state that raced through the relay slower than a newer one must not
         // roll the project back (this was "you place something and it disappears")
         if (m.rev && m.rev < this.rev) return;
@@ -319,6 +330,7 @@ const Sync = {
         if (this.busy || this.typingBusy()) { this.pending = m; return; }
         this.applyRemote(m.state, m.samples);
         break;
+      }
 
       case 'presence': {
         const isNew = !this.peers.has(m.id);
@@ -456,7 +468,41 @@ const Sync = {
     }
   },
 
+  // ---------- host-side validation ----------
+  // Everything a guest is "not allowed" to do is enforced on the guest's own
+  // machine, which is only a speed bump: the app is readable JavaScript. So the
+  // host checks incoming project states too, and undoes anything that breaks a
+  // rule. Returns a reason string when the state should be refused.
+  judgeState(m) {
+    if (!this.isHost) return null;
+    const from = m.from;
+    if (from && this.kicked && this.kicked.has(from)) return 'kicked';
+    const peer = from ? this.peers.get(from) : null;
+    const name = (peer && peer.name) || m.by;
+    if (!name || name === this.me.name) return null;   // our own / unattributable
+    // sending audio they are not allowed to add
+    if (m.samples && Object.keys(m.samples).length && this.customAudioRight(name) !== true) return 'audio';
+    return null;
+  },
+
+  // refuse it and immediately re-assert our own state, so the change is undone
+  // for everyone within one broadcast cycle
+  rejectState(m, why) {
+    const who = ((this.peers.get(m.from) || {}).name) || m.by || '?';
+    this.rev = Math.max(this.rev, m.rev || 0) + 1;
+    this.lastSent = '';               // force a full resend
+    this.sharedSamples.clear();
+    this.broadcast(true);
+    this.pushHistory({ ts: Date.now(), name: who, action: 'blocked', what: why });
+    const now = Date.now();
+    if (!this._lastBlockToast || now - this._lastBlockToast > 4000) {
+      this._lastBlockToast = now;
+      toast(tr('mp_blocked_change', 'Blocked a change from {name}', { name: who }), 'red');
+    }
+  },
+
   handleKnock(m) {
+    if (this.kicked && this.kicked.has(m.id)) { this.send({ type: 'deny', to: m.id, reason: 'banned' }); return; }
     // someone we already know is just reconnecting: let them straight back in,
     // no approval round-trip, no "X joined" spam
     if (this.peers.has(m.id)) { this.admit(m.id); return; }
@@ -774,7 +820,8 @@ const Sync = {
       left: tr('hist_left', '{name} left'),
       kicked: tr('hist_kicked', '{name} was removed'),
       sound_approved: tr('hist_sound_ok', '{name} got sound "{what}" approved'),
-      sound_denied: tr('hist_sound_no', '{name} had sound "{what}" denied')
+      sound_denied: tr('hist_sound_no', '{name} had sound "{what}" denied'),
+      blocked: tr('hist_blocked', '{name} tried a change that was blocked ({what})')
     };
     return (map[e.action] || '{name}: {what}').replace('{name}', e.name).replace('{what}', e.what || '');
   },
@@ -1008,6 +1055,7 @@ const Sync = {
     if (!p) return;
     const until = durationMs > 0 ? Date.now() + durationMs : Date.now() + 100 * 365 * 24 * 3600e3;
     this.bans[p.name] = until;
+    this.kicked.add(peerId);        // do not take their word for it that they left
     this.send({ type: 'kick', to: peerId, until });
     this.peers.delete(peerId);
     this.cursors.delete(peerId);
@@ -1041,6 +1089,7 @@ const Sync = {
       const pr = this.peers.get(id);
       if (!pr) continue;
       this.bans[pr.name] = until;
+      this.kicked.add(id);
       this.send({ type: 'kick', to: id, until });
       this.peers.delete(id);
       this.cursors.delete(id);
@@ -1251,7 +1300,7 @@ const Sync = {
     }
     const hasSamples = added.length > 0;
     if (!force && stateJson === this.lastSent && !hasSamples) return;
-    const msg = { type: 'state', room: this.room, rev: this.rev + 1, state: JSON.parse(stateJson) };
+    const msg = { type: 'state', room: this.room, rev: this.rev + 1, state: JSON.parse(stateJson), from: this.me && this.me.id, by: this.me && this.me.name };
     if (hasSamples) msg.samples = samples;
     const json = JSON.stringify(msg);
     if (json.length > this.SIZE_LIMIT) {

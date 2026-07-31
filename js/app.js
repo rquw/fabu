@@ -28,6 +28,7 @@ const App = {
 
     this.showHome();
     this.initLanguages();
+    if (typeof Auth !== 'undefined' && Auth.verifyCached) Auth.verifyCached();
     this.checkAutosave();
     this.startAutosave();
     this.loadLibrary();

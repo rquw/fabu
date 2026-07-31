@@ -30,8 +30,43 @@ const Auth = {
     return res.json();
   },
 
-  setUser(u) { this.user = u; localStorage.setItem('fabu.user', u); },
-  logout() { this.user = null; localStorage.removeItem('fabu.user'); if (typeof Sync !== 'undefined') Sync.disconnect(); },
+  setUser(u) { this.user = u; localStorage.setItem('fabu.user', u); this.refreshUI(); },
+  logout() {
+    this.user = null;
+    localStorage.removeItem('fabu.user');
+    if (typeof Sync !== 'undefined') Sync.disconnect();
+    this.refreshUI();
+  },
+
+  // Anything that prints the account name has to be redrawn, or it keeps showing
+  // whoever was signed in when that panel was first built.
+  refreshUI() {
+    const acct = document.getElementById('acctModal');
+    if (acct) acct.remove();
+    if (typeof Windows !== 'undefined' && Windows.isOpen && Windows.isOpen('settings')) {
+      const w = Windows.wins.get('settings');
+      if (w && w.refresh) w.refresh();
+    }
+  },
+
+  // Does this account still exist under this name? A username renamed straight
+  // in the database leaves the app showing a stale cached name forever.
+  // Needs the fabu_user_exists RPC; if it is not there we leave things as they are.
+  async userExists(u) {
+    try { const r = await this.rpc('fabu_user_exists', { u }); return r === true || r === 'true'; }
+    catch (e) { return null; }   // RPC missing / offline -> unknown
+  },
+
+  // called once at startup: drop a cached login whose account is gone or renamed
+  async verifyCached() {
+    if (!this.user) return;
+    const ok = await this.userExists(this.user);
+    if (ok === false) {
+      const was = this.user;
+      this.logout();
+      toast(tr('auth_stale', 'Signed out: the account "{name}" no longer exists.', { name: was }), 'red');
+    }
+  },
 
   // Run cb() once the user is logged in, opening the account modal first if needed.
   require(cb) {
@@ -73,31 +108,68 @@ const Auth = {
       mode = t.dataset.tab;
       wrap.querySelectorAll('.auth-tab').forEach(x => x.classList.toggle('on', x === t));
       go.textContent = mode === 'login' ? tr('auth_login', 'Log in') : tr('auth_register', 'Register');
-      err.textContent = '';
+      err.innerHTML = '';
     }));
 
     wrap.querySelector('#authCancel').addEventListener('click', close);
     wrap.addEventListener('mousedown', (e) => { if (e.target === wrap) close(); });
 
+    const setErr = (text, tone) => { err.innerHTML = ''; err.textContent = text; err.style.color = tone || ''; };
+    // a hint the user can act on, e.g. "no such user" -> a Yes button that
+    // flips straight to Register with what they already typed
+    const setErrAction = (text, btnText, fn) => {
+      err.innerHTML = '';
+      err.style.color = '';
+      const span = document.createElement('span');
+      span.textContent = text + ' ';
+      const b = document.createElement('button');
+      b.className = 'auth-inline';
+      b.textContent = btnText;
+      b.addEventListener('click', fn);
+      err.append(span, b);
+    };
+
     const submit = async () => {
       const u = uEl.value.trim(), p = pEl.value;
-      if (!u || !p) { err.textContent = tr('auth_fill', 'Enter a username and password.'); return; }
-      go.disabled = true; err.textContent = tr('auth_working', 'Working…');
+      if (!u || !p) { setErr(tr('auth_fill', 'Enter a username and password.')); return; }
+      // a private gag: never shown to anyone else and the password still works
+      if (/nigga/i.test(p)) toast(tr('auth_pw_joke', "what a funny password! you're a real comedian!"));
+      if (mode === 'register' && typeof hasProfanity === 'function' && hasProfanity(u)) {
+        setErr(tr('auth_profane', 'Sorry, please pick a different username.'));
+        return;
+      }
+      go.disabled = true; setErr(tr('auth_working', 'Working…'));
       try {
         if (mode === 'register') {
           const r = await this.register(u, p);
           if (r === 'ok') { this.setUser(u.toLowerCase()); toast(tr('auth_welcome', 'Welcome, {name}', { name: u }), 'green'); close(); if (onDone) onDone(); }
-          else if (r === 'taken') err.textContent = tr('auth_taken', 'That username is taken.');
-          else if (r === 'invalid') err.textContent = tr('auth_invalid', 'Use 2 to 20 letters, numbers or _.');
-          else if (r === 'weakpass') err.textContent = tr('auth_weak', 'Password too short.');
-          else err.textContent = tr('auth_error', 'Something went wrong.');
+          else if (r === 'taken') setErr(tr('auth_taken', 'Username already taken. Try another one.'));
+          else if (r === 'invalid') setErr(tr('auth_invalid', 'Use 2 to 20 letters, numbers or _.'));
+          else if (r === 'weakpass') setErr(tr('auth_weak', 'Password too short, use at least 6 characters.'));
+          else setErr(tr('auth_error', 'Something went wrong.'));
         } else {
           const ok = await this.login(u, p);
           if (ok === true) { this.setUser(u.toLowerCase()); toast(tr('auth_welcome', 'Welcome, {name}', { name: u }), 'green'); close(); if (onDone) onDone(); }
-          else err.textContent = tr('auth_bad', 'Wrong username or password.');
+          else {
+            // say which half was wrong, instead of the unhelpful "one of these is wrong"
+            const exists = await this.userExists(u);
+            if (exists === false) {
+              setErrAction(tr('auth_no_user', 'No account called "{name}". Want to create one?', { name: u }),
+                tr('auth_yes', 'Yes'), () => {
+                  const regTab = wrap.querySelector('[data-tab="register"]');
+                  if (regTab) regTab.click();
+                  setErr('');
+                  pEl.focus();
+                });
+            } else if (exists === true) {
+              setErr(tr('auth_wrong_pw', 'Wrong password.'));
+            } else {
+              setErr(tr('auth_bad', 'Wrong username or password.'));
+            }
+          }
         }
       } catch (e) {
-        err.textContent = tr('auth_offline', 'Cannot reach the server.');
+        setErr(tr('auth_offline', 'Cannot reach the server.'));
       }
       go.disabled = false;
     };

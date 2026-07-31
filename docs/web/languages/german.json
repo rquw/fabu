@@ -393,9 +393,9 @@
   "auth_fill": "Gib Benutzername und Passwort ein.",
   "auth_working": "Moment…",
   "auth_welcome": "Willkommen, {name}",
-  "auth_taken": "Dieser Name ist schon vergeben.",
+  "auth_taken": "Benutzername schon vergeben. Probier einen anderen.",
   "auth_invalid": "Nutze 2 bis 20 Buchstaben, Zahlen oder _.",
-  "auth_weak": "Passwort zu kurz.",
+  "auth_weak": "Passwort zu kurz, nutze mindestens 6 Zeichen.",
   "auth_error": "Etwas ist schiefgelaufen.",
   "auth_bad": "Falscher Benutzername oder falsches Passwort.",
   "auth_offline": "Server nicht erreichbar.",
@@ -732,5 +732,13 @@
   "instr_rharp": "Harfe",
   "instr_sub": "808-Bass",
   "instr_pad": "Warmes Pad",
-  "cat_strings": "Streicher"
+  "cat_strings": "Streicher",
+  "auth_no_user": "Kein Konto mit dem Namen \"{name}\". Eins erstellen?",
+  "auth_yes": "Ja",
+  "auth_wrong_pw": "Falsches Passwort.",
+  "auth_profane": "Bitte wähle einen anderen Benutzernamen.",
+  "auth_pw_joke": "was für ein lustiges Passwort! du bist ein echter Komiker!",
+  "auth_stale": "Abgemeldet: das Konto \"{name}\" existiert nicht mehr.",
+  "mp_blocked_change": "Änderung von {name} blockiert",
+  "hist_blocked": "{name} hat eine blockierte Änderung versucht ({what})"
 }
