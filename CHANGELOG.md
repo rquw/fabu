@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.1.8
+- Multiplayer: a wrong room code now actually says "Invalid Code" instead of waiting forever.
+- Change history: hosts can see who added or removed patterns, sounds and tracks, and who joined or left.
+- Getting your custom sounds turned off now tells you so, and for how long.
+- "Manually approve custom audio files" works on its own, without needing custom sounds allowed first.
+- Manage people: the search box no longer loses focus after every letter.
+- Removed the follow-a-player feature and the "allow joining after start" rule.
+- Clearer wording on the new-code button.
+- Recent projects: the play button turns into a stop button while that project plays, and stops it when clicked.
+- The top bar no longer scrambles when the window is not fullscreen.
+- Completed and polished the German translation.
+
 ## 1.1.7
 - Scrubbing: drag the playhead while stopped to hear what's under it. It holds the notes like keys instead of re-triggering them. Turn it on or off in Settings.
 - Editing while playing: change a long note's clip settings (gain, transpose, drive, crush, filter, effects) and it applies to the note that's already sounding, not just the next one. Switching a pattern's instrument applies live too, with no stutter or "simulated" re-attack.

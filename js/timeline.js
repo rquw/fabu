@@ -117,6 +117,7 @@ const Timeline = {
         track.clips.push(clip);
         this.render();
         App.selectClip(clip.id);
+        if (typeof Sync !== 'undefined') Sync.logAction('add_pattern', clip.name);
         toast(tr('toast_pattern_added', 'Pattern added'));
         if (typeof Tutor !== 'undefined') Tutor.maybeStart(clip.id);
       } else {
@@ -924,6 +925,7 @@ const Timeline = {
     KeysPanel.refreshTracks();
     App.selectClip(clip.id);
     if (UI.playing) Engine.liveEdit();
+    if (typeof Sync !== 'undefined') Sync.logAction('add_track', nt.name);
     toast(tr('toast_track_created', 'New track'), 'green');
   },
 
@@ -1040,11 +1042,10 @@ const Timeline = {
     }
 
     if (UI.playing) {
-      // keep the playhead in view (skip while following someone — their scroll wins)
+      // keep the playhead in view
       const viewL = this.scroller.scrollLeft;
       const viewR = viewL + this.scroller.clientWidth;
-      const following = typeof Sync !== 'undefined' && Sync.following;
-      if (!following && (x > viewR - 80 || x < viewL)) {
+      if (x > viewR - 80 || x < viewL) {
         this.scroller.scrollLeft = Math.max(0, x - 120);
       }
       // grow lanes if we run past the end

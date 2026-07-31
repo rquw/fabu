@@ -76,7 +76,13 @@ html, body {
 body.is-mac #topbar { padding-left: 82px; }
 body.is-mac.is-fullscreen #topbar { padding-left: 14px; }
 
-.tb-group { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; row-gap: 6px; }
+/* a group never splits across rows — that's what made the bar look scrambled
+   when the window wasn't fullscreen. Narrow windows drop the labels, then let
+   the tool row scroll sideways, instead of jumbling everything. */
+.tb-group { display: flex; align-items: center; gap: 6px; flex-wrap: nowrap; min-width: 0; }
+.tb-group:last-child { overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
+.tb-group:last-child::-webkit-scrollbar { display: none; }
+#projName { min-width: 60px; }
 
 #logo {
   font-size: 17px;
@@ -120,8 +126,9 @@ body.is-mac.is-fullscreen #topbar { padding-left: 14px; }
 }
 .tbtn.labeled { padding: 0 11px; }
 .tbtn-label { font-size: 11.5px; font-weight: 600; letter-spacing: 0.01em; }
-/* keep the toolbar from overflowing on smaller windows */
-@media (max-width: 1180px) { .tbtn-label { display: none; } .tbtn.labeled { padding: 0 7px; } }
+/* keep the toolbar from overflowing on smaller windows (drop the labels well
+   before the bar is forced to wrap, so a windowed app still looks right) */
+@media (max-width: 1420px) { .tbtn-label { display: none; } .tbtn.labeled { padding: 0 7px; } }
 .tbtn:hover { background: var(--panel2); color: var(--text); }
 .tbtn:active { transform: translateY(1px); }
 .tbtn.big { height: 36px; min-width: 40px; }
@@ -1778,3 +1785,9 @@ input[type="range"].locked { opacity: 0.45; filter: saturate(0.4); }
   box-shadow: 0 0 0 4000px rgba(0,0,0,0.45);
   transition: all 0.25s var(--ease);
 }
+
+/* change history (host) */
+.hist-row { display: flex; align-items: center; gap: 8px; padding: 5px 4px; border-radius: 6px; font-size: 12px; }
+.hist-row:hover { background: var(--panel2); }
+.hist-time { color: var(--faint); font-size: 10.5px; font-variant-numeric: tabular-nums; flex-shrink: 0; width: 34px; }
+.hist-text { flex: 1; min-width: 0; color: var(--dim); }
