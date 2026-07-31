@@ -1,6 +1,8 @@
 // ---------- Piano roll: the MIDI note editor (floating window) ----------
 'use strict';
 
+function isDrumInstrSafe(i){ try { return isDrumInstr(i); } catch (e) { return false; } }
+
 const PianoRoll = {
   clipId: null,
   selNoteId: null,        // primary
@@ -59,6 +61,22 @@ const PianoRoll = {
     return f ? f : null;
   },
 
+  // Where the keyboard should sit when the roll opens. Landing on C4-C6 for a
+  // bass meant the 808 only ever got played in the register it sounds worst in.
+  INSTR_CENTER: { sub: 33, bass: 40, rharp: 60, rvibes: 72, rglock: 88, bell: 76, pluck: 64 },
+  defaultTopPitch(track, clip) {
+    const rows = Math.max(6, Math.floor(this.gridH() / this.rowH));
+    let center;
+    if (clip.notes && clip.notes.length) {
+      const ps = clip.notes.map(n => n.pitch);
+      center = Math.round((Math.max(...ps) + Math.min(...ps)) / 2);
+    } else {
+      center = this.INSTR_CENTER[track.instrument];
+      if (center == null) center = 60;
+    }
+    return clamp(center + Math.floor(rows / 2), 24 + rows, 120);
+  },
+
   open(clipId) {
     this.clipId = clipId;
     this.selNoteId = null;
@@ -67,6 +85,7 @@ const PianoRoll = {
     const f = this.clip();
     if (!f) return;
 
+    if (!isDrumInstrSafe(f.track.instrument)) this.topPitch = this.defaultTopPitch(f.track, f.clip);
     const w = Windows.create('proll', tr('win_pianoroll', 'Piano roll: {name}', { name: f.clip.name || 'Pattern' }), 'i-note',
       { x: Math.max(20, window.innerWidth / 2 - 420), y: 120, width: 860, height: Math.min(560, Math.max(380, window.innerHeight - 180)) });
     w.body.classList.add('proll-body');

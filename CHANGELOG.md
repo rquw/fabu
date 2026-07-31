@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.2.1
+- "Restart in 1 minute" no longer traps you. It now counts down in a small bar in the corner so you can keep working and save, restart early, or cancel it.
+- Section markers work again. Naming one opened a dialog the desktop app cannot show, so right-clicking the ruler often did nothing at all.
+- Right-clicking the ruler no longer grabs and drags the repeat region. It opens a proper menu: add or remove a marker, turn repeat on or off, and clear it.
+- You can clear the repeat region now.
+- The piano roll opens where the instrument actually lives, so a bass starts in the low octaves instead of the high ones where it sounds wrong.
+- 808 Bass keeps its character higher up the keyboard instead of turning into a whistle.
+- The shortcut list is up to date again, including repeat, grouping, scrubbing, automation and dragging a clip out to a new track.
+
 ## 1.2.0
 - Multiplayer security: the host now checks every change that comes in and undoes anything that breaks the room rules. Before this, the rules only ran on the other person's computer, so a modified app could ignore them. Someone who is removed is now really removed, even if their app pretends otherwise.
 - Accounts: the signed-in name updates properly. It no longer keeps showing the old username after logging out, logging in as someone else, or having the name changed.
