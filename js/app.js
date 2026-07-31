@@ -156,18 +156,39 @@ const App = {
       if (window.electronAPI && window.electronAPI.restartNow) window.electronAPI.restartNow();
     };
     wrap.querySelector('#rsNow').addEventListener('click', doRestart);
+    // "in 1 minute" means "let me save first", so the modal has to get out of
+    // the way — it used to sit there blocking the whole app until it restarted
     wrap.querySelector('#rsSoon').addEventListener('click', () => {
-      const soon = wrap.querySelector('#rsSoon');
-      const sub = wrap.querySelector('#rsSub');
-      soon.disabled = true;
-      let left = 60;
-      const tick = () => {
-        if (left <= 0) { doRestart(); return; }
-        sub.textContent = tr('upd_restart_countdown', 'Restarting in {n} seconds. Save now if you need to.', { n: left });
-        left--;
-      };
-      tick();
-      wrap._iv = setInterval(tick, 1000);
+      wrap.remove();
+      this.showRestartCountdown(60, doRestart);
+    });
+  },
+
+  // A small bar in the corner while the delayed restart counts down: you can
+  // keep working and save, restart early, or cancel it entirely.
+  showRestartCountdown(secs, doRestart) {
+    const old = document.getElementById('restartBar');
+    if (old) { clearInterval(old._iv); old.remove(); }
+    const bar = document.createElement('div');
+    bar.id = 'restartBar';
+    bar.innerHTML = `
+      <span class="rb-text"></span>
+      <button id="rbNow" class="fbtn accent">${tr('upd_restart_now_short', 'Restart now')}</button>
+      <button id="rbCancel" class="rb-x" data-tip="${tr('upd_restart_cancel', 'Not yet')}">&times;</button>`;
+    document.body.appendChild(bar);
+    const txt = bar.querySelector('.rb-text');
+    let left = secs;
+    const tick = () => {
+      if (left <= 0) { clearInterval(bar._iv); bar.remove(); doRestart(); return; }
+      txt.textContent = tr('upd_restart_countdown', 'Restarting in {n} seconds. Save now if you need to.', { n: left });
+      left--;
+    };
+    tick();
+    bar._iv = setInterval(tick, 1000);
+    bar.querySelector('#rbNow').addEventListener('click', () => { clearInterval(bar._iv); bar.remove(); doRestart(); });
+    bar.querySelector('#rbCancel').addEventListener('click', () => {
+      clearInterval(bar._iv); bar.remove();
+      toast(tr('upd_restart_later', 'Update will finish next time you open fabu.'));
     });
   },
 
@@ -722,7 +743,7 @@ const App = {
     S.loopOn = v;
     const b = document.getElementById('btnLoop');
     if (b) b.classList.toggle('on', v);
-    if (v && !(S.loopEnd > S.loopStart)) { S.loopStart = 0; S.loopEnd = 8; }
+    if (v && !(S.loopEnd > S.loopStart)) { S.loopStart = snapBeat(UI.playhead, 4); S.loopEnd = S.loopStart + 8; }
     Timeline.drawRuler();
     UI.dirty = UI.fileDirty = true;
     toast(v ? tr('toast_loop_on', 'Repeating bar {a} to {b}', { a: Math.floor(S.loopStart / 4) + 1, b: Math.floor(S.loopEnd / 4) + 1 })
@@ -732,14 +753,57 @@ const App = {
   // section markers (Intro, Drop, Chorus, ...) along the ruler
   addMarker(beat) {
     const at = beat != null ? beat : snapBeat(UI.playhead, S.snap || 1);
-    const name = prompt(tr('marker_prompt', 'Section name'), tr('marker_default', 'Section'));
-    if (name == null) return;
-    Undo.push('Add marker');
-    if (!S.markers) S.markers = [];
-    S.markers.push({ id: uid('mk'), beat: at, name: String(name).slice(0, 24) || tr('marker_default', 'Section') });
-    S.markers.sort((a, b) => a.beat - b.beat);
+    // a real dialog: Electron has no window.prompt, so the old one just vanished
+    this.askText(tr('marker_prompt', 'Section name'), tr('marker_default', 'Section'), (name) => {
+      if (!name) return;
+      Undo.push('Add marker');
+      if (!S.markers) S.markers = [];
+      S.markers.push({ id: uid('mk'), beat: at, name: String(name).slice(0, 24) });
+      S.markers.sort((a, b) => a.beat - b.beat);
+      Timeline.drawRuler();
+      UI.dirty = UI.fileDirty = true;
+      toast(tr('toast_marker_added', 'Section marker added'), 'green');
+    });
+  },
+
+  // small in-app text prompt (quick presets for section names)
+  askText(title, initial, done) {
+    const old = document.getElementById('askModal');
+    if (old) old.remove();
+    const presets = ['Intro', 'Verse', 'Chorus', 'Drop', 'Bridge', 'Outro'];
+    const wrap = document.createElement('div');
+    wrap.id = 'askModal';
+    wrap.className = 'modal-back';
+    wrap.innerHTML = `
+      <div class="modal-card">
+        <div class="modal-title">${title}</div>
+        <input id="askInput" type="text" maxlength="24" spellcheck="false" value="${initial || ''}">
+        <div class="ask-presets">${presets.map(p => `<button class="fbtn ask-preset">${p}</button>`).join('')}</div>
+        <div class="modal-btns">
+          <button id="askCancel" class="fbtn">${tr('cancel', 'Cancel')}</button>
+          <button id="askOk" class="fbtn accent">${tr('ask_ok', 'Add')}</button>
+        </div>
+      </div>`;
+    document.body.appendChild(wrap);
+    const inp = wrap.querySelector('#askInput');
+    const close = () => wrap.remove();
+    const ok = () => { const v = inp.value.trim(); close(); done(v); };
+    wrap.querySelectorAll('.ask-preset').forEach(b => b.addEventListener('click', () => { inp.value = b.textContent; ok(); }));
+    wrap.querySelector('#askOk').addEventListener('click', ok);
+    wrap.querySelector('#askCancel').addEventListener('click', close);
+    wrap.addEventListener('mousedown', (e) => { if (e.target === wrap) close(); });
+    inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') ok(); if (e.key === 'Escape') close(); });
+    setTimeout(() => { inp.focus(); inp.select(); }, 40);
+  },
+
+  // get rid of the repeat region entirely
+  clearLoop() {
+    S.loopOn = false; S.loopStart = 0; S.loopEnd = 0;
+    const b = document.getElementById('btnLoop');
+    if (b) b.classList.remove('on');
     Timeline.drawRuler();
-    toast(tr('toast_marker_added', 'Section marker added'), 'green');
+    UI.dirty = UI.fileDirty = true;
+    toast(tr('toast_loop_cleared', 'Repeat region cleared'));
   },
   removeMarkerNear(beat) {
     if (!S.markers || !S.markers.length) return false;

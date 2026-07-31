@@ -773,6 +773,12 @@ const Windows = {
       ['<kbd>Cmd</kbd><kbd>C</kbd> <kbd>X</kbd> <kbd>V</kbd>', tr('help_copy', 'Copy, cut, paste')],
       ['<kbd>Cmd</kbd><kbd>D</kbd>', tr('help_duplicate', 'Duplicate clip')],
       ['<kbd>Cmd</kbd><kbd>B</kbd>', tr('help_split', 'Split clip at the playhead')],
+      ['<kbd>Cmd</kbd><kbd>G</kbd>', tr('help_group', 'Group the selected clips')],
+      ['<kbd>Cmd</kbd><kbd>Shift</kbd><kbd>G</kbd>', tr('help_ungroup', 'Ungroup')],
+      ['<kbd>L</kbd>', tr('help_loop', 'Repeat a section on and off')],
+      [tr('help_col_shift_ruler', 'Shift-drag the ruler'), tr('help_set_loop', 'Set the repeat region')],
+      [tr('help_col_right_ruler', 'Right-click the ruler'), tr('help_ruler_menu', 'Section markers and repeat options')],
+      [tr('help_col_drag_playhead', 'Drag the playhead'), tr('help_scrub', 'Hear what is under it')],
       [tr('help_col_drag_edges', 'Drag clip edges'), tr('help_trim', 'Trim a clip')],
       ['<kbd>Delete</kbd>', tr('help_delete', 'Delete clip or note')],
       ['<kbd>Cmd</kbd><kbd>S</kbd>', tr('help_save', 'Save project')],
@@ -785,7 +791,10 @@ const Windows = {
       [tr('help_col_double_lane', 'Double-click lane'), tr('help_new_pattern', 'New pattern')],
       [tr('help_col_double_clip', 'Double-click clip'), tr('help_edit_clip', 'Edit it')],
       [tr('help_col_rightclick', 'Right-click clip or note'), tr('help_rightclick', 'Delete it')],
-      [tr('help_col_drag_sound', 'Drag a sound in'), tr('help_drag_sound', 'Add it where you drop')]
+      [tr('help_col_drag_sound', 'Drag a sound in'), tr('help_drag_sound', 'Add it where you drop')],
+      [tr('help_col_drag_between', 'Drag a clip between tracks'), tr('help_new_track', 'Drop in the gap for a new track')],
+      [tr('help_col_shift_click', 'Shift-click clips'), tr('help_multi', 'Select several at once')],
+      [tr('help_col_a_button', 'The A buttons'), tr('help_autom', 'Automate that value over time')]
     ];
     w.body.innerHTML = '<table class="kbd-table">' +
       rows.map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td></tr>`).join('') + '</table>';

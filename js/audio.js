@@ -471,15 +471,19 @@ const Engine = {
       // 808 is actually made (synthesised), not a sample pretending to be one.
       const o = ac.createOscillator();
       o.type = 'sine';
-      o.frequency.setValueAtTime(f * 4.5, t);
-      o.frequency.exponentialRampToValueAtTime(Math.max(20, f), t + 0.055);
+      // the pitch drop is what makes an 808 an 808, but the same big drop up high
+      // just sounds like a whistle, so ease it off as the note climbs
+      const low = clamp((72 - pitch) / 36, 0, 1);          // 1 down low, 0 up high
+      const drop = 1.5 + 3 * low;
+      o.frequency.setValueAtTime(f * drop, t);
+      o.frequency.exponentialRampToValueAtTime(Math.max(20, f), t + 0.03 + 0.045 * low);
       const og = ac.createGain(); og.gain.value = 1;
       o.connect(og); og.connect(g);
       oscs.push(o);
       const click = ac.createOscillator();
       click.type = 'triangle'; click.frequency.value = f * 8;
       const cg = ac.createGain();
-      cg.gain.setValueAtTime(0.28 * vel, t);
+      cg.gain.setValueAtTime(0.28 * vel * (0.35 + 0.65 * low), t);
       cg.gain.exponentialRampToValueAtTime(0.0005, t + 0.03);
       click.connect(cg); cg.connect(g);
       oscs.push(click);

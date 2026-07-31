@@ -50,6 +50,7 @@ const Timeline = {
     // click ruler = move playhead; drag while stopped = scrub (hear it);
     // shift-drag (or dragging the top strip) sets the loop region
     this.ruler.addEventListener('mousedown', (e) => {
+      if (e.button !== 0) return;        // right-click is the marker menu, not a drag
       const inLoopStrip = (e.clientY - this.ruler.getBoundingClientRect().top) < 11;
       if (e.shiftKey || inLoopStrip) {
         const anchor = snapBeat(this.xToBeat(e.clientX), S.snap || 1);
@@ -87,11 +88,11 @@ const Timeline = {
       window.addEventListener('mouseup', up);
     });
 
-    // right-click the ruler: add a section marker (or remove one you hit)
+    // right-click the ruler: a real menu. It used to call prompt() straight away,
+    // which Electron does not implement, so it silently did nothing.
     this.ruler.addEventListener('contextmenu', (e) => {
       e.preventDefault();
-      const beat = this.xToBeat(e.clientX);
-      if (!App.removeMarkerNear(beat)) App.addMarker(snapBeat(beat, S.snap || 1));
+      this.openRulerMenu(e.clientX, e.clientY);
     });
 
     // background: click deselects, drag draws a selection box (marquee)
@@ -968,6 +969,40 @@ const Timeline = {
     };
     window.addEventListener('mousemove', move);
     window.addEventListener('mouseup', up);
+  },
+
+  openRulerMenu(x, y) {
+    const old = document.getElementById('rulerMenu');
+    if (old) old.remove();
+    const beat = snapBeat(this.xToBeat(x), S.snap || 1);
+    const m = document.createElement('div');
+    m.id = 'rulerMenu';
+    m.className = 'ctx-menu';
+    const add = (label, fn, danger) => {
+      const b = document.createElement('button');
+      b.className = 'ctx-item' + (danger ? ' danger' : '');
+      b.textContent = label;
+      b.addEventListener('click', () => { m.remove(); fn(); });
+      m.appendChild(b);
+    };
+    const onMarker = (S.markers || []).some(mk => Math.abs(mk.beat - this.xToBeat(x)) <= 12 / UI.zoom);
+    if (onMarker) add(tr('menu_marker_remove', 'Remove this section marker'), () => App.removeMarkerNear(this.xToBeat(x)), true);
+    else add(tr('menu_marker_add', 'Add section marker here'), () => App.addMarker(beat));
+    if (S.loopEnd > S.loopStart) {
+      add(S.loopOn ? tr('menu_loop_off', 'Turn repeat off') : tr('menu_loop_on', 'Turn repeat on'), () => App.setLoop(!S.loopOn));
+      add(tr('menu_loop_clear', 'Clear repeat region'), () => App.clearLoop(), true);
+    } else {
+      add(tr('menu_loop_here', 'Repeat this bar'), () => {
+        const bar = Math.floor(beat / 4) * 4;
+        S.loopStart = bar; S.loopEnd = bar + 4;
+        App.setLoop(true);
+      });
+    }
+    document.body.appendChild(m);
+    m.style.left = Math.min(x, window.innerWidth - m.offsetWidth - 8) + 'px';
+    m.style.top = Math.min(y, window.innerHeight - m.offsetHeight - 8) + 'px';
+    const close = (ev) => { if (!m.contains(ev.target)) { m.remove(); window.removeEventListener('mousedown', close, true); } };
+    window.addEventListener('mousedown', close, true);
   },
 
   // the "release here to make a new track" indicator between/around tracks
