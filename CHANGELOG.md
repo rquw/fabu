@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.1.9
+- Five new instruments: Upright Piano, Glockenspiel and Harp (real recordings), plus an 808 Bass and a Warm Pad. The instrument menu now has a Strings group too.
+- Loop a section: shift-drag the ruler (or press L) to repeat part of your song while you work on it.
+- Section markers: right-click the ruler to name a part (Intro, Drop, Chorus), right-click it again to remove it.
+- Export stems: one audio file per track, so you can take the parts into another program.
+- Exports now sound like what you hear. They were being squashed harder than the app played them back.
+- The mixer shows one track at a time with room to breathe, plus a track list to switch, instead of a wall of narrow strips.
+- Much faster with big songs: the timeline only draws what is on screen, so a long project stays smooth.
+
 ## 1.1.8
 - Multiplayer: a wrong room code now actually says "Invalid Code" instead of waiting forever.
 - Change history: hosts can see who added or removed patterns, sounds and tracks, and who joined or left.

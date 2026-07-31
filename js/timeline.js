@@ -5,10 +5,11 @@ const TRACK_H = 84;
 
 // grouped, readable instrument picker (replaces the long flat dropdown)
 const INSTR_CATS = [
-  { key: 'cat_keys', label: 'Keys & Piano', ids: ['keys', 'epiano', 'organ', 'rpiano'] },
-  { key: 'cat_mallets', label: 'Mallets & Bells', ids: ['rvibes', 'bell'] },
-  { key: 'cat_synth', label: 'Synth', ids: ['synth', 'pluck', 'strings'] },
-  { key: 'cat_bass', label: 'Bass', ids: ['bass'] },
+  { key: 'cat_keys', label: 'Keys & Piano', ids: ['keys', 'epiano', 'organ', 'rpiano', 'rupright'] },
+  { key: 'cat_mallets', label: 'Mallets & Bells', ids: ['rvibes', 'rglock', 'bell'] },
+  { key: 'cat_strings', label: 'Strings', ids: ['rharp', 'strings'] },
+  { key: 'cat_synth', label: 'Synth', ids: ['synth', 'pad', 'pluck'] },
+  { key: 'cat_bass', label: 'Bass', ids: ['sub', 'bass'] },
   { key: 'cat_drums', label: 'Drums', ids: ['drums', 'drumkit'] }
 ];
 
@@ -26,6 +27,11 @@ const Timeline = {
     this.scroller.addEventListener('scroll', () => {
       $('#trackHeads').scrollTop = this.scroller.scrollTop;
       this.drawRuler();
+      // scrolled past the margin of what we built? bring the next clips in
+      const vw = this.scroller.clientWidth;
+      const from = (this.scroller.scrollLeft - vw * 0.4) / UI.zoom;
+      const to = (this.scroller.scrollLeft + vw * 1.4) / UI.zoom;
+      if (this._viewFrom == null || from < this._viewFrom || to > this._viewTo) this.renderSoon();
     });
 
     // scrolling while the pointer is over the track-headers column (which is
@@ -41,8 +47,30 @@ const Timeline = {
       this.setZoom(UI.zoom * (e.deltaY < 0 ? 1.1 : 1 / 1.1));
     }, { passive: false });
 
-    // click ruler = move playhead; drag while stopped = scrub (hear it)
+    // click ruler = move playhead; drag while stopped = scrub (hear it);
+    // shift-drag (or dragging the top strip) sets the loop region
     this.ruler.addEventListener('mousedown', (e) => {
+      const inLoopStrip = (e.clientY - this.ruler.getBoundingClientRect().top) < 11;
+      if (e.shiftKey || inLoopStrip) {
+        const anchor = snapBeat(this.xToBeat(e.clientX), S.snap || 1);
+        const setLoop = (ev) => {
+          const b = snapBeat(this.xToBeat(ev.clientX), S.snap || 1);
+          S.loopStart = Math.max(0, Math.min(anchor, b));
+          S.loopEnd = Math.max(anchor, b);
+          if (S.loopEnd - S.loopStart < 0.25) S.loopEnd = S.loopStart + (S.snap || 1);
+          this.drawRuler();
+        };
+        setLoop(e);
+        const done = () => {
+          window.removeEventListener('mousemove', setLoop);
+          window.removeEventListener('mouseup', done);
+          if (!S.loopOn) App.setLoop(true); else this.drawRuler();
+          UI.dirty = UI.fileDirty = true;
+        };
+        window.addEventListener('mousemove', setLoop);
+        window.addEventListener('mouseup', done);
+        return;
+      }
       const scrubbing = !UI.playing && Engine.scrubOn();
       const move = (ev) => {
         const beat = snapBeat(this.xToBeat(ev.clientX), S.snap);
@@ -57,6 +85,13 @@ const Timeline = {
       };
       window.addEventListener('mousemove', move);
       window.addEventListener('mouseup', up);
+    });
+
+    // right-click the ruler: add a section marker (or remove one you hit)
+    this.ruler.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      const beat = this.xToBeat(e.clientX);
+      if (!App.removeMarkerNear(beat)) App.addMarker(snapBeat(beat, S.snap || 1));
     });
 
     // background: click deselects, drag draws a selection box (marquee)
@@ -184,7 +219,14 @@ const Timeline = {
 
   // ---------- full render ----------
 
+  // coalesce a burst of edits into one render on the next frame
+  renderSoon() {
+    if (this._renderRaf) return;
+    this._renderRaf = requestAnimationFrame(() => { this._renderRaf = null; this.render(); });
+  },
+
   render() {
+    if (this._renderRaf) { cancelAnimationFrame(this._renderRaf); this._renderRaf = null; }
     // drop selection entries whose clips no longer exist
     for (const id of [...UI.selClipIds]) if (!getClip(id)) UI.selClipIds.delete(id);
     if (UI.selClipId && !UI.selClipIds.has(UI.selClipId)) UI.selClipId = [...UI.selClipIds].pop() || null;
@@ -202,6 +244,14 @@ const Timeline = {
     const bar = UI.zoom * 4;
     let clipCount = 0;
     const firstMidiIdx = S.tracks.findIndex(t => t.kind === 'midi');
+    // Only build the clips inside (or near) the visible window. A long song can
+    // hold hundreds of clips, and building every one of them — each with its own
+    // canvas — on every edit was the main source of slowdown.
+    const vw = this.scroller ? this.scroller.clientWidth : 1200;
+    const sl = this.scroller ? this.scroller.scrollLeft : 0;
+    const viewFrom = (sl - vw) / UI.zoom;          // one screen of margin each side
+    const viewTo = (sl + vw * 2) / UI.zoom;
+    this._viewFrom = viewFrom; this._viewTo = viewTo;
     for (const t of S.tracks) {
       const lane = document.createElement('div');
       lane.className = 'lane' + (t.id === UI.selTrackId ? ' sel' : '');
@@ -210,7 +260,11 @@ const Timeline = {
         `repeating-linear-gradient(90deg, rgba(255,255,255,0.07) 0 1px, transparent 1px ${bar}px),` +
         `repeating-linear-gradient(90deg, rgba(255,255,255,0.028) 0 1px, transparent 1px ${beat}px)`;
       this.lanes.appendChild(lane);
-      for (const c of t.clips) { lane.appendChild(this.buildClip(c, t)); clipCount++; }
+      for (const c of t.clips) {
+        clipCount++;
+        if (c.start > viewTo || c.start + clipBeats(c) < viewFrom) continue;   // off screen
+        lane.appendChild(this.buildClip(c, t));
+      }
     }
 
     // brand-new/empty project: gentle "double-click to add a pattern" nudge
@@ -266,6 +320,32 @@ const Timeline = {
           ctx.fillRect(x + q * UI.zoom, 22, 1, 8);
         }
       }
+    }
+
+    // loop region: the section that repeats while you work on it
+    if (S.loopEnd > S.loopStart) {
+      const lx = S.loopStart * UI.zoom - scrollX;
+      const lw = (S.loopEnd - S.loopStart) * UI.zoom;
+      ctx.fillStyle = S.loopOn ? 'rgba(224,122,63,0.30)' : 'rgba(255,255,255,0.07)';
+      ctx.fillRect(lx, 0, lw, 11);
+      ctx.fillStyle = S.loopOn ? 'var(--accent)' : 'rgba(255,255,255,0.28)';
+      ctx.fillStyle = S.loopOn ? '#e07a3f' : 'rgba(255,255,255,0.3)';
+      ctx.fillRect(lx, 0, 2, 11);
+      ctx.fillRect(lx + lw - 2, 0, 2, 11);
+    }
+
+    // section markers
+    for (const mk of (S.markers || [])) {
+      const mx = mk.beat * UI.zoom - scrollX;
+      if (mx < -60 || mx > w + 60) continue;
+      ctx.fillStyle = '#56b6a6';
+      ctx.fillRect(mx, 0, 1.5, h);
+      ctx.font = '700 9px -apple-system, sans-serif';
+      const tw = ctx.measureText(mk.name).width;
+      ctx.fillRect(mx, 0, tw + 8, 11);
+      ctx.fillStyle = '#0d1117';
+      ctx.fillText(mk.name, mx + 4, 8.5);
+      ctx.font = '600 10px -apple-system, sans-serif';
     }
   },
 

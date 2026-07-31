@@ -11,7 +11,12 @@ const INSTRUMENTS = {
   pluck: 'Pluck',
   bell:  'Bell',
   rpiano: 'Grand Piano',
+  rupright: 'Upright Piano',
   rvibes: 'Vibraphone',
+  rglock: 'Glockenspiel',
+  rharp: 'Harp',
+  sub: '808 Bass',
+  pad: 'Warm Pad',
   drums: 'Drum Kit',
   drumkit: 'Acoustic Kit'
 };
@@ -20,7 +25,12 @@ const INSTRUMENTS = {
 // multi-zone: pick the sample whose root is nearest the note, then pitch-shift a little
 const MELODIC = {
   rpiano: { name: 'Grand Piano', attack: 0.004, release: 0.18, zones: [{ file: 'piano_c2', root: 36 }, { file: 'piano_c4', root: 60 }, { file: 'piano_c6', root: 84 }] },
-  rvibes: { name: 'Vibraphone', attack: 0.003, release: 0.4, zones: [{ file: 'vibes_c3', root: 48 }, { file: 'vibes_d4', root: 62 }, { file: 'vibes_a4', root: 69 }, { file: 'vibes_c5', root: 72 }, { file: 'vibes_e5', root: 76 }] }
+  rvibes: { name: 'Vibraphone', attack: 0.003, release: 0.4, zones: [{ file: 'vibes_c3', root: 48 }, { file: 'vibes_d4', root: 62 }, { file: 'vibes_a4', root: 69 }, { file: 'vibes_c5', root: 72 }, { file: 'vibes_e5', root: 76 }] },
+  // roots below were measured from the audio, not taken from the file names
+  // (VCSL labels these an octave off, which would have detuned everything)
+  rupright: { name: 'Upright Piano', gain: 2.6, attack: 0.004, release: 0.2, zones: [{ file: 'upright_c3', root: 48 }, { file: 'upright_c4', root: 60 }, { file: 'upright_c5', root: 72 }, { file: 'upright_c6', root: 84 }, { file: 'upright_c7', root: 96 }] },
+  rglock: { name: 'Glockenspiel', gain: 5.5, attack: 0.002, release: 0.5, zones: [{ file: 'glock_g5', root: 79 }, { file: 'glock_c6', root: 84 }, { file: 'glock_c7', root: 96 }, { file: 'glock_c8', root: 108 }] },
+  rharp: { name: 'Harp', gain: 4.2, attack: 0.003, release: 0.35, zones: [{ file: 'harp_d2', root: 38 }, { file: 'harp_g3', root: 55 }, { file: 'harp_c5', root: 72 }, { file: 'harp_d6', root: 86 }] }
 };
 
 // pitch-class -> bundled real drum sample (assets/oneshots). Same layout as the
@@ -455,6 +465,38 @@ const Engine = {
       mk('sine', f / 2, 0, 0.6).connect(filter);
       filter.connect(g);
       A = 0.006; D = 0.22; SUS = 0.72; R = 0.12; peak = 0.5;
+    } else if (instr === 'sub') {
+      // 808-style sub: a sine whose pitch drops fast into the fundamental, with
+      // a short click on top so it still reads on small speakers. This is how an
+      // 808 is actually made (synthesised), not a sample pretending to be one.
+      const o = ac.createOscillator();
+      o.type = 'sine';
+      o.frequency.setValueAtTime(f * 4.5, t);
+      o.frequency.exponentialRampToValueAtTime(Math.max(20, f), t + 0.055);
+      const og = ac.createGain(); og.gain.value = 1;
+      o.connect(og); og.connect(g);
+      oscs.push(o);
+      const click = ac.createOscillator();
+      click.type = 'triangle'; click.frequency.value = f * 8;
+      const cg = ac.createGain();
+      cg.gain.setValueAtTime(0.28 * vel, t);
+      cg.gain.exponentialRampToValueAtTime(0.0005, t + 0.03);
+      click.connect(cg); cg.connect(g);
+      oscs.push(click);
+      A = 0.004; D = 0.9; SUS = 0.55; R = 0.42; peak = 0.72;
+    } else if (instr === 'pad') {
+      // wide, slow-blooming saw/triangle stack behind a gentle filter
+      filter = ac.createBiquadFilter();
+      filter.type = 'lowpass';
+      filter.frequency.value = clamp(f * 3.2, 500, 3600); filter.Q.value = 0.7;
+      filtEnv = clamp(f * 3, 700, 3200);
+      mk('sawtooth', f, -14, 0.22).connect(filter);
+      mk('sawtooth', f, 14, 0.22).connect(filter);
+      mk('triangle', f, 0, 0.3).connect(filter);
+      mk('triangle', f * 2, 7, 0.12).connect(filter);
+      mk('sine', f / 2, 0, 0.22).connect(filter);
+      filter.connect(g);
+      A = 0.5; D = 0.8; SUS = 0.9; R = 1.1; peak = 0.26;
     } else if (instr === 'pluck') {
       filter = ac.createBiquadFilter();
       filter.type = 'lowpass'; filter.frequency.value = clamp(f * 9, 1400, 9000); filter.Q.value = 2;
@@ -1068,8 +1110,28 @@ const Engine = {
     App.onTransport();
   },
 
+  // jump the transport to a beat without stopping (used by the loop region)
+  jumpTo(beat) {
+    if (!UI.playing || !this.ctx) return;
+    for (const v of this.live) v.kill();
+    this.live.clear();
+    if (this.sounding) this.sounding.clear();
+    this.startBeat = Math.max(0, beat);
+    this.startCtxTime = this.ctx.currentTime + 0.02;
+    this.events = this.collectEvents(this.startBeat);
+    this.evIdx = 0;
+    this.nextClickBeat = Math.ceil(this.startBeat - 1e-6);
+    this.scheduleAllAutomation(this.startBeat, this.startCtxTime);
+    this.scheduleAllSidechain(this.startBeat, this.startCtxTime);
+  },
+
   schedTick() {
     if (!UI.playing) return;
+    // loop region: wrap back round while you work on a section
+    if (S.loopOn && S.loopEnd > S.loopStart && this.currentBeat() >= S.loopEnd) {
+      this.jumpTo(S.loopStart);
+      return;
+    }
     // drop finished notes from the sounding map so it stays small
     if (this.sounding && this.sounding.size) {
       const t = this.ctx.currentTime;
@@ -1453,8 +1515,9 @@ const Engine = {
     src.connect(g);
     const A = noAttack ? 0.004 : (m.attack ?? 0.005);
     const R = m.release ?? 0.15;
+    const lvl = 0.92 * vel * (m.gain || 1);   // level-match quieter source samples
     g.gain.setValueAtTime(0, t);
-    g.gain.linearRampToValueAtTime(0.92 * vel, t + A);
+    g.gain.linearRampToValueAtTime(lvl, t + A);
     const naturalEnd = t + buf.duration / src.playbackRate.value;
     src.start(t);
     try { src.stop(naturalEnd + 0.02); } catch (e) {}
@@ -1700,6 +1763,56 @@ const Engine = {
     return buf;
   },
 
+  // Render each track on its own, so you can take the parts elsewhere.
+  // Same chain as the full mix, just one track at a time (mutes/solos ignored
+  // so you always get every stem).
+  async renderStems(onProgress) {
+    this.ensureCtx();
+    const spb = this.spb();
+    const lead = 0.05;
+    const lenSec = songEndBeat() * spb + 2;
+    const sr = 44100;
+    const out = [];
+    const tracks = S.tracks.filter(t => t.clips.length);
+    for (let i = 0; i < tracks.length; i++) {
+      const t = tracks[i];
+      if (onProgress) onProgress(i / tracks.length, t.name);
+      const oc = new OfflineAudioContext(2, Math.ceil(lenSec * sr), sr);
+      const comp = oc.createDynamicsCompressor();
+      comp.threshold.value = -3; comp.knee.value = 8; comp.ratio.value = 3;
+      comp.attack.value = 0.006; comp.release.value = 0.2;
+      const master = oc.createGain();
+      master.gain.value = S.masterVol;
+      master.connect(comp);
+      const rev = this.buildReverb(oc, master, comp, this.ecoMode() ? 0 : 0.16);
+      comp.connect(oc.destination);
+      const offFx = { curBeat: 0, time0: lead, beatToTime: (b) => lead + b * spb };
+      this._offlineFx = offFx;
+      const chain = this.buildChain(oc, master, t);
+      chain.gain.gain.value = t.volume;       // ignore mute/solo for stems
+      this.scheduleAutomation(oc, chain, t, 0, lead, spb);
+      for (const c of t.clips) {
+        if (c.kind === 'midi') {
+          const clipDest = this.clipFxDest(oc, chain.input, c, rev.pre, offFx);
+          const sp = c.speed || 1;
+          for (const n of c.notes) {
+            if (n.start >= c.length) continue;
+            const time = lead + (c.start + n.start / sp) * spb;
+            const durB = Math.min(n.length, c.length - n.start) / sp;
+            const v = this.makeVoice(oc, clipDest, t.instrument, n.pitch + (c.pitch || 0) + (c.detune || 0) / 100, time, (n.vel ?? 0.9) * (c.gain ?? 1));
+            v.stop(time + durB * spb);
+          }
+        } else {
+          this.scheduleAudioClip(oc, chain.input, c, lead + c.start * spb, 0, false, rev.pre);
+        }
+      }
+      this._offlineFx = null;
+      out.push({ name: t.name, buffer: await oc.startRendering() });
+    }
+    if (onProgress) onProgress(1, '');
+    return out;
+  },
+
   // Render the whole song offline into a stereo AudioBuffer.
   async renderSong() {
     this.ensureCtx();
@@ -1709,8 +1822,11 @@ const Engine = {
     const sr = 44100;
     const oc = new OfflineAudioContext(2, Math.ceil(lenSec * sr), sr);
 
+    // match the live master chain exactly — these used to differ (-8/6 offline
+    // vs -3/3 live), so every export came out more squashed than what you mixed
     const comp = oc.createDynamicsCompressor();
-    comp.threshold.value = -8; comp.ratio.value = 6;
+    comp.threshold.value = -3; comp.knee.value = 8; comp.ratio.value = 3;
+    comp.attack.value = 0.006; comp.release.value = 0.2;
     const master = oc.createGain();
     master.gain.value = S.masterVol;
     master.connect(comp);

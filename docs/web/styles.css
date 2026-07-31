@@ -1791,3 +1791,17 @@ input[type="range"].locked { opacity: 0.45; filter: saturate(0.4); }
 .hist-row:hover { background: var(--panel2); }
 .hist-time { color: var(--faint); font-size: 10.5px; font-variant-numeric: tabular-nums; flex-shrink: 0; width: 34px; }
 .hist-text { flex: 1; min-width: 0; color: var(--dim); }
+
+/* ---- Mixer: one track at a time, plus a compact picker ---- */
+#mixFocus { margin: 10px 0 4px; display: flex; flex-direction: column; gap: 7px; }
+.mixf-row { display: flex; align-items: center; gap: 8px; }
+.mixf-lbl { width: 46px; flex-shrink: 0; font-size: 9.5px; font-weight: 800; letter-spacing: 0.06em; color: var(--faint); }
+.mixf-row input[type="range"] { flex: 1; min-width: 0; }
+.mixf-val { width: 54px; flex-shrink: 0; text-align: right; font-size: 10.5px; color: var(--dim); font-variant-numeric: tabular-nums; }
+.mixf-row.master { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
+#mixPicker { display: flex; flex-direction: column; gap: 3px; max-height: 190px; overflow-y: auto; margin-top: 10px; padding-top: 9px; border-top: 1px solid var(--line); }
+.mixchip { display: flex; align-items: center; gap: 7px; padding: 5px 7px; border-radius: 7px; cursor: pointer; border: 1px solid transparent; }
+.mixchip:hover { background: var(--panel2); }
+.mixchip.on { background: var(--accent-soft); border-color: var(--accent); }
+.mixchip-dot { width: 9px; height: 9px; border-radius: 3px; flex-shrink: 0; }
+.mixchip-name { flex: 1; min-width: 0; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
