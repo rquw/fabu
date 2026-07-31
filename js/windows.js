@@ -99,7 +99,9 @@ const Windows = {
 
   toggleMixer() {
     if (this.isOpen('mixer')) { this.close('mixer'); return; }
-    const width = clamp((S.tracks.length + 1) * 128 + 26, 300, window.innerWidth - 40);
+    // fixed, readable width now that it shows one track at a time instead of
+    // a row of narrow strips per track
+    const width = Math.min(360, window.innerWidth - 40);
     const x = clamp(140, 8, window.innerWidth - width - 8);
     const w = this.create('mixer', tr('win_mixer', 'Mixer'), 'i-mixer', { x, y: 96, width });
     w.refresh = () => this.buildMixer(w.body);
@@ -262,13 +264,13 @@ const Windows = {
   },
 
   buildMixer(body) {
-    body.innerHTML = '<div id="mixEq"></div><div id="mixerStrips"></div>';
-    const strips = body.querySelector('#mixerStrips');
+    body.innerHTML = '<div id="mixEq"></div><div id="mixFocus"></div><div id="mixPicker"></div><div id="mixMaster"></div>';
     const bandLabel = { high: tr('eq_high', 'HIGH'), mid: tr('eq_mid', 'MID'), low: tr('eq_low', 'LOW') };
-
-    // one clear EQ for the selected track (was a cramped tiny EQ on every strip)
-    const eqBox = body.querySelector('#mixEq');
+    if (!UI.selTrackId && S.tracks.length) UI.selTrackId = S.tracks[0].id;
     const selT = UI.selTrackId ? getTrack(UI.selTrackId) : null;
+
+    // --- one clear EQ for the track you're working on ---
+    const eqBox = body.querySelector('#mixEq');
     if (selT) {
       const head = document.createElement('div');
       head.className = 'mixeq-head';
@@ -288,102 +290,76 @@ const Windows = {
       eqBox.innerHTML = `<div class="mixeq-empty">${tr('mixeq_pick', 'Click a track below to shape its EQ.')}</div>`;
     }
 
+    // --- the selected track's controls, roomy instead of a 116px column ---
+    // (a wall of narrow strips side by side was unreadable past a few tracks)
+    const focus = body.querySelector('#mixFocus');
+    if (selT) {
+      const row = (labelKey, labelFb, min, max, step, value, tip, apply, undoLabel, lockKey, fmt, automParam) => {
+        const r = document.createElement('div');
+        r.className = 'mixf-row';
+        r.innerHTML = `<span class="mixf-lbl">${tr(labelKey, labelFb)}</span>`;
+        const val = document.createElement('span');
+        val.className = 'mixf-val';
+        val.textContent = fmt(value);
+        this.mixSlider(r, min, max, step, value, tip,
+          (v) => { apply(v); val.textContent = fmt(v); }, undoLabel, lockKey);
+        r.appendChild(val);
+        if (automParam) r.appendChild(this.autoDot(selT, automParam));
+        focus.appendChild(r);
+        return r;
+      };
+      const dbTxt = (v) => v <= 0.001 ? '-inf' : (20 * Math.log10(v)).toFixed(1) + ' dB';
+      row('eq_pan', 'PAN', -1, 1, 0.05, selT.pan, tr('tip_pan', 'Pan "{name}" left or right', { name: selT.name }),
+        (v) => { selT.pan = v; Engine.updateTrack(selT); }, tr('act_change_pan', 'Pan'), 'pan:' + selT.id,
+        (v) => v === 0 ? 'C' : (v < 0 ? 'L' : 'R') + Math.round(Math.abs(v) * 100), 'pan');
+      row('mix_vol', 'VOL', 0, 3, 0.01, selT.volume, tr('tip_vol', 'Volume of "{name}"', { name: selT.name }),
+        (v) => { selT.volume = v; Engine.updateTrack(selT); Timeline.syncHeads(); }, tr('act_change_volume', 'Volume'), 'vol:' + selT.id,
+        dbTxt, 'volume');
+      row('mix_swing', 'SWING', 0, 0.6, 0.02, selT.swing || 0, tr('tip_track_swing', 'Swing "{name}": nudges its offbeats for groove', { name: selT.name }),
+        (v) => { selT.swing = v; if (UI.playing) Engine.liveEdit(); }, tr('act_change_swing', 'Swing'), 'swing:' + selT.id,
+        (v) => Math.round(v * 100) + '%');
+      row('mix_pump', 'PUMP', 0, 1, 0.02, selT.sidechain || 0, tr('tip_pump', 'Sidechain "{name}": ducks it on every beat for a pumping groove', { name: selT.name }),
+        (v) => { selT.sidechain = v; Engine.rescheduleSidechain(selT); }, tr('act_change_pump', 'Pump'), 'pump:' + selT.id,
+        (v) => Math.round(v * 100) + '%');
+    }
+
+    // --- compact track picker: switch tracks, mute/solo at a glance ---
+    const picker = body.querySelector('#mixPicker');
     for (const t of S.tracks) {
-      const strip = document.createElement('div');
-      strip.className = 'strip' + (t.id === UI.selTrackId ? ' sel' : '');
-      const nameEl = document.createElement('div');
-      nameEl.className = 'strip-name';
-      nameEl.style.color = t.color;
-      nameEl.textContent = t.name;
-      nameEl.addEventListener('click', () => { App.selectTrack(t.id); this.buildMixer(body); });
-      strip.appendChild(nameEl);
-
-      const panRow = document.createElement('div');
-      panRow.className = 'mix-row';
-      panRow.innerHTML = `<span class="mix-lbl">${tr('eq_pan', 'PAN')}</span>`;
-      this.mixSlider(panRow, -1, 1, 0.05, t.pan, tr('tip_pan', 'Pan "{name}" left or right', { name: t.name }),
-        (v) => { t.pan = v; Engine.updateTrack(t); }, tr('act_change_pan', 'Pan'), 'pan:' + t.id);
-      panRow.appendChild(this.autoDot(t, 'pan'));
-      strip.appendChild(panRow);
-
-      const div = document.createElement('div');
-      div.className = 'strip-div';
-      strip.appendChild(div);
-
-      const volRow = document.createElement('div');
-      volRow.className = 'mix-row';
-      volRow.innerHTML = `<span class="mix-lbl">${tr('mix_vol', 'VOL')}</span>`;
-      const db = document.createElement('div');
-      db.className = 'strip-db';
-      const setDb = (v) => { db.textContent = v <= 0.001 ? '-inf' : (20 * Math.log10(v)).toFixed(1) + ' dB'; };
-      this.mixSlider(volRow, 0, 3, 0.01, t.volume, tr('tip_vol', 'Volume of "{name}"', { name: t.name }),
-        (v) => { t.volume = v; Engine.updateTrack(t); Timeline.syncHeads(); setDb(v); },
-        tr('act_change_volume', 'Volume'), 'vol:' + t.id);
-      volRow.appendChild(this.autoDot(t, 'volume'));
-      strip.appendChild(volRow);
-      setDb(t.volume);
-      strip.appendChild(db);
-
-      // per-track swing: some tracks can groove while others stay straight
-      const swRow = document.createElement('div');
-      swRow.className = 'mix-row';
-      swRow.innerHTML = `<span class="mix-lbl">${tr('mix_swing', 'SWING')}</span>`;
-      const swVal = document.createElement('div');
-      swVal.className = 'strip-db';
-      const setSw = (v) => { swVal.textContent = Math.round(v * 100) + '%'; };
-      this.mixSlider(swRow, 0, 0.6, 0.02, t.swing || 0, tr('tip_track_swing', 'Swing "{name}": nudges its offbeats for groove', { name: t.name }),
-        (v) => { t.swing = v; setSw(v); if (UI.playing) Engine.liveEdit(); }, tr('act_change_swing', 'Swing'), 'swing:' + t.id);
-      strip.appendChild(swRow);
-      setSw(t.swing || 0);
-      strip.appendChild(swVal);
-
-      // per-track sidechain "pump": ducks the track on every beat
-      const pumpRow = document.createElement('div');
-      pumpRow.className = 'mix-row';
-      pumpRow.innerHTML = `<span class="mix-lbl">${tr('mix_pump', 'PUMP')}</span>`;
-      const pumpVal = document.createElement('div');
-      pumpVal.className = 'strip-db';
-      const setPump = (v) => { pumpVal.textContent = Math.round(v * 100) + '%'; };
-      this.mixSlider(pumpRow, 0, 1, 0.02, t.sidechain || 0, tr('tip_pump', 'Sidechain "{name}": ducks it on every beat for a pumping groove', { name: t.name }),
-        (v) => { t.sidechain = v; setPump(v); Engine.rescheduleSidechain(t); }, tr('act_change_pump', 'Pump'), 'pump:' + t.id);
-      strip.appendChild(pumpRow);
-      setPump(t.sidechain || 0);
-      strip.appendChild(pumpVal);
-
-      const ms = document.createElement('div');
-      ms.className = 'strip-ms';
+      const chip = document.createElement('div');
+      chip.className = 'mixchip' + (t.id === UI.selTrackId ? ' on' : '');
+      chip.innerHTML = `<span class="mixchip-dot" style="background:${t.color}"></span><span class="mixchip-name">${t.name}</span>`;
+      chip.addEventListener('click', (e) => {
+        if (e.target.closest('.ms-btn')) return;
+        App.selectTrack(t.id); this.buildMixer(body);
+      });
       const mBtn = document.createElement('button');
       mBtn.className = 'ms-btn mute' + (t.mute ? ' on' : '');
       mBtn.textContent = tr('mix_mute', 'M');
       mBtn.dataset.tip = tr('tip_mute', 'Mute this track');
-      mBtn.addEventListener('click', () => App.toggleMute(t));
+      mBtn.addEventListener('click', () => { App.toggleMute(t); this.buildMixer(body); });
       const sBtn = document.createElement('button');
       sBtn.className = 'ms-btn solo' + (t.solo ? ' on' : '');
       sBtn.textContent = tr('mix_solo', 'S');
       sBtn.dataset.tip = tr('tip_solo', 'Solo this track');
-      sBtn.addEventListener('click', () => App.toggleSolo(t));
-      ms.append(mBtn, sBtn);
-      strip.appendChild(ms);
-
-      strips.appendChild(strip);
+      sBtn.addEventListener('click', () => { App.toggleSolo(t); this.buildMixer(body); });
+      chip.append(mBtn, sBtn);
+      picker.appendChild(chip);
     }
 
-    // master strip
-    const m = document.createElement('div');
-    m.className = 'strip master';
-    m.innerHTML = `<div class="strip-name" style="color:var(--accent)">${tr('mix_master', 'Master')}</div><div style="flex:1"></div>`;
-    const volRow = document.createElement('div');
-    volRow.className = 'mix-row';
-    volRow.innerHTML = `<span class="mix-lbl">${tr('mix_vol', 'VOL')}</span>`;
-    const mdb = document.createElement('div');
-    mdb.className = 'strip-db';
-    const setMdb = (v) => { mdb.textContent = v <= 0.001 ? '-inf' : (20 * Math.log10(v)).toFixed(1) + ' dB'; };
-    this.mixSlider(volRow, 0, 3, 0.01, S.masterVol, tr('tip_master_vol', 'Overall volume'),
+    // --- master ---
+    const mw = body.querySelector('#mixMaster');
+    const mrow = document.createElement('div');
+    mrow.className = 'mixf-row master';
+    mrow.innerHTML = `<span class="mixf-lbl" style="color:var(--accent)">${tr('mix_master', 'Master')}</span>`;
+    const mval = document.createElement('span');
+    mval.className = 'mixf-val';
+    const setMdb = (v) => { mval.textContent = v <= 0.001 ? '-inf' : (20 * Math.log10(v)).toFixed(1) + ' dB'; };
+    this.mixSlider(mrow, 0, 3, 0.01, S.masterVol, tr('tip_master_vol', 'Overall volume'),
       (v) => { S.masterVol = v; Engine.updateAllTracks(); setMdb(v); }, tr('act_master_volume', 'Master volume'), 'vol:master');
-    m.appendChild(volRow);
+    mrow.appendChild(mval);
     setMdb(S.masterVol);
-    m.appendChild(mdb);
-    strips.appendChild(m);
+    mw.appendChild(mrow);
   },
 
   // ---------- Clip inspector ----------

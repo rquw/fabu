@@ -14,6 +14,10 @@ function freshProject() {
     metronome: false,
     countIn: false,   // 1-2-3-4 before recording (off by default)
     masterVol: 0.9,
+    loopOn: false,    // repeat a section while you work on it
+    loopStart: 0,
+    loopEnd: 8,
+    markers: [],      // song sections: [{ id, beat, name }]
     instruments: {},   // id -> custom sampler instrument { name, sampleId, root, start, end, attack, release }
     tracks: []
   };

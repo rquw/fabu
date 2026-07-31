@@ -716,6 +716,42 @@ const App = {
     toast(tr(v ? 'toast_metro_on' : 'toast_metro_off', 'Metronome ' + (v ? 'on' : 'off')));
   },
 
+  // repeat a section while you work on it
+  setLoop(v) {
+    S.loopOn = v;
+    const b = document.getElementById('btnLoop');
+    if (b) b.classList.toggle('on', v);
+    if (v && !(S.loopEnd > S.loopStart)) { S.loopStart = 0; S.loopEnd = 8; }
+    Timeline.drawRuler();
+    UI.dirty = UI.fileDirty = true;
+    toast(v ? tr('toast_loop_on', 'Repeating bar {a} to {b}', { a: Math.floor(S.loopStart / 4) + 1, b: Math.floor(S.loopEnd / 4) + 1 })
+            : tr('toast_loop_off', 'Repeat off'));
+  },
+
+  // section markers (Intro, Drop, Chorus, ...) along the ruler
+  addMarker(beat) {
+    const at = beat != null ? beat : snapBeat(UI.playhead, S.snap || 1);
+    const name = prompt(tr('marker_prompt', 'Section name'), tr('marker_default', 'Section'));
+    if (name == null) return;
+    Undo.push('Add marker');
+    if (!S.markers) S.markers = [];
+    S.markers.push({ id: uid('mk'), beat: at, name: String(name).slice(0, 24) || tr('marker_default', 'Section') });
+    S.markers.sort((a, b) => a.beat - b.beat);
+    Timeline.drawRuler();
+    toast(tr('toast_marker_added', 'Section marker added'), 'green');
+  },
+  removeMarkerNear(beat) {
+    if (!S.markers || !S.markers.length) return false;
+    const tol = 12 / UI.zoom;   // within ~12px
+    const i = S.markers.findIndex(m => Math.abs(m.beat - beat) <= tol);
+    if (i < 0) return false;
+    Undo.push('Remove marker');
+    S.markers.splice(i, 1);
+    Timeline.drawRuler();
+    toast(tr('toast_marker_removed', 'Section marker removed'));
+    return true;
+  },
+
   setBpm(v, pushUndo = true) {
     v = clamp(Math.round(v), 40, 300);
     if (v === S.bpm) return;
@@ -1398,6 +1434,7 @@ const App = {
           <button class="fbtn" data-fmt="mp3">MP3</button>
           <button class="fbtn" data-fmt="ogg"${oggOk ? '' : ' disabled'}>OGG</button>
         </div>
+        <button id="expStems" class="fbtn" style="width:100%;margin-top:8px">${tr('export_stems', 'Export stems (one file per track)')}</button>
         <div id="exportProg" class="export-prog hidden"><div id="exportBar"></div></div>
         <div id="exportStat" class="export-stat"></div>
         <div class="modal-btns"><button id="exportCancel" class="fbtn">${tr('cancel', 'Cancel')}</button></div>
@@ -1410,6 +1447,7 @@ const App = {
       if (b.disabled) return;
       this.runExport(b.dataset.fmt, wrap);
     }));
+    wrap.querySelector('#expStems').addEventListener('click', () => this.runStemExport(wrap));
   },
 
   async runExport(fmt, wrap) {
@@ -1453,6 +1491,48 @@ const App = {
     } catch (e) {
       stat.textContent = tr('toast_export_failed', 'Export failed');
       wrap.querySelectorAll('[data-fmt]').forEach(b => b.disabled = false);
+    }
+  },
+
+  // one WAV per track, so parts can go into another tool or to a collaborator
+  async runStemExport(wrap) {
+    const prog = wrap.querySelector('#exportProg');
+    const bar = wrap.querySelector('#exportBar');
+    const stat = wrap.querySelector('#exportStat');
+    const btns = wrap.querySelectorAll('[data-fmt], #expStems');
+    btns.forEach(b => b.disabled = true);
+    prog.classList.remove('hidden');
+    stat.textContent = tr('toast_stems_working', 'Rendering stems…');
+    try {
+      const stems = await Engine.renderStems((f, name) => {
+        bar.style.width = Math.round(f * 100) + '%';
+        if (name) stat.textContent = name;
+      });
+      if (!stems.length) { stat.textContent = tr('toast_export_failed', 'Export failed'); btns.forEach(b => b.disabled = false); return; }
+      const safe = (n, i) => String(i + 1).padStart(2, '0') + ' ' + String(n || 'Track').replace(/[\\/:*?"<>|]/g, '_');
+      const base = ($('#projName').value.trim() || 'Untitled');
+      let saved = 0;
+      for (let i = 0; i < stems.length; i++) {
+        const data = Engine.encodeWav(stems[i].buffer);
+        const fname = base + ' - ' + safe(stems[i].name, i) + '.wav';
+        if (window.electronAPI) {
+          const res = await window.electronAPI.saveFile({
+            defaultName: fname,
+            filters: [{ name: 'WAV Audio', extensions: ['wav'] }],
+            data: bufToB64(data), encoding: 'base64'
+          });
+          if (res.ok) saved++;
+        } else {
+          this.browserDownload(new Blob([data], { type: 'audio/wav' }), fname);
+          saved++;
+        }
+      }
+      toast(tr('toast_stems_done', 'Exported {n} stems', { n: saved }), 'green');
+      wrap.remove();
+    } catch (e) {
+      console.warn('stem export failed', e);
+      stat.textContent = tr('toast_export_failed', 'Export failed');
+      btns.forEach(b => b.disabled = false);
     }
   },
 
@@ -1513,6 +1593,8 @@ const App = {
     metroBtn.addEventListener('pointerup', () => clearTimeout(metroTimer));
     metroBtn.addEventListener('pointerleave', () => clearTimeout(metroTimer));
     metroBtn.addEventListener('click', () => { if (!metroHeld) this.setMetronome(!S.metronome); });
+    const loopBtn = document.getElementById('btnLoop');
+    if (loopBtn) loopBtn.addEventListener('click', () => this.setLoop(!S.loopOn));
     metroBtn.addEventListener('contextmenu', (e) => { e.preventDefault(); openMetroMenu(); });
     $('#btnUndo').addEventListener('click', () => Undo.undo());
     $('#btnRedo').addEventListener('click', () => Undo.redo());
@@ -1674,6 +1756,7 @@ const App = {
       // --- single letter shortcuts (disabled while playing keys) ---
       if (e.repeat) return;
       if (e.code === 'KeyM') { this.setMetronome(!S.metronome); return; }
+      if (e.code === 'KeyL') { this.setLoop(!S.loopOn); return; }
       if (e.code === 'KeyR') {
         if (KeysPanel.visible) Engine.toggleMidiRecord();
         else Engine.toggleRecord();
