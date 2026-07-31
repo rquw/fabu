@@ -74,6 +74,21 @@ function automPoints(track, param) {
   return track.autom[param];
 }
 
+// Interpolated value of a raw keyframe array at a beat (0 if empty)
+function interpPoints(pts, beat) {
+  if (!pts || !pts.length) return 0;
+  if (beat <= pts[0].beat) return pts[0].v;
+  if (beat >= pts[pts.length - 1].beat) return pts[pts.length - 1].v;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const a = pts[i], b = pts[i + 1];
+    if (beat >= a.beat && beat <= b.beat) {
+      const f = (beat - a.beat) / ((b.beat - a.beat) || 1);
+      return a.v + (b.v - a.v) * f;
+    }
+  }
+  return pts[pts.length - 1].v;
+}
+
 // Interpolated automation value at a beat, or null if the param has no keyframes
 function automValueAt(track, param, beat) {
   const pts = track.autom && track.autom[param];
@@ -110,17 +125,73 @@ function clipDurSec(clip) {
   return clip.dur != null ? Math.min(clip.dur, max) : max;
 }
 
+// ---------- automated playback rate (speed / pitch keyframes on audio) ----------
+// With speed or pitch automation the source is consumed at a VARYING rate, so
+// the clip's real length and any seek position are the INTEGRAL of that curve,
+// not a simple division. We integrate numerically once and cache a cumulative
+// table, so footprint, seeking and the waveform all agree with what plays.
+
+const _rateCache = new Map(); // clip.id -> { key, durSec, dt, table }
+
+function clipRateAutom(clip) {
+  return !!(clip && clip.kind === 'audio' && clip.autom &&
+    ((clip.autom.speed && clip.autom.speed.length) || (clip.autom.pitch && clip.autom.pitch.length)));
+}
+
+// combined playback rate at an absolute song beat (speed keyframes x pitch
+// detune; a static pitch shift is length-preserving so it does not count)
+function clipRateAtBeat(clip, beat) {
+  const sp = (clip.autom && clip.autom.speed && clip.autom.speed.length)
+    ? interpPoints(clip.autom.speed, beat) : (clip.speed || 1);
+  const pf = (clip.autom && clip.autom.pitch && clip.autom.pitch.length)
+    ? Math.pow(2, interpPoints(clip.autom.pitch, beat) / 12) : 1;
+  return Math.max(0.01, sp * pf);
+}
+
+function clipAutoInfo(clip) {
+  const avail = clipDurSec(clip);           // source seconds to consume
+  const spb = 60 / (S.bpm || 120);
+  const key = JSON.stringify([S.bpm, clip.speed || 1, avail, clip.start,
+    clip.autom && clip.autom.speed, clip.autom && clip.autom.pitch]);
+  const hit = _rateCache.get(clip.id);
+  if (hit && hit.key === key) return hit;
+  const dt = Math.min(0.02, spb / 8);
+  const CAP = 1200;                          // sanity ceiling on output length
+  const table = [0];
+  let t = 0, consumed = 0;
+  while (consumed < avail && t < CAP) {
+    consumed += clipRateAtBeat(clip, clip.start + (t + dt / 2) / spb) * dt; // midpoint rule
+    t += dt;
+    table.push(Math.min(consumed, avail));
+  }
+  const info = {
+    key, dt, table, durSec: t,
+    // source seconds consumed after `outSec` seconds of output (for seek + waveform)
+    sourceAt(outSec) {
+      const i = Math.max(0, outSec / this.dt);
+      const i0 = Math.min(this.table.length - 1, Math.floor(i));
+      const i1 = Math.min(this.table.length - 1, i0 + 1);
+      return this.table[i0] + (this.table[i1] - this.table[i0]) * (i - i0);
+    }
+  };
+  _rateCache.set(clip.id, info);
+  return info;
+}
+
 // Audio clip length in beats depends on trim, tempo and speed. Pitch shifting
-// preserves duration (so it does NOT change the length); speed does.
+// preserves duration (so it does NOT change the length); speed does. With
+// speed/pitch automation the length is the integral of the rate curve.
 function audioClipBeats(clip) {
   const s = Samples[clip.sampleId];
   if (!s || !s.buffer) return 4;
+  if (clipRateAutom(clip)) return clipAutoInfo(clip).durSec * (S.bpm / 60);
   return (clipDurSec(clip) / (clip.speed || 1)) * (S.bpm / 60);
 }
 
 function clipBeats(clip) {
   if (clip.kind === 'group') return clip.length;
-  return clip.kind === 'midi' ? clip.length : audioClipBeats(clip);
+  // a pattern's speed stretches/squashes how much timeline it takes up
+  return clip.kind === 'midi' ? clip.length / (clip.speed || 1) : audioClipBeats(clip);
 }
 
 function songEndBeat() {

@@ -5,13 +5,14 @@ const Windows = {
   wins: new Map(), // id -> { el, body, refresh }
   zTop: 30,
 
-  create(id, title, iconId, { x = 120, y = 90, width = null } = {}) {
+  create(id, title, iconId, { x = 120, y = 90, width = null, height = null } = {}) {
     this.close(id);
     const el = document.createElement('div');
     el.className = 'fwin';
     el.style.left = x + 'px';
     el.style.top = y + 'px';
     if (width) el.style.width = width + 'px';
+    if (height) { el.style.height = height + 'px'; el.style.maxHeight = 'none'; }
     el.innerHTML = `
       <div class="fwin-head">
         <svg class="ic"><use href="#${iconId}"/></svg>
@@ -408,6 +409,7 @@ const Windows = {
     }
     const { clip, track } = found;
     body.innerHTML = '';
+    body.classList.add('insp-body');
 
     const row = (labelText) => {
       const r = document.createElement('div');
@@ -432,68 +434,80 @@ const Windows = {
     });
     nameRow.appendChild(nameInp);
 
-    const slider = (labelText, min, max, step, value, fmt, tip, apply, undoLabel) => {
+    // A directly editable value field (no slider) with a generous range so you
+    // are not boxed in — type any number. `read` returns the display value from
+    // the clip, `apply` writes the display value back.
+    const numField = (labelText, read, { min, max, step = 1, unit = '', tip, clipAuto }, apply, undoLabel, automParam) => {
       const r = row(labelText);
       const inp = document.createElement('input');
-      inp.type = 'range';
-      inp.min = min; inp.max = max; inp.step = step; inp.value = value;
+      inp.type = 'number';
+      inp.className = 'insp-num';
+      inp.min = min; inp.max = max; inp.step = step;
       if (tip) inp.dataset.tip = tip;
-      inp.dataset.lk = 'insp:' + clip.id + ':' + undoLabel;
-      const val = document.createElement('span');
-      val.className = 'val';
-      val.textContent = fmt(value);
-      inp.addEventListener('input', () => {
-        if (!inp._gesture) { Undo.push(undoLabel); inp._gesture = true; }
-        const v = parseFloat(inp.value);
+      const rnd = (v) => Math.round(v * 1000) / 1000;
+      inp.value = rnd(read());
+      const commit = () => {
+        let v = parseFloat(inp.value);
+        if (isNaN(v)) v = read();
+        v = clamp(v, min, max);
+        inp.value = rnd(v);
+        Undo.push(undoLabel);
         apply(v);
-        val.textContent = fmt(v);
         Timeline.drawClip(clip.id);
-      });
-      inp.addEventListener('change', () => {
-        inp._gesture = false;
-        if (UI.playing) Engine.reschedule(); // apply the edit live, no stop/start
-      });
-      r.append(inp, val);
+        if (UI.playing) Engine.reschedule();
+      };
+      inp.addEventListener('change', commit);
+      inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') inp.blur(); });
+      r.appendChild(inp);
+      if (unit) { const u = document.createElement('span'); u.className = 'insp-unit'; u.textContent = unit; r.appendChild(u); }
+      if (automParam && Engine.AUTOM_PARAMS.includes(automParam)) r.appendChild(this.autoDot(track, automParam));
+      else if (clipAuto) {   // per-clip automation of an audio clip's pitch / speed
+        const dot = document.createElement('button');
+        const has = clip.autom && clip.autom[clipAuto] && clip.autom[clipAuto].length;
+        dot.className = 'auto-dot' + (has ? ' on' : '');
+        dot.textContent = 'A';
+        dot.dataset.tip = tr('tip_auto_dot', 'Automate this over time');
+        dot.addEventListener('click', () => Automation.openClip(clip.id, clipAuto));
+        r.appendChild(dot);
+      }
       return inp;
     };
 
     if (clip.kind === 'audio') {
-      slider(tr('insp_gain', 'Gain'), 0, 3, 0.01, clip.gain ?? 1, v => Math.round(v * 100) + '%',
-        tr('tip_clip_gain', 'Clip volume'), v => { clip.gain = v; }, 'Clip gain');
-      slider(tr('insp_pitch', 'Pitch'), -12, 12, 1, clip.pitch ?? 0, v => (v > 0 ? '+' : '') + v + ' st',
-        tr('tip_clip_pitch', 'Real pitch shift. Keeps the same length.'),
+      numField(tr('insp_gain', 'Gain'), () => (clip.gain ?? 1) * 100, { min: 0, max: 6400, step: 1, unit: '%', tip: tr('tip_clip_gain', 'Clip volume') },
+        v => { clip.gain = v / 100; }, 'Clip gain', 'gain');
+      numField(tr('insp_pitch', 'Pitch'), () => clip.pitch ?? 0, { min: -96, max: 96, step: 1, unit: 'st', tip: tr('tip_clip_pitch', 'Real pitch shift. Keeps the same length.'), clipAuto: 'pitch' },
         v => { clip.pitch = v; Timeline.render(); }, 'Clip pitch');
-      slider(tr('insp_speed', 'Speed'), 0.25, 4, 0.01, clip.speed ?? 1, v => v.toFixed(2) + 'x',
-        tr('tip_speed', 'Playback speed. Changes length and pitch.'),
+      numField(tr('insp_speed', 'Speed'), () => clip.speed ?? 1, { min: 0.05, max: 64, step: 0.05, unit: 'x', tip: tr('tip_speed', 'Playback speed. Changes length and pitch.'), clipAuto: 'speed' },
         v => { clip.speed = v; Timeline.render(); }, 'Clip speed');
-      slider(tr('insp_drive', 'Drive'), 0, 100, 1, clip.drive ?? 0, v => Math.round(v) + '%',
-        tr('tip_drive', 'Distortion / overdrive'), v => { clip.drive = v; }, 'Clip drive');
-      slider(tr('insp_crush', 'Crush'), 0, 100, 1, clip.crush ?? 0, v => Math.round(v) + '%',
-        tr('tip_crush', 'Bit crusher, lo-fi grit'), v => { clip.crush = v; }, 'Clip crush');
-      slider(tr('insp_filter', 'Filter'), 200, 20000, 100, (clip.cutoff && clip.cutoff > 0) ? clip.cutoff : 20000,
-        v => v >= 20000 ? tr('word_off', 'off') : Math.round(v) + ' Hz',
-        tr('tip_filter', 'Low-pass filter, muffles the highs'),
-        v => { clip.cutoff = v >= 20000 ? 0 : v; }, 'Clip filter');
-      slider(tr('insp_fade_in', 'Fade in'), 0, 5, 0.05, clip.fadeIn ?? 0, v => v.toFixed(2) + ' s',
-        tr('tip_fade_in', 'Fade in from silence'), v => { clip.fadeIn = v; }, 'Fade in');
-      slider(tr('insp_fade_out', 'Fade out'), 0, 5, 0.05, clip.fadeOut ?? 0, v => v.toFixed(2) + ' s',
-        tr('tip_fade_out', 'Fade out to silence'), v => { clip.fadeOut = v; }, 'Fade out');
+      numField(tr('insp_drive', 'Drive'), () => clip.drive ?? 0, { min: 0, max: 100, step: 1, unit: '%', tip: tr('tip_drive', 'Distortion / overdrive') },
+        v => { clip.drive = v; }, 'Clip drive', 'drive');
+      numField(tr('insp_crush', 'Crush'), () => clip.crush ?? 0, { min: 0, max: 100, step: 1, unit: '%', tip: tr('tip_crush', 'Bit crusher, lo-fi grit') },
+        v => { clip.crush = v; }, 'Clip crush', 'crush');
+      numField(tr('insp_filter', 'Filter'), () => (clip.cutoff && clip.cutoff > 0) ? clip.cutoff : 20000, { min: 20, max: 22000, step: 10, unit: 'Hz', tip: tr('tip_filter', 'Low-pass filter, muffles the highs') },
+        v => { clip.cutoff = v >= 20000 ? 0 : v; }, 'Clip filter', 'filter');
+      numField(tr('insp_fade_in', 'Fade in'), () => clip.fadeIn ?? 0, { min: 0, max: 30, step: 0.05, unit: 's', tip: tr('tip_fade_in', 'Fade in from silence') },
+        v => { clip.fadeIn = v; }, 'Fade in');
+      numField(tr('insp_fade_out', 'Fade out'), () => clip.fadeOut ?? 0, { min: 0, max: 30, step: 0.05, unit: 's', tip: tr('tip_fade_out', 'Fade out to silence') },
+        v => { clip.fadeOut = v; }, 'Fade out');
     } else {
-      // instrument (MIDI) clips get their own volume + transpose + effects
-      slider(tr('insp_gain', 'Gain'), 0, 3, 0.01, clip.gain ?? 1, v => Math.round(v * 100) + '%',
-        tr('tip_clip_gain', 'Clip volume'), v => { clip.gain = v; }, 'Clip gain');
-      slider(tr('insp_transpose', 'Transpose'), -24, 24, 1, clip.pitch ?? 0, v => (v > 0 ? '+' : '') + v + ' st',
-        tr('tip_transpose', 'Shift every note up or down'), v => { clip.pitch = v; }, 'Transpose');
-      slider(tr('insp_drive', 'Drive'), 0, 100, 1, clip.drive ?? 0, v => Math.round(v) + '%',
-        tr('tip_drive', 'Distortion / overdrive'), v => { clip.drive = v; }, 'Clip drive');
-      slider(tr('insp_crush', 'Crush'), 0, 100, 1, clip.crush ?? 0, v => Math.round(v) + '%',
-        tr('tip_crush', 'Bit crusher, lo-fi grit'), v => { clip.crush = v; }, 'Clip crush');
-      slider(tr('insp_filter', 'Filter'), 200, 20000, 100, (clip.cutoff && clip.cutoff > 0) ? clip.cutoff : 20000,
-        v => v >= 20000 ? tr('word_off', 'off') : Math.round(v) + ' Hz',
-        tr('tip_filter', 'Low-pass filter, muffles the highs'),
-        v => { clip.cutoff = v >= 20000 ? 0 : v; }, 'Clip filter');
+      // instrument (MIDI) clips get their own volume + transpose + fine pitch + effects
+      numField(tr('insp_gain', 'Gain'), () => (clip.gain ?? 1) * 100, { min: 0, max: 6400, step: 1, unit: '%', tip: tr('tip_clip_gain', 'Clip volume') },
+        v => { clip.gain = v / 100; }, 'Clip gain', 'gain');
+      numField(tr('insp_transpose', 'Transpose'), () => clip.pitch ?? 0, { min: -96, max: 96, step: 1, unit: 'st', tip: tr('tip_transpose', 'Shift every note up or down') },
+        v => { clip.pitch = v; }, 'Transpose', 'transpose');
+      numField(tr('insp_finepitch', 'Pitch'), () => clip.detune ?? 0, { min: -2400, max: 2400, step: 1, unit: 'cents', tip: tr('tip_finepitch', 'Fine pitch, in cents (100 = one semitone)') },
+        v => { clip.detune = v; }, 'Pitch');
+      numField(tr('insp_speed', 'Speed'), () => clip.speed ?? 1, { min: 0.05, max: 64, step: 0.05, unit: 'x', tip: tr('tip_pattern_speed', 'Play the pattern faster or slower. Changes how much timeline it takes up.') },
+        v => { clip.speed = v; Timeline.render(); }, 'Pattern speed');
+      numField(tr('insp_drive', 'Drive'), () => clip.drive ?? 0, { min: 0, max: 100, step: 1, unit: '%', tip: tr('tip_drive', 'Distortion / overdrive') },
+        v => { clip.drive = v; }, 'Clip drive', 'drive');
+      numField(tr('insp_crush', 'Crush'), () => clip.crush ?? 0, { min: 0, max: 100, step: 1, unit: '%', tip: tr('tip_crush', 'Bit crusher, lo-fi grit') },
+        v => { clip.crush = v; }, 'Clip crush', 'crush');
+      numField(tr('insp_filter', 'Filter'), () => (clip.cutoff && clip.cutoff > 0) ? clip.cutoff : 20000, { min: 20, max: 22000, step: 10, unit: 'Hz', tip: tr('tip_filter', 'Low-pass filter, muffles the highs') },
+        v => { clip.cutoff = v >= 20000 ? 0 : v; }, 'Clip filter', 'filter');
       const info = document.createElement('div');
-      info.style.cssText = 'color:var(--dim);font-size:11.5px;margin:10px 0';
+      info.className = 'insp-info';
       info.textContent = tr('insp_info', '{notes} notes, {beats} beats, {instr}',
         { notes: clip.notes.length, beats: clip.length, instr: instrLabel(track.instrument) });
       body.appendChild(info);
@@ -644,6 +658,9 @@ const Windows = {
       mkCheck(tr('set_eco', 'Reduce CPU load (weaker computers)'), Engine.ecoMode(),
         tr('tip_eco', 'Turns off the room reverb and limits voices so playback stays smooth.'),
         (v) => { Engine.setEco(v); toast(tr(v ? 'toast_eco_on' : 'toast_eco_off', 'CPU saver ' + (v ? 'on' : 'off'))); });
+      mkCheck(tr('set_scrub', 'Scrub while dragging the playhead'), Engine.scrubOn(),
+        tr('tip_scrub', 'Hear the notes under the playhead as you drag it (when stopped).'),
+        (v) => { Engine.setScrub(v); toast(tr(v ? 'toast_scrub_on' : 'toast_scrub_off', 'Scrubbing ' + (v ? 'on' : 'off'))); });
 
       // MIDI keyboard input
       if (typeof MIDI !== 'undefined' && MIDI.supported()) {
