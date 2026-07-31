@@ -13,6 +13,7 @@ let win;
 // touched until a complete, verified new version is on disk.
 let updateInfo = null;
 let updater = null;
+let pendingRestart = null; // set once an update is downloaded/ready; run on 'restart-now'
 
 function setupAutoUpdate() {
   if (!app.isPackaged) return;
@@ -32,18 +33,17 @@ function setupAutoUpdate() {
   updater.on('download-progress', (p) => {
     if (win) win.webContents.send('update-progress', Math.floor(p.percent || 0));
   });
-  updater.on('update-downloaded', async () => {
-    if (win) win.webContents.send('update-restarting');
-    quitOk = true;
-    await new Promise((r) => setTimeout(r, 700)); // let the renderer autosave
-    try { updater.quitAndInstall(false, true); } catch (e) { /* ignore */ }
+  updater.on('update-downloaded', () => {
+    // don't restart yet — let the user pick "now" or "in a minute" so they can save
+    pendingRestart = () => { quitOk = true; try { updater.quitAndInstall(false, true); } catch (e) { /* ignore */ } };
+    if (win) win.webContents.send('update-downloaded');
   });
   updater.on('error', () => {
     if (win) win.webContents.send('update-error', 'err');
   });
   updater.checkForUpdates().catch(() => {});
-  // check again every 3 hours for long sessions
-  setInterval(() => updater.checkForUpdates().catch(() => {}), 3 * 3600 * 1000);
+  // keep checking through a long session so a fresh release is noticed promptly
+  setInterval(() => updater.checkForUpdates().catch(() => {}), 15 * 60 * 1000);
 }
 
 function versionNewer(a, b) { // a > b, "1.0.10" style
@@ -131,11 +131,8 @@ async function applyUpdateMac() {
     await downloadAsset(meta, dest);
   }
 
-  // give the renderer a moment to autosave before we go down
-  if (win) win.webContents.send('update-restarting');
-  await new Promise((r) => setTimeout(r, 700));
-
-  // unpack the new fabu.app and swap it in place, then relaunch
+  // unpack the new fabu.app and swap it in place (we relaunch later, once the
+  // user picks when to restart)
   const { execFile } = require('child_process');
   const run = (cmd, args) => new Promise((res, rej) => execFile(cmd, args, (e) => (e ? rej(e) : res())));
   const dir = path.join(tmp, 'fabu-update-' + updateInfo.version);
@@ -157,10 +154,18 @@ async function applyUpdateMac() {
     await run('/bin/mv', [oldApp, curApp]); // put the old one back
     throw e;
   }
-  quitOk = true;
-  app.relaunch();
-  app.quit();
+  // the new app is in place; defer the relaunch until the user is ready
+  pendingRestart = () => { quitOk = true; app.relaunch(); app.quit(); };
+  if (win) win.webContents.send('update-downloaded');
 }
+
+// the renderer asks to actually restart (either "now" or after its 1-minute wait)
+ipcMain.on('restart-now', () => {
+  if (!pendingRestart) return;
+  const fn = pendingRestart; pendingRestart = null;
+  if (win) win.webContents.send('update-restarting'); // triggers a final autosave
+  setTimeout(fn, 500);
+});
 
 ipcMain.on('install-update', () => {
   if (!updateInfo) { shell.openExternal('https://rquw.github.io/fabu/').catch(() => {}); return; }
@@ -195,6 +200,12 @@ function createWindow() {
     }
   });
   win.loadFile('index.html');
+
+  // tell the renderer about fullscreen so it can reclaim the macOS traffic-light gutter
+  const sendFS = () => { if (win && !win.isDestroyed()) win.webContents.send('fullscreen-changed', win.isFullScreen()); };
+  win.on('enter-full-screen', sendFS);
+  win.on('leave-full-screen', sendFS);
+  win.webContents.on('did-finish-load', sendFS);
 
   // open external links (Ko-fi, GitHub, etc.) in the real browser, not a blank window
   win.webContents.setWindowOpenHandler(({ url }) => {
@@ -256,6 +267,17 @@ ipcMain.handle('save-file', async (e, { defaultName, filters, data, encoding }) 
       fs.writeFileSync(res.filePath, data, 'utf8');
     }
     return { ok: true, path: res.filePath, name: path.basename(res.filePath) };
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  }
+});
+
+// write straight to a known path (a project that already has a .fab file) — no dialog
+ipcMain.handle('write-file', async (e, { filePath, data, encoding }) => {
+  try {
+    if (encoding === 'base64') fs.writeFileSync(filePath, Buffer.from(data, 'base64'));
+    else fs.writeFileSync(filePath, data, 'utf8');
+    return { ok: true, path: filePath, name: path.basename(filePath) };
   } catch (err) {
     return { ok: false, error: String(err) };
   }

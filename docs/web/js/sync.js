@@ -19,10 +19,12 @@ const Sync = {
 
   me: null,           // { id, name, color, joinTs }
   isHost: false,
-  settings: { allowLate: true, approve: false, maxPlayers: 100 },
+  settings: { allowLate: true, approve: false, maxPlayers: 100, allowMic: true, allowCustomAudio: true, approveAudio: false, perms: {} },
   started: false,     // set once the host presses play; gates late joins
   peers: new Map(),   // id -> { name, color, host, joinTs, lastSeen }
   pendingReqs: [],    // host only: [{id, name, ts}]
+  pendingAudio: [],   // host only: [{reqId, from, name, sample, place, buffer, ts}]
+  selPlayers: new Set(), // host only: shift-selected player ids (for kick-all-except)
   bans: {},           // host only: name -> untilTs
   locks: new Map(),   // key -> { id, name, ts }
   myLocks: new Set(),
@@ -62,6 +64,65 @@ const Sync = {
 
   banKey(room) { return 'fabu.ban.' + room + '.' + ((Auth && Auth.user) || ''); },
 
+  // ---------- per-user permissions (host is the source of truth) ----------
+  // A user's effective right = their per-name override if set, else the room
+  // default. The host broadcasts settings (incl. perms) via presence/admit, so
+  // every client can gate its own actions. This is host-enforced moderation:
+  // the relay is a dumb broadcaster, so the client refuses disallowed actions.
+  permOverride(name) {
+    const perms = (this.settings && this.settings.perms) || {};
+    return perms[name] || null;
+  },
+  // is a customAudio override still in force, or has its timer run out?
+  overrideLive(ov) { return ov && !(ov.customAudioUntil && ov.customAudioUntil < Date.now()); },
+  // pure per-user resolution (ignores who the local user is) — used by the
+  // management panel to show any user's real permission state
+  micRight(name) {
+    const ov = this.permOverride(name);
+    if (ov && ov.mic != null) return !!ov.mic;
+    return this.settings.allowMic !== false;
+  },
+  canMic(name) {
+    if (!this.connected || !this.admitted || this.isHost) return true;
+    return this.micRight(name || (this.me && this.me.name));
+  },
+  // Effective custom-audio right for a user: true (add directly),
+  // 'approve' (must be reviewed by the host), or false (not allowed at all).
+  // An explicit per-user override wins: true = trusted bypass, false = banned
+  // (optionally until customAudioUntil).
+  customAudioRight(name) {
+    name = name || (this.me && this.me.name);
+    const ov = this.permOverride(name);
+    if (ov && ov.customAudio != null && this.overrideLive(ov)) return ov.customAudio ? true : false;
+    if (this.settings.allowCustomAudio === false) return false;
+    if (this.settings.approveAudio) return 'approve';
+    return true;
+  },
+  canCustomAudio(name) {
+    if (!this.connected || !this.admitted || this.isHost) return true;
+    return this.customAudioRight(name) === true;
+  },
+  // what happens when the local user tries to add a custom sound
+  audioAction() {
+    if (!this.connected || !this.admitted || this.isHost) return 'allow';
+    const r = this.customAudioRight(this.me.name);
+    return r === true ? 'allow' : (r === 'approve' ? 'approve' : 'block');
+  },
+  // Gate for entry points that can't route through approval (the sampler).
+  // Returns true if the caller must STOP.
+  blockCustomAudio() {
+    const a = this.audioAction();
+    if (a === 'allow') return false;
+    if (a === 'approve') toast(tr('mp_audio_needs_approval', 'Drop the file onto the timeline so the host can review it.'));
+    else toast(tr('mp_no_custom_audio', 'The host turned off custom sounds in this room.'), 'red');
+    return true;
+  },
+  blockMic() {
+    if (this.canMic()) return false;
+    toast(tr('mp_no_mic', 'The host turned off microphone recording in this room.'), 'red');
+    return true;
+  },
+
   connect(room, asHost = false, settings = null) {
     room = room.toUpperCase().trim();
     const banUntil = parseInt(localStorage.getItem(this.banKey(room)) || '0');
@@ -78,12 +139,13 @@ const Sync = {
     // otherwise it wipes everyone's work the moment it connects.
     this.synced = asHost;
     this.started = false;
-    if (settings) this.settings = Object.assign({ allowLate: true, approve: false, maxPlayers: 100 }, settings);
+    if (settings) this.settings = Object.assign({ allowLate: true, approve: false, maxPlayers: 100, allowMic: true, allowCustomAudio: true, approveAudio: false, perms: {} }, settings);
+    if (!this.settings.perms) this.settings.perms = {};
     this.settings.maxPlayers = clamp(this.settings.maxPlayers || 100, 2, 100);
     this.me = { id: uid('p'), name: (Auth && Auth.user) || 'anon', joinTs: Date.now() };
     this.me.color = hashColor(this.me.name);
     this.peers.clear(); this.locks.clear(); this.cursors.clear();
-    this.pendingReqs = []; this.sharedSamples.clear(); this.lastSent = '';
+    this.pendingReqs = []; this.pendingAudio = []; this.sharedSamples.clear(); this.lastSent = '';
     this.rev = 0; this.pending = null;
     this.setStatus('connecting');
 
@@ -103,7 +165,8 @@ const Sync = {
       this.send({ type: 'join', room });
       if (asHost) {
         this.setStatus('online');
-        toast(tr('mp_room_created', 'Room {room} created', { room }), 'green');
+        // never surface the code here (streamers) - it only appears in the reveal control
+        toast(tr('mp_room_created', 'Room created'), 'green');
         this.afterAdmit();
       } else {
         this.setStatus('connecting');
@@ -111,7 +174,7 @@ const Sync = {
         // if nobody answers, give up politely
         this.knockTimer = setTimeout(() => {
           if (!this.admitted) {
-            toast(tr('mp_no_answer', 'No answer from that room'), 'red');
+            toast(tr('mp_no_answer', 'Invalid Code'), 'red');
             this.disconnect();
           }
         }, 12000);
@@ -222,6 +285,8 @@ const Sync = {
     this.following = null;
     clearInterval(this.periodTimer); clearInterval(this.presenceTimer);
     this.peers.clear(); this.locks.clear(); this.cursors.clear(); this.remotePH.clear(); this.pendingReqs = [];
+    this.pendingAudio = [];
+    const rev = document.getElementById('audioReview'); if (rev) rev.remove();
     this.myLocks.clear();
     this.room = null;
     this.setStatus('offline');
@@ -308,6 +373,18 @@ const Sync = {
         }
         break;
 
+      case 'audioreq':
+        if (this.isHost) this.handleAudioReq(m);
+        break;
+
+      case 'audiookay':
+        if (m.to === this.me.id) toast(tr('mp_audio_approved', 'The host added your sound'), 'green');
+        break;
+
+      case 'audiodeny':
+        if (m.to === this.me.id) toast(tr('mp_audio_denied', 'The host declined your sound'), 'red');
+        break;
+
       case 'cursor':
         if (m.id !== this.me.id) {
           this.cursors.set(m.id, { beat: m.beat, y: m.y, fx: m.fx, fy: m.fy, over: m.over, ts: Date.now(), name: m.name, color: m.color });
@@ -338,6 +415,19 @@ const Sync = {
           localStorage.setItem(this.banKey(this.room), String(m.until || 0));
           this.disconnect(true);
           this.showKickedModal(m.until);
+        }
+        break;
+
+      case 'migrate':
+        // host is rotating the room code: move to the new channel but stay in.
+        // Only trust it from the known host (a peer flagged host in our map).
+        if (!this.isHost && m.to && m.from) {
+          const src = this.peers.get(m.from);
+          if (src && src.host && m.to !== this.room) {
+            this.room = m.to;
+            this.send({ type: 'join', room: m.to });
+            this.renderPanel();
+          }
         }
         break;
 
@@ -395,6 +485,326 @@ const Sync = {
     this.renderRequests();
   },
 
+  // ---------- custom-audio approval (host reviews sounds from guests) ----------
+
+  // guest: hand the files to the host for review instead of adding them ourselves
+  async requestAudioFiles(files, place) {
+    const hostEntry = [...this.peers].find(([, p]) => p.host);
+    const hostId = hostEntry ? hostEntry[0] : null;
+    let sent = 0;
+    for (const f of files) {
+      if (f.size > 25 * 1024 * 1024) { toast(tr('mp_audio_too_big', '"{name}" is too big to send for review', { name: f.name }), 'red'); continue; }
+      try {
+        const bytes = await f.arrayBuffer();
+        this.send({
+          type: 'audioreq', to: hostId, reqId: uid('areq'),
+          from: this.me.id, name: this.me.name,
+          sample: { name: f.name.replace(/\.[^.]+$/, ''), mime: f.type || 'audio/*', data: bufToB64(bytes) },
+          place: { beat: place && place.beat != null ? place.beat : null, trackId: (place && place.trackId) || null }
+        });
+        sent++;
+      } catch (e) { /* unreadable file */ }
+    }
+    if (sent) toast(tr('mp_audio_sent', 'Sent to the host for review'));
+  },
+
+  // host: a review request arrived
+  async handleAudioReq(m) {
+    if (!m.sample || !m.sample.data) return;
+    const ov = this.permOverride(m.name);
+    if (ov && ov.customAudio === false && this.overrideLive(ov)) { this.send({ type: 'audiodeny', to: m.from, reqId: m.reqId }); return; }
+    if (this.pendingAudio.some(r => r.reqId === m.reqId)) return;
+    if (this.pendingAudio.length > 40) return; // flood guard
+    let buffer = null;
+    try { Engine.ensureCtx(); buffer = await Engine.ctx.decodeAudioData(b64ToBuf(m.sample.data).slice(0)); }
+    catch (e) { this.send({ type: 'audiodeny', to: m.from, reqId: m.reqId }); return; }
+    this.pendingAudio.push({ reqId: m.reqId, from: m.from, name: m.name, sample: m.sample, place: m.place || {}, buffer, ts: Date.now() });
+    toast(tr('mp_audio_wants', '{name} wants to add a sound', { name: m.name }));
+    this.showAudioReview();
+  },
+
+  stopReviewAudio() {
+    if (this._revSrc) { try { this._revSrc.onended = null; this._revSrc.stop(); } catch (e) {} this._revSrc = null; }
+    if (this._revRAF) { cancelAnimationFrame(this._revRAF); this._revRAF = null; }
+  },
+
+  showAudioReview() {
+    let wrap = document.getElementById('audioReview');
+    if (!this.pendingAudio.length) { this.stopReviewAudio(); if (this._revGain) { try { this._revGain.disconnect(); } catch (e) {} this._revGain = null; } if (wrap) wrap.remove(); return; }
+    const req = this.pendingAudio[0];
+    if (!wrap) {
+      wrap = document.createElement('div');
+      wrap.id = 'audioReview';
+      wrap.className = 'modal-back';
+      document.body.appendChild(wrap);
+    }
+    const more = this.pendingAudio.length - 1;
+    wrap.innerHTML = `
+      <div class="modal-card ar-card">
+        <div class="modal-title">${tr('mp_audio_review_title', '{name} wants to add this sound:', { name: req.name })}</div>
+        <div class="ar-name">${req.sample.name}</div>
+        <div class="ar-player">
+          <canvas class="ar-wave" width="520" height="72"></canvas>
+          <div class="ar-scrub"><div class="ar-scrub-fill"></div><div class="ar-scrub-head"></div></div>
+          <div class="ar-controls">
+            <button class="fbtn ar-play"><svg class="ic"><use href="#i-play"/></svg></button>
+            <span class="ar-time">0:00</span>
+            <span style="flex:1"></span>
+            <span class="ar-vol-lbl">${tr('mp_volume', 'Vol')}</span>
+            <input type="range" class="ar-vol" min="0" max="1" step="0.01" value="1">
+          </div>
+        </div>
+        ${more > 0 ? `<div class="ar-more">${tr('mp_audio_more', '{n} more waiting', { n: more })}</div>` : ''}
+        <div class="modal-btns">
+          <button class="fbtn danger ar-deny">${tr('mp_deny', 'Deny')}</button>
+          <button class="fbtn accent ar-approve">${tr('mp_approve_btn', 'Approve')}</button>
+        </div>
+      </div>`;
+    this.stopReviewAudio();
+    this.wireReviewPlayer(wrap, req);
+    wrap.querySelector('.ar-approve').addEventListener('click', () => this.approveAudioReq(req));
+    wrap.querySelector('.ar-deny').addEventListener('click', () => this.denyAudioReq(req, wrap));
+  },
+
+  wireReviewPlayer(wrap, req) {
+    const buf = req.buffer;
+    const canvas = wrap.querySelector('.ar-wave');
+    const cx = canvas.getContext('2d');
+    const W = canvas.width, H = canvas.height;
+    const ch = buf.getChannelData(0);
+    const bars = 130, step = Math.floor(ch.length / bars) || 1;
+    const accent = (getComputedStyle(document.documentElement).getPropertyValue('--accent') || '#e07a3f').trim();
+    const drawWave = (progress) => {
+      cx.clearRect(0, 0, W, H);
+      const bw = W / bars;
+      for (let i = 0; i < bars; i++) {
+        let peak = 0;
+        for (let j = 0; j < step; j++) { const v = Math.abs(ch[i * step + j] || 0); if (v > peak) peak = v; }
+        const h = Math.max(1, peak * (H * 0.9));
+        cx.fillStyle = (i / bars) <= progress ? accent : 'rgba(255,255,255,0.18)';
+        cx.fillRect(i * bw, (H - h) / 2, Math.max(1, bw - 1), h);
+      }
+    };
+    const playBtn = wrap.querySelector('.ar-play');
+    const fill = wrap.querySelector('.ar-scrub-fill');
+    const head = wrap.querySelector('.ar-scrub-head');
+    const timeEl = wrap.querySelector('.ar-time');
+    const vol = wrap.querySelector('.ar-vol');
+    const dur = buf.duration || 0.01;
+    let offset = 0, startedAt = 0, playing = false;
+    if (this._revGain) { try { this._revGain.disconnect(); } catch (e) {} }
+    const gain = Engine.ctx.createGain(); gain.gain.value = parseFloat(vol.value); gain.connect(Engine.ctx.destination);
+    this._revGain = gain;
+    const fmt = (s) => Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStart(2, '0');
+    const setProg = (p) => { p = clamp(p, 0, 1); fill.style.width = (p * 100) + '%'; head.style.left = (p * 100) + '%'; drawWave(p); timeEl.textContent = fmt(p * dur); };
+    const setIcon = (name) => { const u = playBtn.querySelector('use'); if (u) u.setAttribute('href', '#i-' + name); };
+    setProg(0);
+    const stop = () => { this.stopReviewAudio(); playing = false; playBtn.classList.remove('on'); setIcon('play'); };
+    const tick = () => {
+      if (!playing) return;
+      const t = offset + (Engine.ctx.currentTime - startedAt);
+      if (t >= dur) { stop(); setProg(0); offset = 0; return; }
+      setProg(t / dur);
+      this._revRAF = requestAnimationFrame(tick);
+    };
+    const play = (from) => {
+      this.stopReviewAudio();
+      offset = from != null ? from : offset;
+      const src = Engine.ctx.createBufferSource();
+      src.buffer = buf; src.connect(gain);
+      src.onended = () => { if (this._revSrc === src) { playing = false; playBtn.classList.remove('on'); setIcon('play'); } };
+      src.start(0, offset);
+      this._revSrc = src; startedAt = Engine.ctx.currentTime; playing = true;
+      playBtn.classList.add('on'); setIcon('pause');
+      this._revRAF = requestAnimationFrame(tick);
+    };
+    playBtn.addEventListener('click', () => { Engine.ctx.resume(); playing ? stop() : play(); });
+    vol.addEventListener('input', () => { gain.gain.value = parseFloat(vol.value); });
+    const scrub = wrap.querySelector('.ar-scrub');
+    scrub.addEventListener('click', (e) => {
+      const r = scrub.getBoundingClientRect();
+      const p = clamp((e.clientX - r.left) / r.width, 0, 1);
+      offset = p * dur; setProg(p);
+      if (playing) play(offset);
+    });
+  },
+
+  approveAudioReq(req) {
+    const id = uid('smp');
+    const bytes = b64ToBuf(req.sample.data);
+    Samples[id] = { id, name: req.sample.name, buffer: req.buffer, bytes, mime: req.sample.mime };
+    Undo.push('Add reviewed sound');
+    let track = req.place && req.place.trackId ? getTrack(req.place.trackId) : null;
+    if (!track || track.kind !== 'audio') track = S.tracks.find(t => t.kind === 'audio') || null;
+    if (!track) { track = makeTrack('audio'); S.tracks.push(track); Engine.rebuildTracks(); }
+    const at = (req.place && req.place.beat != null) ? req.place.beat : 0;
+    const clip = { id: uid('clip'), kind: 'audio', name: req.sample.name, by: req.name, start: at, sampleId: id, fadeIn: 0, fadeOut: 0, pitch: 0, gain: 1 };
+    clip.start = Timeline.firstFreeStart(track, clipBeats(clip), at, null);
+    track.clips.push(clip);
+    Timeline.render(); Windows.refreshAll();
+    this.sharedSamples.clear(); this.lastSent = '';
+    this.broadcast(true);
+    this.send({ type: 'audiookay', to: req.from, reqId: req.reqId });
+    toast(tr('mp_audio_added', 'Added {name} from {who}', { name: req.sample.name, who: req.name }), 'green');
+    this.pendingAudio = this.pendingAudio.filter(r => r !== req);
+    this.showAudioReview();
+  },
+
+  denyAudioReq(req, wrap) {
+    this.stopReviewAudio();
+    wrap.innerHTML = `
+      <div class="modal-card">
+        <div class="modal-title">${tr('mp_ban_audio_title', 'Ban {name} from adding sounds?', { name: req.name })}</div>
+        <div class="modal-sub">${tr('mp_ban_audio_sub', 'They will not be able to add or request custom sounds for a while.')}</div>
+        <div class="ar-ban-row">
+          <span>${tr('mp_ban_for', 'For')}</span>
+          <input type="number" class="ar-ban-num" min="1" value="15">
+          <select class="ar-ban-unit">
+            <option value="1000">${tr('mp_unit_sec', 'seconds')}</option>
+            <option value="60000" selected>${tr('mp_unit_min', 'minutes')}</option>
+            <option value="3600000">${tr('mp_unit_hr', 'hours')}</option>
+          </select>
+        </div>
+        <div class="modal-btns" style="flex-direction:column;align-items:stretch">
+          <button class="fbtn danger ar-ban-go">${tr('mp_deny_and_ban', 'Deny and ban')}</button>
+          <button class="fbtn ar-just-deny">${tr('mp_just_deny', 'Just deny')}</button>
+        </div>
+      </div>`;
+    const finish = () => { this.pendingAudio = this.pendingAudio.filter(r => r !== req); this.showAudioReview(); };
+    wrap.querySelector('.ar-just-deny').addEventListener('click', () => {
+      this.send({ type: 'audiodeny', to: req.from, reqId: req.reqId });
+      finish();
+    });
+    wrap.querySelector('.ar-ban-go').addEventListener('click', () => {
+      const n = Math.max(1, parseInt(wrap.querySelector('.ar-ban-num').value) || 15);
+      const unit = parseInt(wrap.querySelector('.ar-ban-unit').value) || 60000;
+      this.setAudioBan(req.name, n * unit);
+      this.send({ type: 'audiodeny', to: req.from, reqId: req.reqId });
+      finish();
+    });
+  },
+
+  // revoke a user's custom-audio right for a while (0 = until the room closes)
+  setAudioBan(name, durMs) {
+    if (!this.settings.perms) this.settings.perms = {};
+    const prev = this.settings.perms[name] || {};
+    this.settings.perms[name] = Object.assign({}, prev, { customAudio: false, customAudioUntil: durMs > 0 ? Date.now() + durMs : 0 });
+    this.sendPresence();
+    toast(tr('mp_audio_banned', '{name} can no longer add sounds', { name }), 'red');
+  },
+
+  // host: let expired audio bans lapse and tell everyone
+  pruneAudioBans() {
+    if (!this.isHost || !this.settings.perms) return;
+    const now = Date.now();
+    let changed = false;
+    for (const [name, ov] of Object.entries(this.settings.perms)) {
+      if (ov && ov.customAudio === false && ov.customAudioUntil && ov.customAudioUntil < now) {
+        delete ov.customAudio; delete ov.customAudioUntil;
+        if (!Object.keys(ov).length) delete this.settings.perms[name];
+        changed = true;
+      }
+    }
+    if (changed) this.sendPresence();
+  },
+
+  // ---------- manage people (host): permissions + bans ----------
+
+  openManage() { this.renderManage(true); },
+
+  // set or clear a per-user permission override (mic / customAudio)
+  setPerm(name, key, val) {
+    if (!this.isHost) return;
+    if (!this.settings.perms) this.settings.perms = {};
+    const ov = this.settings.perms[name] || (this.settings.perms[name] = {});
+    ov[key] = val;
+    if (key === 'customAudio') delete ov.customAudioUntil; // a manual choice clears any timed ban
+    this.sendPresence();
+    this.renderManage();
+    this.renderPanel();
+  },
+  clearPerm(name) {
+    if (this.settings.perms) delete this.settings.perms[name];
+    this.sendPresence();
+    this.renderManage();
+  },
+  liftRoomBan(name) {
+    if (this.bans) delete this.bans[name];
+    toast(tr('mp_unbanned', '{name} can rejoin', { name }), 'green');
+    this.renderManage();
+  },
+
+  banLabel(until) {
+    if (!until) return '';
+    const ms = until - Date.now();
+    if (ms <= 0) return '';
+    const m = Math.ceil(ms / 60000);
+    if (m < 60) return tr('mp_ban_mins', '{n}m left', { n: m });
+    return tr('mp_ban_hrs', '{n}h left', { n: Math.ceil(m / 60) });
+  },
+
+  renderManage(create = false) {
+    let wrap = document.getElementById('manageModal');
+    if (!wrap && !create) return;
+    if (!this.isHost) { if (wrap) wrap.remove(); return; }
+    if (!wrap) {
+      wrap = document.createElement('div');
+      wrap.id = 'manageModal';
+      wrap.className = 'modal-back';
+      wrap.addEventListener('mousedown', (e) => { if (e.target === wrap) wrap.remove(); });
+      document.body.appendChild(wrap);
+    }
+    const filter = ((wrap.querySelector('#mgSearch') || {}).value || '').toLowerCase();
+    const now = Date.now();
+    const inRoom = new Set([this.me && this.me.name, ...[...this.peers.values()].map(p => p.name)]);
+    const names = new Set([...inRoom]);
+    for (const n of Object.keys(this.settings.perms || {})) names.add(n);
+    for (const [n, until] of Object.entries(this.bans || {})) if (until > now) names.add(n);
+    const list = [...names].filter(n => n && n !== (this.me && this.me.name) && n.toLowerCase().includes(filter)).sort();
+
+    wrap.innerHTML = `
+      <div class="modal-card mg-card">
+        <div class="modal-title">${tr('mp_manage', 'Manage people')}</div>
+        <div class="modal-sub">${tr('mp_manage_sub', 'Choose who can add custom sounds or record from the mic, and lift bans.')}</div>
+        <input id="mgSearch" type="text" placeholder="${tr('mp_search', 'Search names')}" value="${filter}">
+        <div class="mg-head"><span class="mg-h-name"></span><span class="mg-h-col">${tr('mp_col_mic', 'Mic')}</span><span class="mg-h-col">${tr('mp_col_sounds', 'Sounds')}</span></div>
+        <div id="mgList" class="mg-list"></div>
+        <div class="modal-btns"><button id="mgClose" class="fbtn">${tr('close', 'Close')}</button></div>
+      </div>`;
+    const listEl = wrap.querySelector('#mgList');
+    if (!list.length) {
+      listEl.innerHTML = `<div class="req-empty">${tr('mp_manage_empty', 'Nobody to manage yet.')}</div>`;
+    }
+    for (const name of list) {
+      const here = inRoom.has(name);
+      const roomBan = this.bans && this.bans[name] > now ? this.bans[name] : 0;
+      const ov = this.permOverride(name);
+      const soundBan = ov && ov.customAudio === false && this.overrideLive(ov) ? (ov.customAudioUntil || -1) : 0;
+      const row = document.createElement('div');
+      row.className = 'mg-row';
+      row.innerHTML = `
+        <span class="jam-pdot" style="background:${hashColor(name)}"></span>
+        <span class="mg-name">${name}${here ? '' : ` <i class="mg-away">(${tr('mp_not_here', 'not here')})</i>`}
+          ${roomBan ? `<span class="mg-badge">${tr('mp_room_banned', 'Room banned')} ${this.banLabel(roomBan)}</span>` : ''}
+          ${soundBan ? `<span class="mg-badge">${tr('mp_sound_banned', 'Sound banned')}${soundBan > 0 ? ' ' + this.banLabel(soundBan) : ''}</span>` : ''}
+        </span>
+        <label class="mg-tog"><input type="checkbox" class="mg-mic" ${this.micRight(name) ? 'checked' : ''}></label>
+        <label class="mg-tog"><input type="checkbox" class="mg-snd" ${this.customAudioRight(name) === true ? 'checked' : ''}></label>`;
+      row.querySelector('.mg-mic').addEventListener('change', (e) => this.setPerm(name, 'mic', e.target.checked));
+      row.querySelector('.mg-snd').addEventListener('change', (e) => this.setPerm(name, 'customAudio', e.target.checked));
+      if (roomBan) {
+        const un = document.createElement('button');
+        un.className = 'fbtn mg-unban';
+        un.textContent = tr('mp_unban', 'Unban');
+        un.addEventListener('click', () => this.liftRoomBan(name));
+        row.appendChild(un);
+      }
+      listEl.appendChild(row);
+    }
+    wrap.querySelector('#mgSearch').addEventListener('input', () => this.renderManage());
+    wrap.querySelector('#mgClose').addEventListener('click', () => wrap.remove());
+  },
+
   sendPresence() {
     const p = {
       type: 'presence', id: this.me.id, name: this.me.name, color: this.me.color,
@@ -418,6 +828,7 @@ const Sync = {
       }
     }
     for (const [key, l] of this.locks) if (now - l.ts > 15000) this.locks.delete(key);
+    if (this.isHost) this.pruneAudioBans();
     if (lostHost) this.hostLost();
     if (changed) { this.renderPanel(); this.renderCursors(); }
   },
@@ -486,6 +897,40 @@ const Sync = {
     this.peers.delete(peerId);
     this.cursors.delete(peerId);
     toast(tr('mp_kicked_toast', '{name} was removed', { name: p.name }));
+    this.renderPanel();
+    this.renderCursors();
+  },
+
+  // rotate the room code: everyone here moves to the new channel, the leaked
+  // code stops admitting anyone new. (Relay stays a dumb broadcaster; members
+  // re-join the new channel on the host's signal.)
+  cycleCode() {
+    if (!this.isHost) return;
+    const newCode = this.generateCode();
+    this.send({ type: 'migrate', from: this.me.id, to: newCode }); // tell current members (sent on the old channel)
+    this.room = newCode;
+    this.send({ type: 'join', room: newCode });
+    this.renderPanel();
+    toast(tr('mp_code_cycled', 'New room code set. The old one no longer works.'), 'green');
+  },
+
+  // remove everyone except the given ids (the host is always kept)
+  kickAllExcept(keepIds, durationMs) {
+    if (!this.isHost) return;
+    const keep = new Set(keepIds);
+    keep.add(this.me.id);
+    const targets = [...this.peers.keys()].filter(id => !keep.has(id));
+    const until = durationMs > 0 ? Date.now() + durationMs : Date.now() + 100 * 365 * 24 * 3600e3;
+    for (const id of targets) {
+      const pr = this.peers.get(id);
+      if (!pr) continue;
+      this.bans[pr.name] = until;
+      this.send({ type: 'kick', to: id, until });
+      this.peers.delete(id);
+      this.cursors.delete(id);
+    }
+    if (this.selPlayers) this.selPlayers.clear();
+    toast(tr('mp_kicked_all', 'Removed {n} people', { n: targets.length }));
     this.renderPanel();
     this.renderCursors();
   },
@@ -876,7 +1321,7 @@ const Sync = {
         ? tr('mp_not_connected', 'Not in a room. Open Multiplayer from the home menu, or create a room now.')
         : this.connected
           ? tr('mp_waiting', 'Waiting for the host to let you in…')
-          : tr('mp_connecting', 'Setting up room {room}…', { room: this.room });
+          : tr('mp_connecting', 'Connecting (might take a minute)');
       p.innerHTML = `
         <div class="jam-head"><svg class="ic"><use href="#i-users"/></svg>
           <span>${inRoom ? tr('mp_room', 'Room') : tr('jam_title', 'Jam together')}</span></div>
@@ -898,7 +1343,10 @@ const Sync = {
         <span style="flex:1"></span>
         <span class="jam-dot" style="background:var(--green)"></span>
         <span class="jam-status">${players.length}/${this.settings.maxPlayers}</span></div>
-      <button id="jamCode" class="jam-code" data-tip="${tr('mp_code_tip', 'Click to reveal, click again to copy')}">${tr('mp_code_hidden', 'Code: click to reveal')}</button>
+      <div class="jam-code-row">
+        <button id="jamCode" class="jam-code" data-tip="${tr('mp_code_tip', 'Click to reveal, again to copy, again to hide')}">${tr('mp_code_hidden', 'Code: click to reveal')}</button>
+        ${this.isHost ? `<button id="jamCycle" class="jam-cycle" data-tip="${tr('mp_cycle_tip', 'New code — the old one stops working, everyone here stays')}"><svg class="ic"><use href="#i-redo"/></svg></button>` : ''}
+      </div>
       <div id="jamPlayers"></div>
       ${this.isHost && this.settings.approve ? `<button id="jamReqBtn" class="fbtn jam-req">${tr('mp_requests', 'Requests')}${this.pendingReqs.length ? `<span class="req-badge">${this.pendingReqs.length}</span>` : ''}</button>` : ''}
       ${this.isHost ? `
@@ -906,22 +1354,32 @@ const Sync = {
         <label class="jam-check"><input type="checkbox" id="jamAllowLate" ${this.settings.allowLate ? 'checked' : ''}> ${tr('mp_allow_late', 'Allow joining after start')}</label>
         <label class="jam-check"><input type="checkbox" id="jamApprove" ${this.settings.approve ? 'checked' : ''}> ${tr('mp_approve', 'Approve joining')}</label>
         <label class="jam-check">${tr('mp_max_players', 'Max players')} <input type="number" id="jamMax" min="2" max="100" value="${this.settings.maxPlayers}"></label>
+        <div class="jam-set-sep">${tr('mp_rules', 'Room rules')}</div>
+        <label class="jam-check"><input type="checkbox" id="jamAllowMic" ${this.settings.allowMic !== false ? 'checked' : ''}> ${tr('mp_allow_mic', 'Allow microphone recording for everybody')}</label>
+        <label class="jam-check"><input type="checkbox" id="jamAllowAudio" ${this.settings.allowCustomAudio !== false ? 'checked' : ''}> ${tr('mp_allow_audio', 'Allow custom audio files from everybody')}</label>
+        <label class="jam-check jam-check-sub"><input type="checkbox" id="jamApproveAudio" ${this.settings.approveAudio ? 'checked' : ''} ${this.settings.allowCustomAudio === false ? 'disabled' : ''}> ${tr('mp_approve_audio', 'Manually approve custom audio files')}</label>
+        <button id="jamManage" class="fbtn jam-manage">${tr('mp_manage', 'Manage people')}</button>
       </div>` : ''}
       <div class="jam-row"><button id="jamLeave" class="fbtn danger" style="flex:1">${tr('jam_disconnect', 'Leave')}</button></div>`;
 
-    // room code reveal / copy
+    // room code: click to reveal, again to copy, again to hide
     const codeBtn = p.querySelector('#jamCode');
-    let revealed = false;
+    let codeState = 0; // 0 hidden, 1 revealed, 2 copied
     codeBtn.addEventListener('click', () => {
-      if (!revealed) { codeBtn.textContent = this.room; codeBtn.classList.add('revealed'); revealed = true; }
-      else { navigator.clipboard && navigator.clipboard.writeText(this.room); toast(tr('mp_code_copied', 'Code copied')); }
+      if (codeState === 0) { codeBtn.textContent = this.room; codeBtn.classList.add('revealed'); codeState = 1; }
+      else if (codeState === 1) { if (navigator.clipboard) navigator.clipboard.writeText(this.room); toast(tr('mp_code_copied', 'Code copied')); codeState = 2; }
+      else { codeBtn.textContent = tr('mp_code_hidden', 'Code: click to reveal'); codeBtn.classList.remove('revealed'); codeState = 0; }
     });
+    const cyc = p.querySelector('#jamCycle');
+    if (cyc) cyc.addEventListener('click', () => this.cycleCode());
 
     // players
     const list = p.querySelector('#jamPlayers');
+    if (!this.selPlayers) this.selPlayers = new Set();
     for (const pl of players) {
       const row = document.createElement('div');
-      row.className = 'jam-player' + (this.following === pl.id ? ' following' : '') + (pl.me ? '' : ' clickable');
+      const sel = this.isHost && this.selPlayers.has(pl.id);
+      row.className = 'jam-player' + (this.following === pl.id ? ' following' : '') + (pl.me ? '' : ' clickable') + (sel ? ' mp-selected' : '');
       row.innerHTML = `
         <span class="jam-pdot" style="background:${pl.color}"></span>
         <span class="jam-pname">${pl.name}${pl.me ? ' <i>(' + tr('mp_you', 'you') + ')</i>' : ''}</span>
@@ -929,7 +1387,17 @@ const Sync = {
         ${this.following === pl.id ? `<span class="jam-eye" data-tip="${tr('mp_following_tip', 'Following — click to stop')}"><svg class="ic"><use href="#i-eye"/></svg></span>` : ''}`;
       if (!pl.me) {
         row.dataset.tip = this.following === pl.id ? tr('mp_stop_follow', 'Click to stop following') : tr('mp_click_follow', 'Click to follow their screen');
-        row.addEventListener('click', (e) => { if (!e.target.closest('.jam-kick')) this.follow(pl.id); });
+        row.addEventListener('click', (e) => {
+          if (e.target.closest('.jam-kick')) return;
+          // host: shift-click multi-selects players for "kick all except"
+          if (this.isHost && e.shiftKey) {
+            if (this.selPlayers.has(pl.id)) this.selPlayers.delete(pl.id); else this.selPlayers.add(pl.id);
+            this.renderPanel();
+            return;
+          }
+          this.follow(pl.id);
+        });
+        if (this.isHost) row.addEventListener('contextmenu', (e) => { e.preventDefault(); this.openPlayerMenu(e.clientX, e.clientY, pl.id, pl.name); });
       }
       if (this.isHost && !pl.me) {
         const kick = document.createElement('button');
@@ -950,6 +1418,10 @@ const Sync = {
       p.querySelector('#jamAllowLate').addEventListener('change', (e) => { this.settings.allowLate = e.target.checked; this.sendPresence(); });
       p.querySelector('#jamApprove').addEventListener('change', (e) => { this.settings.approve = e.target.checked; this.sendPresence(); this.renderPanel(); });
       p.querySelector('#jamMax').addEventListener('change', (e) => { this.settings.maxPlayers = clamp(parseInt(e.target.value) || 100, 2, 100); this.sendPresence(); });
+      p.querySelector('#jamAllowMic').addEventListener('change', (e) => { this.settings.allowMic = e.target.checked; this.sendPresence(); toast(tr(e.target.checked ? 'mp_mic_on' : 'mp_mic_off', 'Mic recording ' + (e.target.checked ? 'allowed' : 'off'))); });
+      p.querySelector('#jamAllowAudio').addEventListener('change', (e) => { this.settings.allowCustomAudio = e.target.checked; if (!e.target.checked) this.settings.approveAudio = false; this.sendPresence(); this.renderPanel(); toast(tr(e.target.checked ? 'mp_audio_on' : 'mp_audio_off', 'Custom sounds ' + (e.target.checked ? 'allowed' : 'off'))); });
+      p.querySelector('#jamApproveAudio').addEventListener('change', (e) => { this.settings.approveAudio = e.target.checked; this.sendPresence(); });
+      p.querySelector('#jamManage').addEventListener('click', () => this.openManage());
     }
   },
 
@@ -990,6 +1462,39 @@ const Sync = {
       b.addEventListener('click', () => { m.remove(); this.kick(id, dur); });
       m.appendChild(b);
     }
+    document.body.appendChild(m);
+    m.style.left = Math.min(x, window.innerWidth - m.offsetWidth - 8) + 'px';
+    m.style.top = Math.min(y, window.innerHeight - m.offsetHeight - 8) + 'px';
+    const close = (ev) => { if (!m.contains(ev.target)) { m.remove(); window.removeEventListener('mousedown', close, true); } };
+    window.addEventListener('mousedown', close, true);
+  },
+
+  // right-click a player (host): kick-all-except, with shift multi-select
+  openPlayerMenu(x, y, id, name) {
+    const old = document.getElementById('kickMenu');
+    if (old) old.remove();
+    const m = document.createElement('div');
+    m.id = 'kickMenu';
+    m.className = 'ctx-menu';
+    const add = (label, danger, fn) => {
+      const b = document.createElement('button');
+      b.className = 'ctx-item' + (danger ? ' danger' : '');
+      b.textContent = label;
+      b.addEventListener('click', () => { m.remove(); fn(); });
+      m.appendChild(b);
+    };
+    const sel = this.selPlayers && this.selPlayers.size ? [...this.selPlayers] : null;
+    if (sel && sel.length) {
+      const names = sel.map(pid => (this.peers.get(pid) || {}).name).filter(Boolean);
+      const label = names.length <= 3
+        ? tr('mp_kick_except_these', 'Kick all except {list}', { list: names.join(', ') })
+        : tr('mp_kick_except_n', 'Kick all except these {n}', { n: names.length });
+      add(label, true, () => this.kickAllExcept(sel, 0));
+      add(tr('mp_clear_sel', 'Clear selection'), false, () => { this.selPlayers.clear(); this.renderPanel(); });
+    } else {
+      add(tr('mp_kick_except', 'Kick all except {name}', { name }), true, () => this.kickAllExcept([id], 0));
+    }
+    add(tr('mp_remove_player', 'Remove {name}…', { name }), true, () => this.openKickMenu(x, y, id, name));
     document.body.appendChild(m);
     m.style.left = Math.min(x, window.innerWidth - m.offsetWidth - 8) + 'px';
     m.style.top = Math.min(y, window.innerHeight - m.offsetHeight - 8) + 'px';
@@ -1117,6 +1622,10 @@ const MP = {
           <label class="jam-check"><input type="checkbox" id="mpAllowLate" checked> ${tr('mp_allow_late', 'Allow joining after start')}</label>
           <label class="jam-check"><input type="checkbox" id="mpApprove"> ${tr('mp_approve', 'Approve joining')}</label>
           <label class="jam-check">${tr('mp_max_players', 'Max players')} <input type="number" id="mpMax" min="2" max="100" value="100"></label>
+          <div class="jam-set-sep">${tr('mp_rules', 'Room rules')}</div>
+          <label class="jam-check"><input type="checkbox" id="mpAllowMic" checked> ${tr('mp_allow_mic', 'Allow microphone recording for everybody')}</label>
+          <label class="jam-check"><input type="checkbox" id="mpAllowAudio" checked> ${tr('mp_allow_audio', 'Allow custom audio files from everybody')}</label>
+          <label class="jam-check jam-check-sub"><input type="checkbox" id="mpApproveAudio"> ${tr('mp_approve_audio', 'Manually approve custom audio files')}</label>
         </div>
         <div class="modal-btns">
           <button class="fbtn" id="mpCback">${tr('cancel', 'Cancel')}</button>
@@ -1131,11 +1640,24 @@ const MP = {
     }));
     wrap.querySelector('#mpCback').addEventListener('click', () => wrap.remove());
     wrap.addEventListener('mousedown', (e) => { if (e.target === wrap) wrap.remove(); });
+    // manual approval only makes sense while custom audio is allowed at all
+    const mpAudio = wrap.querySelector('#mpAllowAudio');
+    const mpApproveAudio = wrap.querySelector('#mpApproveAudio');
+    const syncApprove = () => {
+      mpApproveAudio.disabled = !mpAudio.checked;
+      if (!mpAudio.checked) mpApproveAudio.checked = false;
+    };
+    mpAudio.addEventListener('change', syncApprove);
+    syncApprove();
     wrap.querySelector('#mpCgo').addEventListener('click', async () => {
       const settings = {
         allowLate: wrap.querySelector('#mpAllowLate').checked,
         approve: wrap.querySelector('#mpApprove').checked,
-        maxPlayers: clamp(parseInt(wrap.querySelector('#mpMax').value) || 100, 2, 100)
+        maxPlayers: clamp(parseInt(wrap.querySelector('#mpMax').value) || 100, 2, 100),
+        allowMic: wrap.querySelector('#mpAllowMic').checked,
+        allowCustomAudio: mpAudio.checked,
+        approveAudio: mpApproveAudio.checked,
+        perms: {}
       };
       wrap.remove();
       if (chosen === 'new') App.newProject(false);

@@ -1,5 +1,30 @@
 # Changelog
 
+## 1.1.7
+- Scrubbing: drag the playhead while stopped to hear what's under it. It holds the notes like keys instead of re-triggering them. Turn it on or off in Settings.
+- Editing while playing: change a long note's clip settings (gain, transpose, drive, crush, filter, effects) and it applies to the note that's already sounding, not just the next one. Switching a pattern's instrument applies live too, with no stutter or "simulated" re-attack.
+- Automate more: gain, transpose, drive, crush and filter now have keyframe lanes alongside volume, EQ and pan.
+- Automate effects: keyframe a dropped effect's parameters over time (tremolo depth and rate, echo, reverb, filters, wobble, widen). There's an "A" button on each effect and on the clip settings, and it renders into your exported song.
+- Automate pitch and speed on audio clips and groups, sample-accurately: the block stretches to the real length, the waveform bends with the curve, and seeking lands exactly where it sounds.
+- Piano roll: smooth, precise up/down scrolling instead of the old laggy 2-note jumps, and it grows to fill the window when you make it taller.
+- Patterns now have a Speed control in the clip settings, so you can play a pattern faster or slower, plus a fine Pitch (cents) control.
+- Clip settings redesigned: every value is a directly editable number field (no sliders) with generous ranges — type any gain, transpose, speed or filter you want. No more hard caps boxing in your sound.
+- Groups are flattened into a real audio clip now: correct waveform, pitch/speed/effects all work, and you can drop effects straight onto them. Ungroup brings the original clips back.
+- Microphone recording is more reliable (a proper codec, so takes no longer come back silent), and it no longer drops playback into tinny "phone call" quality while the mic is on.
+- Grand Piano and Vibraphone: longer piano samples for slow, sustained songs, and the vibraphone no longer turns into a weird tone above C4.
+- Multiplayer, moderation for streamers:
+  - Room rules to allow or block microphone recording and custom audio files for everyone.
+  - Manually approve custom sounds: review a guest's sound with a waveform player (play, scrub, volume) before it is added.
+  - Deny a sound and optionally ban that person from adding sounds for a set time.
+  - Manage people: per-person mic and sound permissions, and lift bans, including people who have already left.
+  - Kick everyone except one person, or shift-select several and kick the rest.
+  - Room code: click to reveal, again to copy, again to hide. Cycle the code to kill a leaked one while keeping everyone who is already in.
+  - Clearer messages ("Invalid Code", "Connecting…"), "Make music with other people", and the code no longer shows while a room is being created.
+- Labeled toolbar: Keys, Mixer, Effects, Loops, Jam and Settings now show their names, not just icons.
+- The track list scrolls far enough to reach the add-instrument and add-audio buttons, and New project sits top-left on the home screen.
+- Updates: constant checking, a clearer banner, a "Restart now / in 1 minute" prompt, a Check for updates button, and it tells you when you are already up to date.
+- Saving a project that already has a file writes straight to it, no dialog.
+
 ## 1.1.6
 - MIDI keyboards: plug one in and play (and record) any instrument track with it. Turn it on or off in Settings.
 - Sidechain "pump": a per-track slider in the mixer that ducks the track on every beat for that classic pumping groove.

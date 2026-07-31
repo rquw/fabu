@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>fabu</title>
-<link rel="stylesheet" href="styles.css?v=26">
+<link rel="stylesheet" href="styles.css?v=34">
 </head>
 <body>
 
@@ -95,12 +95,12 @@
     <button id="btnSave" class="tbtn" data-tip="Save project (Cmd S)" data-i18n-tip="tip_save"><svg class="ic"><use href="#i-save"/></svg></button>
     <button id="btnExport" class="tbtn" data-tip="Export song as WAV (Cmd E)" data-i18n-tip="tip_export"><svg class="ic"><use href="#i-export"/></svg></button>
     <div class="tb-sep"></div>
-    <button id="btnKeys" class="tbtn toggle" data-tip="Play with your keyboard (K)" data-i18n-tip="tip_keys"><svg class="ic"><use href="#i-piano"/></svg></button>
-    <button id="btnMixer" class="tbtn toggle" data-tip="Mixer and EQ (X)" data-i18n-tip="tip_mixer"><svg class="ic"><use href="#i-mixer"/></svg></button>
-    <button id="btnFx" class="tbtn toggle" data-tip="Effects to drag onto clips" data-i18n-tip="tip_fx"><svg class="ic"><use href="#i-fx"/></svg></button>
-    <button id="btnSamples" class="tbtn toggle" data-tip="Loops to drag onto the timeline" data-i18n-tip="tip_samples"><svg class="ic"><use href="#i-loops"/></svg></button>
-    <button id="btnJam" class="tbtn toggle" data-tip="Jam together (live multiplayer)" data-i18n-tip="tip_jam"><svg class="ic"><use href="#i-users"/></svg></button>
-    <button id="btnSettings" class="tbtn toggle" data-tip="Settings" data-i18n-tip="tip_settings"><svg class="ic"><use href="#i-gear"/></svg></button>
+    <button id="btnKeys" class="tbtn toggle labeled" data-tip="Play with your keyboard (K)" data-i18n-tip="tip_keys"><svg class="ic"><use href="#i-piano"/></svg><span class="tbtn-label" data-i18n="lbl_keys">Keys</span></button>
+    <button id="btnMixer" class="tbtn toggle labeled" data-tip="Mixer and EQ (X)" data-i18n-tip="tip_mixer"><svg class="ic"><use href="#i-mixer"/></svg><span class="tbtn-label" data-i18n="lbl_mixer">Mixer</span></button>
+    <button id="btnFx" class="tbtn toggle labeled" data-tip="Effects to drag onto clips" data-i18n-tip="tip_fx"><svg class="ic"><use href="#i-fx"/></svg><span class="tbtn-label" data-i18n="lbl_fx">Effects</span></button>
+    <button id="btnSamples" class="tbtn toggle labeled" data-tip="Loops to drag onto the timeline" data-i18n-tip="tip_samples"><svg class="ic"><use href="#i-loops"/></svg><span class="tbtn-label" data-i18n="lbl_loops">Loops</span></button>
+    <button id="btnJam" class="tbtn toggle labeled" data-tip="Jam together (live multiplayer)" data-i18n-tip="tip_jam"><svg class="ic"><use href="#i-users"/></svg><span class="tbtn-label" data-i18n="lbl_jam">Jam</span></button>
+    <button id="btnSettings" class="tbtn toggle labeled" data-tip="Settings" data-i18n-tip="tip_settings"><svg class="ic"><use href="#i-gear"/></svg><span class="tbtn-label" data-i18n="lbl_settings">Settings</span></button>
     <button id="btnHelp" class="tbtn toggle" data-tip="Shortcuts (F1)" data-i18n-tip="tip_help"><svg class="ic"><use href="#i-help"/></svg></button>
   </div>
 </header>
@@ -162,13 +162,13 @@
         <div class="home-tag" data-i18n="tagline">make music.</div>
       </div>
       <div class="home-actions">
-        <button id="homeContinue" class="home-go hidden">
-          <svg class="ic"><use href="#i-undo"/></svg>
-          <span class="hc-txt"><span class="hc-title" data-i18n="home_continue">Continue</span><span class="hc-sub" data-i18n="hc_continue_sub">Pick up where you left off</span></span>
-        </button>
         <button id="homeNew" class="home-go primary">
           <svg class="ic"><use href="#i-plus"/></svg>
           <span class="hc-txt"><span class="hc-title" data-i18n="new_project">New project</span><span class="hc-sub" data-i18n="hc_new_sub">Start something from scratch</span></span>
+        </button>
+        <button id="homeContinue" class="home-go hidden">
+          <svg class="ic"><use href="#i-undo"/></svg>
+          <span class="hc-txt"><span class="hc-title" data-i18n="home_continue">Continue</span><span class="hc-sub" data-i18n="hc_continue_sub">Pick up where you left off</span></span>
         </button>
         <button id="homeOpen" class="home-go">
           <svg class="ic"><use href="#i-folder"/></svg>
@@ -176,7 +176,7 @@
         </button>
         <button id="homeMp" class="home-go">
           <svg class="ic"><use href="#i-users"/></svg>
-          <span class="hc-txt"><span class="hc-title" data-i18n="mp_title">Multiplayer</span><span class="hc-sub" data-i18n="hc_mp_sub">Make music with a friend</span></span>
+          <span class="hc-txt"><span class="hc-title" data-i18n="mp_title">Multiplayer</span><span class="hc-sub" data-i18n="hc_mp_sub">Make music with other people</span></span>
         </button>
       </div>
       <button id="homeDemo" class="home-example">
@@ -193,28 +193,31 @@
   <a id="homeKofi" href="https://ko-fi.com/fabioss" target="_blank" rel="noopener" data-tip="Support fabu on Ko-fi">
     <span class="kofi-cup">&#9749;</span><span data-i18n="support_kofi">support fabu</span>
   </a>
-  <div id="homeVer"></div>
+  <div id="homeVerWrap">
+    <span id="homeVer"></span>
+    <button id="homeCheckUpd" class="home-check-upd hidden" data-i18n="set_check_updates">Check for updates</button>
+  </div>
 </div>
 
 <div id="toasts"></div>
 <div id="tooltip" class="hidden"></div>
 
-<script src="js/vendor/lame.min.js?v=26"></script>
-<script src="js/vendor/WasmMediaEncoder.min.js?v=26"></script>
-<script src="js/vendor/ogg.wasm.js?v=26"></script>
-<script src="js/util.js?v=26"></script>
-<script src="js/state.js?v=26"></script>
-<script src="js/audio.js?v=26"></script>
-<script src="js/windows.js?v=26"></script>
-<script src="js/timeline.js?v=26"></script>
-<script src="js/pianoroll.js?v=26"></script>
-<script src="js/automation.js?v=26"></script>
-<script src="js/sampler.js?v=26"></script>
-<script src="js/auth.js?v=26"></script>
-<script src="js/app.js?v=26"></script>
-<script src="js/midi.js?v=26"></script>
-<script src="js/tutor.js?v=26"></script>
-<script src="js/sync.js?v=26"></script>
-<script src="js/webnudge.js?v=26"></script>
+<script src="js/vendor/lame.min.js?v=34"></script>
+<script src="js/vendor/WasmMediaEncoder.min.js?v=34"></script>
+<script src="js/vendor/ogg.wasm.js?v=34"></script>
+<script src="js/util.js?v=34"></script>
+<script src="js/state.js?v=34"></script>
+<script src="js/audio.js?v=34"></script>
+<script src="js/windows.js?v=34"></script>
+<script src="js/timeline.js?v=34"></script>
+<script src="js/pianoroll.js?v=34"></script>
+<script src="js/automation.js?v=34"></script>
+<script src="js/sampler.js?v=34"></script>
+<script src="js/auth.js?v=34"></script>
+<script src="js/app.js?v=34"></script>
+<script src="js/midi.js?v=34"></script>
+<script src="js/tutor.js?v=34"></script>
+<script src="js/sync.js?v=34"></script>
+<script src="js/webnudge.js?v=34"></script>
 </body>
 </html>

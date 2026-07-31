@@ -60,6 +60,14 @@ const App = {
           this.autosaveTick(); // last save before the swap
         });
       }
+      // update finished downloading: let the user pick when to restart
+      if (window.electronAPI.onUpdateDownloaded) {
+        window.electronAPI.onUpdateDownloaded(() => this.showRestartPrompt());
+      }
+      // macOS traffic lights overlap the top-left unless we reserve space when
+      // windowed; reclaim that gutter in fullscreen (no traffic lights there)
+      if (/Mac/i.test(navigator.platform)) document.body.classList.add('is-mac');
+      if (window.electronAPI.onFullscreen) window.electronAPI.onFullscreen((fs) => document.body.classList.toggle('is-fullscreen', fs));
     }
     // greet the user once after an update went through
     if (window.electronAPI && window.electronAPI.getVersion) {
@@ -68,6 +76,20 @@ const App = {
         this.version = v;
         const hv = document.getElementById('homeVer');
         if (hv) hv.textContent = 'v' + v;
+        // a "Check for updates" button by the version, like the one in Settings
+        const cu = document.getElementById('homeCheckUpd');
+        if (cu && window.electronAPI.checkUpdates) {
+          cu.classList.remove('hidden');
+          cu.addEventListener('click', async () => {
+            cu.disabled = true;
+            cu.textContent = tr('set_checking', 'Checking…');
+            const r = await this.checkForUpdates();
+            cu.disabled = false;
+            cu.textContent = tr('set_check_updates', 'Check for updates');
+            if (r === 'latest') toast(tr('set_up_to_date', "You're on the latest version."), 'green');
+            else if (r === 'error') toast(tr('set_check_failed', 'Could not check. Are you online?'), 'red');
+          });
+        }
         const last = localStorage.getItem('fabu.lastVersion');
         localStorage.setItem('fabu.lastVersion', v);
         if (last && last !== v) setTimeout(() => toast(tr('updated_to', 'Updated to fabu v{v}', { v }), 'green'), 900);
@@ -88,11 +110,17 @@ const App = {
 
   showUpdateBanner(version) {
     if (document.getElementById('updateBanner')) return;
+    if (document.getElementById('restartModal')) return; // already downloaded
     const b = document.createElement('div');
     b.id = 'updateBanner';
-    b.innerHTML = `<span>${tr('update_available', 'Update available')}${version ? ' · v' + version : ''}</span>
+    b.innerHTML = `
+      <span class="upd-dot"></span>
+      <div class="upd-text">
+        <div class="upd-title">${tr('update_available', 'A new version of fabu is out')}${version ? ' · v' + version : ''}</div>
+        <div class="upd-note">${tr('update_note', 'Click update and fabu will install it for you.')}</div>
+      </div>
       <button class="fbtn accent" id="updNow">${tr('update_now', 'Update')}</button>
-      <button class="upd-x" id="updLater"><svg class="ic"><use href="#i-x"/></svg></button>`;
+      <button class="upd-x" id="updLater" data-tip="${tr('update_later', 'Later')}"><svg class="ic"><use href="#i-x"/></svg></button>`;
     document.body.appendChild(b);
     const btn = b.querySelector('#updNow');
     btn.addEventListener('click', () => {
@@ -101,6 +129,45 @@ const App = {
       window.electronAPI.installUpdate();
     });
     b.querySelector('#updLater').addEventListener('click', () => b.remove());
+  },
+
+  // the update finished downloading — ask when to restart so work can be saved
+  showRestartPrompt() {
+    const banner = document.getElementById('updateBanner');
+    if (banner) banner.remove();
+    if (document.getElementById('restartModal')) return;
+    const wrap = document.createElement('div');
+    wrap.id = 'restartModal';
+    wrap.className = 'modal-back';
+    wrap.innerHTML = `
+      <div class="modal-card">
+        <div class="modal-title">${tr('upd_ready_title', 'Update ready to install')}</div>
+        <div class="modal-sub" id="rsSub">${tr('upd_ready_sub', 'The new version is downloaded. fabu needs to restart to finish. Save your work first.')}</div>
+        <div class="modal-btns" style="flex-direction:column;align-items:stretch">
+          <button id="rsNow" class="fbtn accent">${tr('upd_restart_now', 'Restart fabu now')}</button>
+          <button id="rsSoon" class="fbtn">${tr('upd_restart_soon', 'Restart in 1 minute')}</button>
+        </div>
+      </div>`;
+    document.body.appendChild(wrap);
+    const doRestart = () => {
+      if (wrap._iv) clearInterval(wrap._iv);
+      this.autosaveTick();
+      if (window.electronAPI && window.electronAPI.restartNow) window.electronAPI.restartNow();
+    };
+    wrap.querySelector('#rsNow').addEventListener('click', doRestart);
+    wrap.querySelector('#rsSoon').addEventListener('click', () => {
+      const soon = wrap.querySelector('#rsSoon');
+      const sub = wrap.querySelector('#rsSub');
+      soon.disabled = true;
+      let left = 60;
+      const tick = () => {
+        if (left <= 0) { doRestart(); return; }
+        sub.textContent = tr('upd_restart_countdown', 'Restarting in {n} seconds. Save now if you need to.', { n: left });
+        left--;
+      };
+      tick();
+      wrap._iv = setInterval(tick, 1000);
+    });
   },
 
   // ---------- leave confirmation (home / quit) ----------
@@ -596,6 +663,14 @@ const App = {
     if (now < this._coachUntil) return;      // cooldown so it is not naggy
     this._coachUntil = now + 25000;
     const el = $('#snapCoach');
+    // sit it right under the snap control wherever that ends up (wrapped topbar,
+    // narrow window, etc.) instead of a fixed screen-centre spot
+    const snap = $('#snapSelect');
+    if (snap) {
+      const r = snap.getBoundingClientRect();
+      el.style.left = Math.round(r.left + r.width / 2) + 'px';
+      el.style.top = Math.round(r.bottom + 6) + 'px';
+    }
     clearTimeout(this._coachTimer);
     el.classList.remove('hidden', 'hide');
     // restart the entrance animation
@@ -784,13 +859,14 @@ const App = {
 
   // bundle the selected clips (across tracks) into one group clip on a new track.
   // Non-destructive: the originals are kept inside and restored on ungroup.
-  groupSelectedClips() {
+  async groupSelectedClips() {
     const items = [...UI.selClipIds].map(getClip).filter(Boolean);
     if (items.length < 2) { toast(tr('toast_group_need2', 'Select at least two clips to group')); return; }
-    if (items.some(it => it.clip.kind === 'group')) { toast(tr('toast_group_nested', 'You cannot put a group inside a group yet')); return; }
-    Undo.push('Group clips');
+    if (items.some(it => it.clip.kind === 'group')) { toast(tr('toast_group_nested', 'Ungroup the old-style group first')); return; }
     const start = Math.min(...items.map(it => it.clip.start));
     const end = Math.max(...items.map(it => it.clip.start + clipBeats(it.clip)));
+    const lenBeats = Math.max(0.25, end - start);
+    // keep the originals so Ungroup can bring them back exactly
     const children = items.map(it => ({
       origTrackId: it.track.id,
       origTrackName: it.track.name,
@@ -799,33 +875,47 @@ const App = {
       origColor: it.track.color,
       clip: Object.assign(JSON.parse(JSON.stringify(it.clip)), { start: it.clip.start - start })
     }));
+    toast(tr('toast_bouncing', 'Bouncing group…'));
+    let buf;
+    try { buf = await Engine.bounceClips(items, start, lenBeats); }
+    catch (e) { console.warn('bounce failed', e); toast(tr('toast_group_fail', 'Could not bounce the group'), 'red'); return; }
+    // selection may have changed while rendering; make sure the clips still exist
+    if (items.some(it => !getClip(it.clip.id))) { toast(tr('toast_group_fail', 'Could not bounce the group'), 'red'); return; }
+    Undo.push('Group clips');
+    const id = uid('smp');
+    Samples[id] = { id, name: tr('group_name', 'Group'), buffer: buf, bytes: Engine.encodeWav(buf), mime: 'audio/wav' };
     for (const it of items) it.track.clips.splice(it.track.clips.indexOf(it.clip), 1);
-    const gt = makeTrack('group');
+    const gt = makeTrack('audio');
     gt.name = tr('group_track', 'Group');
     gt.color = '#7d8bb0';   // a distinct slate so groups read as their own thing
-    const group = {
-      id: uid('clip'), kind: 'group', name: tr('group_name', 'Group'), by: authorName(),
-      start, length: Math.max(0.25, end - start), children
+    gt.fromGroup = true;
+    const clip = {
+      id: uid('clip'), kind: 'audio', name: tr('group_name', 'Group'), by: authorName(),
+      start, sampleId: id, gain: 1, pitch: 0, speed: 1, fadeIn: 0, fadeOut: 0,
+      bounce: { children, bpm: S.bpm }   // real audio now, but reversible
     };
-    gt.clips.push(group);
+    gt.clips.push(clip);
     S.tracks.push(gt);
     Engine.rebuildTracks();
     Timeline.render();
     Windows.refreshAll();
     KeysPanel.refreshTracks();
-    this.selectClip(group.id);
+    this.selectClip(clip.id);
     if (UI.playing) Engine.liveEdit();
     toast(tr('toast_grouped', 'Grouped {n} clips', { n: items.length }), 'green');
   },
 
-  // undo a group: put every child back on its original track, drop the group
+  // undo a group: put every child back on its original track, drop the group.
+  // Works for a bounced audio group (new) or an old-style container group.
   ungroupClip(clipId) {
     const f = getClip(clipId);
-    if (!f || f.clip.kind !== 'group') return;
+    if (!f) return;
     const group = f.clip, gt = f.track;
+    const children = group.kind === 'group' ? group.children : (group.bounce && group.bounce.children);
+    if (!children) return;
     Undo.push('Ungroup');
     const restored = [];
-    for (const child of group.children) {
+    for (const child of children) {
       const clip = Object.assign(JSON.parse(JSON.stringify(child.clip)), { start: group.start + (child.clip.start || 0) });
       let track = getTrack(child.origTrackId);
       if (!track || track.kind !== child.origTrackKind) {
@@ -840,7 +930,10 @@ const App = {
       restored.push(clip.id);
     }
     gt.clips.splice(gt.clips.indexOf(group), 1);
-    if (!gt.clips.length && gt.kind === 'group') S.tracks.splice(S.tracks.indexOf(gt), 1);
+    // keep the flattened sample in memory so undoing the ungroup can find it
+    // again (Undo only snapshots the project, not the decoded audio); unused
+    // samples are dropped from the saved file automatically anyway.
+    if (!gt.clips.length && (gt.fromGroup || gt.kind === 'group')) S.tracks.splice(S.tracks.indexOf(gt), 1);
     Engine.rebuildTracks();
     Timeline.render();
     Windows.refreshAll();
@@ -848,6 +941,39 @@ const App = {
     this.selectClipSet(restored);
     if (UI.playing) Engine.liveEdit();
     toast(tr('toast_ungrouped', 'Ungrouped'), 'green');
+  },
+
+  // Flatten the selected clip(s) into a plain audio clip — exactly like an
+  // audio file you dragged in. One-way (no "revert to pattern"); undo with Cmd Z.
+  async convertToAudio() {
+    const items = [...UI.selClipIds].map(getClip).filter(Boolean);
+    if (!items.length) return;
+    if (items.some(it => it.clip.kind === 'group')) { toast(tr('toast_convert_group', 'Ungroup it first, then convert')); return; }
+    const start = Math.min(...items.map(it => it.clip.start));
+    const end = Math.max(...items.map(it => it.clip.start + clipBeats(it.clip)));
+    const lenBeats = Math.max(0.25, end - start);
+    const name = (items.length === 1 && items[0].clip.name) ? items[0].clip.name : tr('word_audio', 'Audio');
+    toast(tr('toast_converting', 'Converting to audio…'));
+    let buf;
+    try { buf = await Engine.bounceClips(items, start, lenBeats); }
+    catch (e) { console.warn('convert failed', e); toast(tr('toast_group_fail', 'Could not bounce the group'), 'red'); return; }
+    if (items.some(it => !getClip(it.clip.id))) { toast(tr('toast_group_fail', 'Could not bounce the group'), 'red'); return; }
+    Undo.push('Convert to audio');
+    const id = uid('smp');
+    Samples[id] = { id, name, buffer: buf, bytes: Engine.encodeWav(buf), mime: 'audio/wav' };
+    for (const it of items) it.track.clips.splice(it.track.clips.indexOf(it.clip), 1);
+    let track = items[0].track.kind === 'audio' ? items[0].track : null;
+    if (!track) { track = makeTrack('audio'); track.name = name; S.tracks.push(track); }
+    const clip = { id: uid('clip'), kind: 'audio', name, by: authorName(), start, sampleId: id, gain: 1, pitch: 0, speed: 1, fadeIn: 0, fadeOut: 0 };
+    clip.start = Timeline.nearestFreeStart(track, clipBeats(clip), start, null);
+    track.clips.push(clip);
+    Engine.rebuildTracks();
+    Timeline.render();
+    Windows.refreshAll();
+    KeysPanel.refreshTracks();
+    this.selectClip(clip.id);
+    if (UI.playing) Engine.liveEdit();
+    toast(tr('toast_converted', 'Converted to audio'), 'green');
   },
 
   // slice the selected clip in two at the playhead
@@ -1002,7 +1128,6 @@ const App = {
       wrap.innerHTML = `
         <div class="modal-card">
           <div class="modal-title">${tr('fx_editor_title', 'Effects on "{name}"', { name: clip.name || 'Clip' })}</div>
-          <div class="modal-sub">${tr('fx_editor_sub', 'Changes apply right away, also while playing.')}</div>
           <div id="fxRows"></div>
           <div class="modal-btns"><button id="fxClose" class="fbtn accent">${tr('close', 'Close')}</button></div>
         </div>`;
@@ -1048,6 +1173,16 @@ const App = {
           });
           inp.addEventListener('change', () => { inp._g = false; if (UI.playing) Engine.reschedule(); });
           row.append(lbl, inp, val);
+          // automation dot — keyframe this effect param over time
+          if (Engine.fxAutomatable(fx.type, k)) {
+            const dot = document.createElement('button');
+            const has = fx.autom && fx.autom[k] && fx.autom[k].length;
+            dot.className = 'auto-dot' + (has ? ' on' : '');
+            dot.textContent = 'A';
+            dot.dataset.tip = tr('tip_auto_dot', 'Automate this over time');
+            dot.addEventListener('click', () => Automation.openFx(clip.id, fx, k));
+            row.appendChild(dot);
+          }
           sec.appendChild(row);
         }
         rows.appendChild(sec);
@@ -1060,6 +1195,11 @@ const App = {
   // ---------- audio file import ----------
 
   async importAudioFiles(files, beat, targetTrack) {
+    if (typeof Sync !== 'undefined' && Sync.connected) {
+      const act = Sync.audioAction();
+      if (act === 'approve') { Sync.requestAudioFiles(files, { beat, trackId: targetTrack && targetTrack.id }); return; }
+      if (act !== 'allow') { Sync.blockCustomAudio(); return; }
+    }
     Engine.ensureCtx();
     const decoded = [];
     for (const f of files) {
@@ -1129,6 +1269,18 @@ const App = {
     const json = this.collectFab();
     const fname = this.projectFileName('.fab');
     if (window.electronAPI) {
+      // already has a file? save straight to it, no "save as" prompt
+      if (this.currentPath && window.electronAPI.writeFile) {
+        const wr = await window.electronAPI.writeFile({ filePath: this.currentPath, data: json, encoding: 'utf8' });
+        if (wr.ok) {
+          UI.dirty = false;
+          UI.fileDirty = false;
+          this.addRecent(wr.path, wr.name);
+          toast(tr('toast_saved', 'Saved {name}', { name: wr.name }), 'green');
+          return true;
+        }
+        // file moved/deleted: fall through to the dialog
+      }
       const res = await window.electronAPI.saveFile({
         defaultName: fname,
         filters: [{ name: 'fabu Project', extensions: ['fab'] }],
@@ -1447,7 +1599,7 @@ const App = {
         if (k === 'd') { e.preventDefault(); this.duplicateClip(); return; }
         if (k === 'b') { e.preventDefault(); this.splitSelectedClip(); return; }
         if (k === 'g' && !e.shiftKey) { e.preventDefault(); this.groupSelectedClips(); return; }
-        if (k === 'g' && e.shiftKey) { e.preventDefault(); const g = [...UI.selClipIds].map(getClip).find(x => x && x.clip.kind === 'group'); if (g) this.ungroupClip(g.clip.id); return; }
+        if (k === 'g' && e.shiftKey) { e.preventDefault(); const g = [...UI.selClipIds].map(getClip).find(x => x && (x.clip.kind === 'group' || x.clip.bounce)); if (g) this.ungroupClip(g.clip.id); return; }
         if (k === 'c') { e.preventDefault(); if (!PianoRoll.copySelected(false)) this.copyClip(false); return; }
         if (k === 'x') { e.preventDefault(); if (!PianoRoll.copySelected(true)) this.copyClip(true); return; }
         if (k === 'v') { e.preventDefault(); if (!PianoRoll.paste()) this.pasteClip(); return; }

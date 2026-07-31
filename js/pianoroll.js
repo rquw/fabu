@@ -68,7 +68,7 @@ const PianoRoll = {
     if (!f) return;
 
     const w = Windows.create('proll', tr('win_pianoroll', 'Piano roll: {name}', { name: f.clip.name || 'Pattern' }), 'i-note',
-      { x: Math.max(20, window.innerWidth / 2 - 420), y: 120, width: 860 });
+      { x: Math.max(20, window.innerWidth / 2 - 420), y: 120, width: 860, height: Math.min(560, Math.max(380, window.innerHeight - 180)) });
     w.body.classList.add('proll-body');
 
     this.loadPrefs();
@@ -163,8 +163,8 @@ const PianoRoll = {
       const w = this.wrap;
       if (w.scrollLeft + w.clientWidth > this.gridWidth() - 160) {
         this._viewBeats = Math.ceil((this.gridWidth() / this.pxb) + 8);
-        this.redraw();
       }
+      this.scheduleRedraw();   // repaint the on-screen window as it moves
     });
     row.append(leftCol, this.wrap);
     w.body.appendChild(row);
@@ -199,7 +199,9 @@ const PianoRoll = {
     const len = f ? f.clip.length : 4;
     // always keep a couple of empty bars past the end so you can scroll further
     // and write there; _viewBeats grows as you scroll toward the edge
-    const beats = Math.max(len + 8, this._viewBeats || 0);
+    // cap the total width so a runaway scroll can't build a canvas so wide it
+    // exceeds the browser's limit (which silently breaks rendering / freezes)
+    const beats = Math.min(2048, Math.max(len + 8, this._viewBeats || 0));
     return Math.max(384, beats * this.pxb);
   },
   // drum tracks use a fixed set of labeled lanes; melodic tracks are chromatic
@@ -213,7 +215,22 @@ const PianoRoll = {
       this._rowMeta = null; this._rowMap = null; this._rh = this.rowH;
     }
   },
-  gridH() { return this._rowMap ? this._rowMap.length * this._rh : this.GRID_H; },
+  gridH() {
+    if (this._rowMap) return this._rowMap.length * this._rh;   // drum lanes: fixed set of rows
+    // fill the window: grow the grid to the body height so resizing shows more keys
+    const body = this.wrap ? this.wrap.closest('.fwin-body') : null;
+    if (body && body.clientHeight) {
+      const tools = body.querySelector('.proll-tools');
+      const avail = body.clientHeight - (tools ? tools.offsetHeight : 0) - this.RULER_H - this.VEL_H - 28;
+      return clamp(Math.floor(avail), 168, 4000);
+    }
+    return this.GRID_H;
+  },
+  // coalesce redraws to one per frame (scroll fires many events)
+  scheduleRedraw() {
+    if (this._raf) return;
+    this._raf = requestAnimationFrame(() => { this._raf = null; this.redraw(); });
+  },
   yToPitch(y) {
     if (this._rowMap) return this._rowMap[clamp(Math.floor(y / this._rh), 0, this._rowMap.length - 1)];
     return this.topPitch - Math.floor(y / this.rowH);
@@ -244,6 +261,20 @@ const PianoRoll = {
 
   // ---------- drawing ----------
 
+  // Resize a canvas only when its size actually changes — reallocating the
+  // (potentially huge) backing store every frame was what made scrolling a long
+  // pattern lag. setTransform is idempotent whether or not we reallocated.
+  sizeCanvas(cv, w, h, dpr) {
+    const cw = Math.round(w * dpr), ch = Math.round(h * dpr);
+    if (cv.width !== cw || cv.height !== ch) {
+      cv.width = cw; cv.height = ch;
+      cv.style.width = w + 'px'; cv.style.height = h + 'px';
+    }
+    const ctx = cv.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return ctx;
+  },
+
   redraw() {
     const f = this.clip();
     if (!f || !this.gridCv) return;
@@ -256,10 +287,8 @@ const PianoRoll = {
 
     // --- keys column ---
     const kc = this.keysCv;
-    kc.width = this.KEYS_W * dpr; kc.height = H * dpr;
-    kc.style.width = this.KEYS_W + 'px'; kc.style.height = H + 'px';
-    const kx = kc.getContext('2d');
-    kx.scale(dpr, dpr);
+    const kx = this.sizeCanvas(kc, this.KEYS_W, H, dpr);
+    kx.clearRect(0, 0, this.KEYS_W, H);
     kx.font = '600 9px -apple-system, sans-serif';
     if (isDrums) {
       for (let i = 0; i < this._rowMeta.length; i++) {
@@ -283,19 +312,27 @@ const PianoRoll = {
     }
 
     // --- grid ---
+    // Only paint the horizontal window that's actually on screen (plus a margin).
+    // A long pattern's grid can be many thousands of px wide; painting all of it
+    // every frame is what made up/down scrolling lag. The canvas keeps a matching
+    // CSS background so the unpainted parts look identical.
     const gc = this.gridCv;
-    gc.width = W * dpr; gc.height = H * dpr;
-    gc.style.width = W + 'px'; gc.style.height = H + 'px';
-    const g = gc.getContext('2d');
-    g.scale(dpr, dpr);
+    gc.style.background = '#161927';
+    const sc = this.wrap;
+    const vw = sc ? sc.clientWidth : W;
+    const scL = sc ? sc.scrollLeft : 0;
+    const x0 = Math.max(0, scL - vw);
+    const x1 = Math.min(W, scL + vw * 2);
+    const ww = Math.max(0, x1 - x0);
+    const g = this.sizeCanvas(gc, W, H, dpr);
     g.fillStyle = '#161927';
-    g.fillRect(0, 0, W, H);
+    g.fillRect(x0, 0, ww, H);
     if (isDrums) {
       for (let i = 0; i < this._rowMeta.length; i++) {
         const y = i * rh;
-        if (i % 2) { g.fillStyle = 'rgba(255,255,255,0.03)'; g.fillRect(0, y, W, rh); }
+        if (i % 2) { g.fillStyle = 'rgba(255,255,255,0.03)'; g.fillRect(x0, y, ww, rh); }
         g.fillStyle = 'rgba(255,255,255,0.06)';
-        g.fillRect(0, y + rh - 1, W, 1);   // row separator
+        g.fillRect(x0, y + rh - 1, ww, 1);   // row separator
       }
     } else {
       const rows = Math.floor(H / rh);
@@ -305,20 +342,21 @@ const PianoRoll = {
         const y = this.pitchToY(p);
         if ([1, 3, 6, 8, 10].includes(p % 12)) {
           g.fillStyle = 'rgba(0,0,0,0.22)';
-          g.fillRect(0, y, W, rh);
+          g.fillRect(x0, y, ww, rh);
         }
         if (showScale) {
-          if (((p - this.keyRoot) % 12 + 12) % 12 === 0) { g.fillStyle = 'rgba(224,122,63,0.16)'; g.fillRect(0, y, W, rh); }
-          else if (inScale(p, this.keyRoot, this.keyScale)) { g.fillStyle = 'rgba(86,182,166,0.08)'; g.fillRect(0, y, W, rh); }
-          else { g.fillStyle = 'rgba(0,0,0,0.28)'; g.fillRect(0, y, W, rh); }
+          if (((p - this.keyRoot) % 12 + 12) % 12 === 0) { g.fillStyle = 'rgba(224,122,63,0.16)'; g.fillRect(x0, y, ww, rh); }
+          else if (inScale(p, this.keyRoot, this.keyScale)) { g.fillStyle = 'rgba(86,182,166,0.08)'; g.fillRect(x0, y, ww, rh); }
+          else { g.fillStyle = 'rgba(0,0,0,0.28)'; g.fillRect(x0, y, ww, rh); }
         }
-        if (p % 12 === 0) { g.fillStyle = 'rgba(255,255,255,0.09)'; g.fillRect(0, y + rh - 1, W, 1); }
+        if (p % 12 === 0) { g.fillStyle = 'rgba(255,255,255,0.09)'; g.fillRect(x0, y + rh - 1, ww, 1); }
       }
     }
     const sub = this.snap || 0.25;
-    const totalBeats = W / this.pxb;
-    for (let b = 0; b <= totalBeats + 0.001; b += sub) {
+    const bStart = Math.max(0, Math.floor((x0 / this.pxb) / sub) * sub);
+    for (let b = bStart; b * this.pxb <= x1 + 0.001; b += sub) {
       const x = b * this.pxb;
+      if (x < x0) continue;
       const isBar = Math.abs(b % 4) < 1e-6;
       const isBeat = Math.abs(b % 1) < 1e-6;
       g.fillStyle = isBar ? 'rgba(255,255,255,0.16)' : isBeat ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.03)';
@@ -327,19 +365,20 @@ const PianoRoll = {
     // shade the area past the pattern end so you can see where it stops (drawing
     // a note out there extends the pattern automatically)
     const endX = f.clip.length * this.pxb;
-    if (endX < W) {
+    if (endX < x1) {
+      const sx = Math.max(endX, x0);
       g.fillStyle = 'rgba(0,0,0,0.34)';
-      g.fillRect(endX, 0, W - endX, H);
-      g.fillStyle = 'rgba(224,122,63,0.5)';
-      g.fillRect(endX, 0, 1, H);
+      g.fillRect(sx, 0, x1 - sx, H);
+      if (endX >= x0) { g.fillStyle = 'rgba(224,122,63,0.5)'; g.fillRect(endX, 0, 1, H); }
     }
 
-    // notes
+    // notes (only those inside the painted window)
     for (const n of f.clip.notes) {
       const y = this.pitchToY(n.pitch);
       if (y < -rh || y > H) continue;
       const x = n.start * this.pxb;
       const nw = Math.max(4, n.length * this.pxb - 1);
+      if (x + nw < x0 || x > x1) continue;
       const sel = this.selNoteIds.has(n.id);
       g.fillStyle = sel ? '#ffffff' : f.track.color;
       g.beginPath();
@@ -376,16 +415,18 @@ const PianoRoll = {
     if (!rc) return;
     const dpr = window.devicePixelRatio || 1;
     const H = this.RULER_H;
-    rc.width = W * dpr; rc.height = H * dpr;
-    rc.style.width = W + 'px'; rc.style.height = H + 'px';
-    const x = rc.getContext('2d');
-    x.scale(dpr, dpr);
+    const x = this.sizeCanvas(rc, W, H, dpr);
+    rc.style.background = '#1b1e2b';
+    const sc = this.wrap; const vw = sc ? sc.clientWidth : W; const scL = sc ? sc.scrollLeft : 0;
+    const x0 = Math.max(0, scL - vw), x1 = Math.min(W, scL + vw * 2);
     x.fillStyle = '#1b1e2b';
-    x.fillRect(0, 0, W, H);
+    x.fillRect(x0, 0, x1 - x0, H);
     x.font = '600 8.5px -apple-system, sans-serif'; x.textBaseline = 'middle';
-    const beats = W / this.pxb;
-    for (let b = 0; b <= beats + 0.001; b++) {
+    const b0 = Math.max(0, Math.floor(x0 / this.pxb));
+    const b1 = Math.ceil(x1 / this.pxb);
+    for (let b = b0; b <= b1; b++) {
       const px = b * this.pxb;
+      if (px < x0) continue;
       const isBar = b % 4 === 0;
       x.fillStyle = isBar ? 'rgba(255,255,255,0.35)' : 'rgba(255,255,255,0.14)';
       x.fillRect(px, isBar ? 3 : 7, 1, isBar ? H - 3 : H - 7);
@@ -431,12 +472,12 @@ const PianoRoll = {
     if (!vc || !f) return;
     const dpr = window.devicePixelRatio || 1;
     const H = this.VEL_H;
-    vc.width = W * dpr; vc.height = H * dpr;
-    vc.style.width = W + 'px'; vc.style.height = H + 'px';
-    const v = vc.getContext('2d');
-    v.scale(dpr, dpr);
+    const v = this.sizeCanvas(vc, W, H, dpr);
+    vc.style.background = '#12151f';
+    const sc = this.wrap; const vw = sc ? sc.clientWidth : W; const scL = sc ? sc.scrollLeft : 0;
+    const vX0 = Math.max(0, scL - vw), vX1 = Math.min(W, scL + vw * 2);
     v.fillStyle = '#12151f';
-    v.fillRect(0, 0, W, H);
+    v.fillRect(vX0, 0, vX1 - vX0, H);
     // faint quarter/full markers so it lines up with the grid
     for (let b = 0; b <= f.clip.length + 0.001; b += 1) {
       const x = b * this.pxb;
@@ -469,11 +510,21 @@ const PianoRoll = {
 
     gc.addEventListener('wheel', (e) => {
       if (this._rowMap) return;   // drum lanes are fixed; nothing to scroll to
-      if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
-        e.preventDefault();
-        this.topPitch = clamp(this.topPitch - Math.sign(e.deltaY) * 2, 40, 118);
-        this.redraw();
-      }
+      if (Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;
+      e.preventDefault();
+      // normalise wheel units to pixels, then move whole rows as they accumulate,
+      // so scrolling is smooth and proportional (not a fixed 2-semitone jump)
+      let dy = e.deltaY;
+      if (e.deltaMode === 1) dy *= 16;            // lines -> px
+      else if (e.deltaMode === 2) dy *= this.gridH(); // pages -> px
+      this._scrollAcc = (this._scrollAcc || 0) + dy;
+      const rows = Math.trunc(this._scrollAcc / this.rowH);
+      if (!rows) return;
+      this._scrollAcc -= rows * this.rowH;
+      const rowsVisible = Math.floor(this.gridH() / this.rowH);
+      const minTop = Math.min(84, 12 + rowsVisible); // keep the lowest keys reachable
+      this.topPitch = clamp(this.topPitch - rows, minTop, 120);
+      this.scheduleRedraw();
     }, { passive: false });
 
     gc.addEventListener('contextmenu', (e) => {

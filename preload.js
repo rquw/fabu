@@ -2,6 +2,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('electronAPI', {
   saveFile: (opts) => ipcRenderer.invoke('save-file', opts),
+  writeFile: (opts) => ipcRenderer.invoke('write-file', opts),
   openFile: (opts) => ipcRenderer.invoke('open-file', opts),
   openPath: (opts) => ipcRenderer.invoke('open-path', opts),
   getLanguages: () => ipcRenderer.invoke('get-languages'),
@@ -15,6 +16,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onUpdateProgress: (cb) => ipcRenderer.on('update-progress', (e, pct) => cb(pct)),
   onUpdateError: (cb) => ipcRenderer.on('update-error', (e, msg) => cb(msg)),
   onUpdateRestarting: (cb) => ipcRenderer.on('update-restarting', () => cb()),
+  onUpdateDownloaded: (cb) => ipcRenderer.on('update-downloaded', () => cb()),
+  onFullscreen: (cb) => ipcRenderer.on('fullscreen-changed', (e, fs) => cb(fs)),
+  restartNow: () => ipcRenderer.send('restart-now'),
   getVersion: () => ipcRenderer.invoke('get-version'),
   checkUpdates: () => ipcRenderer.invoke('check-updates'),
   installUpdate: () => ipcRenderer.send('install-update')

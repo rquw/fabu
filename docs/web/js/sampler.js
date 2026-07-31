@@ -171,6 +171,7 @@ const Sampler = {
   },
 
   async loadFile(file) {
+    if (typeof Sync !== 'undefined' && Sync.connected && Sync.blockCustomAudio()) return;
     Engine.ensureCtx();
     try {
       const bytes = await file.arrayBuffer();

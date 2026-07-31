@@ -20,7 +20,7 @@ const INSTRUMENTS = {
 // multi-zone: pick the sample whose root is nearest the note, then pitch-shift a little
 const MELODIC = {
   rpiano: { name: 'Grand Piano', attack: 0.004, release: 0.18, zones: [{ file: 'piano_c2', root: 36 }, { file: 'piano_c4', root: 60 }, { file: 'piano_c6', root: 84 }] },
-  rvibes: { name: 'Vibraphone', attack: 0.003, release: 0.4, zones: [{ file: 'vibes_c3', root: 48 }, { file: 'vibes_c5', root: 72 }] }
+  rvibes: { name: 'Vibraphone', attack: 0.003, release: 0.4, zones: [{ file: 'vibes_c3', root: 48 }, { file: 'vibes_d4', root: 62 }, { file: 'vibes_a4', root: 69 }, { file: 'vibes_c5', root: 72 }, { file: 'vibes_e5', root: 76 }] }
 };
 
 // pitch-class -> bundled real drum sample (assets/oneshots). Same layout as the
@@ -104,6 +104,9 @@ const Engine = {
   },
 
   // eco mode: cheaper audio path for low-end machines (no convolver, fewer voices)
+  // scrubbing preference (on by default). Drag the playhead to hear what's under it.
+  scrubOn() { try { return localStorage.getItem('fabu.scrub') !== '0'; } catch (e) { return true; } },
+  setScrub(on) { try { localStorage.setItem('fabu.scrub', on ? '1' : '0'); } catch (e) {} if (!on) this.scrubEnd(); },
   ecoMode() { try { return localStorage.getItem('fabu.eco') === '1'; } catch (e) { return false; } },
   setEco(on) {
     try { localStorage.setItem('fabu.eco', on ? '1' : '0'); } catch (e) {}
@@ -134,18 +137,34 @@ const Engine = {
 
   buildChain(ac, dest, track) {
     const input = ac.createGain();
+    const trim = ac.createGain();     // 'gain' automation (pre-EQ trim, default 1)
     const eqLow = ac.createBiquadFilter();
     eqLow.type = 'lowshelf'; eqLow.frequency.value = 220;
     const eqMid = ac.createBiquadFilter();
     eqMid.type = 'peaking'; eqMid.frequency.value = 1000; eqMid.Q.value = 0.9;
     const eqHigh = ac.createBiquadFilter();
     eqHigh.type = 'highshelf'; eqHigh.frequency.value = 4500;
+    // drive + crush as parallel wet stages (wet gain 0 = clean passthrough)
+    const driveWS = ac.createWaveShaper(); driveWS.curve = this.distortionCurve(60); driveWS.oversample = '2x';
+    const driveWet = ac.createGain(); driveWet.gain.value = 0;
+    const driveSum = ac.createGain();
+    const crushWS = ac.createWaveShaper(); crushWS.curve = this.crushCurve(60);
+    const crushWet = ac.createGain(); crushWet.gain.value = 0;
+    const crushSum = ac.createGain();
+    const lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 20000; lp.Q.value = 0.7;
     const pan = ac.createStereoPanner();
     const gain = ac.createGain();
     const sc = ac.createGain();   // sidechain "pump" ducking (1 = no ducking)
-    input.connect(eqLow); eqLow.connect(eqMid); eqMid.connect(eqHigh);
-    eqHigh.connect(pan); pan.connect(gain); gain.connect(sc); sc.connect(dest);
-    const chain = { input, eqLow, eqMid, eqHigh, pan, gain, sc };
+    input.connect(trim);
+    trim.connect(eqLow); eqLow.connect(eqMid); eqMid.connect(eqHigh);
+    // drive stage: dry through + distorted*wet, summed
+    eqHigh.connect(driveSum);
+    eqHigh.connect(driveWS); driveWS.connect(driveWet); driveWet.connect(driveSum);
+    // crush stage
+    driveSum.connect(crushSum);
+    driveSum.connect(crushWS); crushWS.connect(crushWet); crushWet.connect(crushSum);
+    crushSum.connect(lp); lp.connect(pan); pan.connect(gain); gain.connect(sc); sc.connect(dest);
+    const chain = { input, trim, eqLow, eqMid, eqHigh, driveWet, crushWet, lp, pan, gain, sc };
     this.applyParams(chain, track);
     return chain;
   },
@@ -156,6 +175,11 @@ const Engine = {
     chain.eqHigh.gain.value = track.eq.high;
     chain.pan.pan.value = track.pan;
     chain.gain.gain.value = this.audible(track) ? track.volume : 0;
+    // static values for the extra automatable params default to transparent
+    if (chain.trim) chain.trim.gain.value = automValueAt(track, 'gain', 0) != null ? automValueAt(track, 'gain', 0) : 1;
+    if (chain.driveWet) chain.driveWet.gain.value = automValueAt(track, 'drive', 0) != null ? automValueAt(track, 'drive', 0) : 0;
+    if (chain.crushWet) chain.crushWet.gain.value = automValueAt(track, 'crush', 0) != null ? automValueAt(track, 'crush', 0) : 0;
+    if (chain.lp) chain.lp.frequency.value = automValueAt(track, 'filter', 0) != null ? automValueAt(track, 'filter', 0) : 20000;
   },
 
   audible(track) {
@@ -187,15 +211,20 @@ const Engine = {
 
   // ----- automation (keyframes over time) -----
 
-  AUTOM_PARAMS: ['volume', 'low', 'mid', 'high', 'pan'],
+  AUTOM_PARAMS: ['volume', 'gain', 'low', 'mid', 'high', 'pan', 'drive', 'crush', 'filter', 'transpose'],
 
   automAudioParam(chain, param) {
     switch (param) {
       case 'volume': return chain.gain.gain;
+      case 'gain': return chain.trim.gain;
       case 'low': return chain.eqLow.gain;
       case 'mid': return chain.eqMid.gain;
       case 'high': return chain.eqHigh.gain;
       case 'pan': return chain.pan.pan;
+      case 'drive': return chain.driveWet.gain;
+      case 'crush': return chain.crushWet.gain;
+      case 'filter': return chain.lp.frequency;
+      // 'transpose' has no audio-rate param; it's applied per note at schedule time
     }
     return null;
   },
@@ -267,7 +296,7 @@ const Engine = {
     if (!this.ctx) return;
     const now = this.ctx.currentTime;
     for (const [id, c] of this.chains) {
-      for (const ap of [c.gain.gain, c.eqLow.gain, c.eqMid.gain, c.eqHigh.gain, c.pan.pan]) {
+      for (const ap of [c.gain.gain, c.trim.gain, c.eqLow.gain, c.eqMid.gain, c.eqHigh.gain, c.pan.pan, c.driveWet.gain, c.crushWet.gain, c.lp.frequency]) {
         try { ap.cancelScheduledValues(now); } catch (e) {}
       }
       if (c.sc) { try { c.sc.gain.cancelScheduledValues(now); c.sc.gain.setValueAtTime(1, now); } catch (e) {} }
@@ -450,9 +479,9 @@ const Engine = {
 
     const p = peak * vel;
     if (noAttack) {
-      // straight to sustain with a tiny fade so there's no attack thump/click
+      // straight to sustain, near-instant so it's just "already there" (no swell)
       g.gain.setValueAtTime(0, t);
-      g.gain.linearRampToValueAtTime(p * SUS, t + 0.01);
+      g.gain.linearRampToValueAtTime(p * SUS, t + 0.004);
       // no filter sweep — it's mid-note, the filter has already settled
     } else {
       g.gain.setValueAtTime(0, t);
@@ -490,7 +519,7 @@ const Engine = {
       // the note has been ringing, not freshly struck
       const amp = lvl * (0.4 + 0.6 * vel) * 0.5 * (noAttack ? 0.5 : 1);
       pg.gain.setValueAtTime(0, t);
-      pg.gain.linearRampToValueAtTime(amp, t + (noAttack ? 0.012 : 0.004));
+      pg.gain.linearRampToValueAtTime(amp, t + 0.004);
       pg.gain.exponentialRampToValueAtTime(0.0002, t + bodyDecay * decayScale * (noAttack ? 0.6 : 1));
       o.connect(pg); pg.connect(g);
       o.start(t);
@@ -539,7 +568,7 @@ const Engine = {
     src.buffer = s.buffer;
     src.playbackRate.value = Math.pow(2, (pitch - (inst.root ?? 60)) / 12);
     src.connect(g);
-    const A = noAttack ? 0.01 : (inst.attack ?? 0.005);
+    const A = noAttack ? 0.004 : (inst.attack ?? 0.005);
     const R = inst.release ?? 0.08;
     const start = clamp(inst.start || 0, 0, s.buffer.duration);
     const end = clamp(inst.end != null ? inst.end : s.buffer.duration, start, s.buffer.duration);
@@ -732,11 +761,61 @@ const Engine = {
     return curve;
   },
 
+  // which dropped-effect params can be automated over time (waveshaper
+  // amounts can't be ramped, so drive/crush amount stay static)
+  FX_AUTOM: {
+    reverb: ['amt'], echo: ['time', 'fb', 'mix'], dampen: ['freq'],
+    lowcut: ['freq'], tremolo: ['rate', 'depth'], wobble: ['rate', 'amt'], widen: ['amt']
+  },
+  fxAutomatable(type, key) { return (this.FX_AUTOM[type] || []).includes(key); },
+
+  // Set an effect-node AudioParam either to a static value or, when the effect
+  // has keyframes for this param and we're playing/exporting, as scheduled ramps
+  // over the song timeline. `transform` maps the user value to the node's units.
+  bindFx(param, fx, key, def, transform, automCtx) {
+    transform = transform || ((x) => x);
+    const pts = fx.autom && fx.autom[key];
+    if (automCtx && pts && pts.length) {
+      try { param.cancelScheduledValues(automCtx.time0); } catch (e) {}
+      param.setValueAtTime(transform(interpPoints(pts, automCtx.curBeat)), automCtx.time0);
+      for (const pt of pts) {
+        if (pt.beat <= automCtx.curBeat) continue;
+        try { param.linearRampToValueAtTime(transform(pt.v), automCtx.beatToTime(pt.beat)); } catch (e) {}
+      }
+    } else {
+      param.value = transform(fx.p && fx.p[key] != null ? fx.p[key] : def);
+    }
+  },
+
+  // ramp an audio-source AudioParam (playbackRate / detune) from a clip's own
+  // keyframes, or set it static when there are none
+  bindClipParam(param, autom, key, staticVal, transform, automCtx) {
+    transform = transform || ((x) => x);
+    const pts = autom && autom[key];
+    if (automCtx && pts && pts.length) {
+      try { param.cancelScheduledValues(automCtx.time0); } catch (e) {}
+      param.setValueAtTime(transform(interpPoints(pts, automCtx.curBeat)), automCtx.time0);
+      for (const pt of pts) {
+        if (pt.beat <= automCtx.curBeat) continue;
+        try { param.linearRampToValueAtTime(transform(pt.v), automCtx.beatToTime(pt.beat)); } catch (e) {}
+      }
+    } else {
+      param.value = staticVal;
+    }
+  },
+
+  // build a live automation context for a clip fx chain starting now
+  liveFxCtx() {
+    if (!UI.playing || !this.ctx) return null;
+    return { curBeat: this.currentBeat(), time0: this.ctx.currentTime, beatToTime: (b) => this.beatToTime(b) };
+  },
+
   // A per-clip effect chain: the built-in drive → crush → filter sliders plus
   // any dropped effects from clip.fx (reverb send, dampen, echo, …). Every note
   // or audio source of the clip routes through it. Returns `dest` unchanged
-  // when the clip has nothing to apply.
-  clipFxDest(ac, dest, clip, revIn) {
+  // when the clip has nothing to apply. `automCtx` (optional) schedules any
+  // per-effect keyframes as ramps instead of static values.
+  clipFxDest(ac, dest, clip, revIn, automCtx) {
     const list = clip.fx || [];
     const hasFx = clip.drive > 0 || clip.crush > 0 || (clip.cutoff > 0 && clip.cutoff < 20000) || list.length;
     if (!hasFx) return dest;
@@ -769,42 +848,42 @@ const Engine = {
         node.connect(cr); node = cr;
       } else if (fx.type === 'dampen') {
         const f = ac.createBiquadFilter();
-        f.type = 'lowpass'; f.frequency.value = p.freq ?? 2500; f.Q.value = 0.9;
+        f.type = 'lowpass'; f.Q.value = 0.9; this.bindFx(f.frequency, fx, 'freq', 2500, null, automCtx);
         node.connect(f); node = f;
       } else if (fx.type === 'echo') {
         const sum = ac.createGain();
-        const dl = ac.createDelay(2); dl.delayTime.value = p.time ?? 0.3;
-        const fb = ac.createGain(); fb.gain.value = clamp(p.fb ?? 0.35, 0, 0.92);
-        const wet = ac.createGain(); wet.gain.value = p.mix ?? 0.35;
+        const dl = ac.createDelay(2); this.bindFx(dl.delayTime, fx, 'time', 0.3, null, automCtx);
+        const fb = ac.createGain(); this.bindFx(fb.gain, fx, 'fb', 0.35, (v) => clamp(v, 0, 0.92), automCtx);
+        const wet = ac.createGain(); this.bindFx(wet.gain, fx, 'mix', 0.35, null, automCtx);
         node.connect(sum);
         node.connect(dl); dl.connect(fb); fb.connect(dl); dl.connect(wet); wet.connect(sum);
         node = sum;
       } else if (fx.type === 'reverb' && revIn) {
-        const send = ac.createGain(); send.gain.value = p.amt ?? 0.35;
+        const send = ac.createGain(); this.bindFx(send.gain, fx, 'amt', 0.35, null, automCtx);
         node.connect(send); send.connect(revIn);
       } else if (fx.type === 'lowcut') {
         const f = ac.createBiquadFilter();
-        f.type = 'highpass'; f.frequency.value = p.freq ?? 200; f.Q.value = 0.7;
+        f.type = 'highpass'; f.Q.value = 0.7; this.bindFx(f.frequency, fx, 'freq', 200, null, automCtx);
         node.connect(f); node = f;
       } else if (fx.type === 'tremolo') {
         const g2 = ac.createGain();
-        const depth = clamp(p.depth ?? 0.6, 0, 1);
-        g2.gain.value = 1 - depth / 2;
-        const lfo = ac.createOscillator(); lfo.type = 'sine'; lfo.frequency.value = p.rate ?? 5;
-        const lg = ac.createGain(); lg.gain.value = depth / 2;
+        // depth splits into the carrier level (1 - depth/2) and the LFO swing (depth/2)
+        this.bindFx(g2.gain, fx, 'depth', 0.6, (d) => 1 - clamp(d, 0, 1) / 2, automCtx);
+        const lfo = ac.createOscillator(); lfo.type = 'sine'; this.bindFx(lfo.frequency, fx, 'rate', 5, null, automCtx);
+        const lg = ac.createGain(); this.bindFx(lg.gain, fx, 'depth', 0.6, (d) => clamp(d, 0, 1) / 2, automCtx);
         lfo.connect(lg); lg.connect(g2.gain); lfo.start();
         node.connect(g2); node = g2;
       } else if (fx.type === 'wobble') {
         const f = ac.createBiquadFilter();
         f.type = 'lowpass'; f.frequency.value = 800; f.Q.value = 6;
-        const lfo = ac.createOscillator(); lfo.type = 'sine'; lfo.frequency.value = p.rate ?? 3;
-        const lg = ac.createGain(); lg.gain.value = (p.amt ?? 0.7) * 1800;
+        const lfo = ac.createOscillator(); lfo.type = 'sine'; this.bindFx(lfo.frequency, fx, 'rate', 3, null, automCtx);
+        const lg = ac.createGain(); this.bindFx(lg.gain, fx, 'amt', 0.7, (a) => a * 1800, automCtx);
         lfo.connect(lg); lg.connect(f.frequency); lfo.start();
         node.connect(f); node = f;
       } else if (fx.type === 'widen') {
         // Haas widening: delay one side a few ms
         const splitL = ac.createGain(), splitR = ac.createDelay(0.05);
-        splitR.delayTime.value = 0.004 + (p.amt ?? 0.6) * 0.02;
+        this.bindFx(splitR.delayTime, fx, 'amt', 0.6, (a) => 0.004 + a * 0.02, automCtx);
         const merger = ac.createChannelMerger(2);
         node.connect(splitL); node.connect(splitR);
         splitL.connect(merger, 0, 0); splitR.connect(merger, 0, 1);
@@ -820,17 +899,30 @@ const Engine = {
     if (!s || !s.buffer) return;
     const speed = clip.speed || 1;
     const trimOff = clipOffSec(clip);
-    const durOut = clipDurSec(clip) / speed;   // speed changes the output length
+    const rateAuto = clipRateAutom(clip);
+    // with rate automation the real output length is the integral of the curve,
+    // so the sound ends exactly where the block on the timeline ends
+    const durOut = rateAuto ? clipAutoInfo(clip).durSec : clipDurSec(clip) / speed;
     if (outOff >= durOut) return;
 
+    if (revIn === undefined) revIn = (ac === this.ctx && this.rev) ? this.rev.pre : null;
+    const automCtx = (ac === this.ctx && UI.playing)
+      ? { curBeat: this.startBeat + (when - this.startCtxTime) / this.spb(), time0: Math.max(when, ac.currentTime), beatToTime: (b) => this.beatToTime(b) }
+      : (this._offlineFx ? this._offlineFx : null);
+    const pitchAuto = automCtx && clip.autom && clip.autom.pitch && clip.autom.pitch.length;
+    const speedAuto = automCtx && clip.autom && clip.autom.speed && clip.autom.speed.length;
+
     const src = ac.createBufferSource();
-    src.buffer = this.shiftedBuffer(s, clip.pitch || 0); // shift pitch, keep length
-    src.playbackRate.value = speed;
+    // automated pitch rides on the raw buffer via detune (tape-style); otherwise
+    // a clean length-preserving shift for the static pitch
+    src.buffer = pitchAuto ? s.buffer : this.shiftedBuffer(s, clip.pitch || 0);
+    if (pitchAuto) this.bindClipParam(src.detune, clip.autom, 'pitch', (clip.pitch || 0) * 100, (st) => st * 100, automCtx);
+    if (speedAuto) this.bindClipParam(src.playbackRate, clip.autom, 'speed', speed, null, automCtx);
+    else src.playbackRate.value = speed;
     const g = ac.createGain();
 
     // effects (built-in sliders + dropped fx) live in the shared per-clip chain
-    if (revIn === undefined) revIn = (ac === this.ctx && this.rev) ? this.rev.pre : null;
-    const fxDest = this.clipFxDest(ac, dest, clip, revIn);
+    const fxDest = this.clipFxDest(ac, dest, clip, revIn, automCtx);
     src.connect(g); g.connect(fxDest);
 
     const lvl = clip.gain ?? 1;
@@ -848,8 +940,10 @@ const Engine = {
       g.gain.linearRampToValueAtTime(envAt(x), T + x);
     }
 
-    src.start(when, trimOff + outOff * speed);
-    src.stop(T + durOut + 0.03);
+    // seeking into a rate-automated clip: the source position is the integral
+    // of the rate curve up to the seek point, not a straight multiply
+    src.start(when, trimOff + (rateAuto ? clipAutoInfo(clip).sourceAt(outOff) : outOff * speed));
+    src.stop(T + durOut + (rateAuto ? 0.1 : 0.03));   // durOut is exact now, small pad only
 
     if (register) {
       const h = {
@@ -880,33 +974,45 @@ const Engine = {
     return this.startBeat + (this.ctx.currentTime - this.startCtxTime) / this.spb();
   },
 
-  // schedule one clip (midi or audio) playing on `t`'s chain into `ev`
-  collectClipEvents(ev, c, t, fromBeat) {
+  // schedule one clip (midi or audio) playing on `t`'s chain into `ev`.
+  // futureOnly = don't re-trigger notes/clips already in progress at fromBeat
+  // (used for live edits: leave sounding voices exactly as they are)
+  collectClipEvents(ev, c, t, fromBeat, futureOnly) {
     if (c.kind === 'midi') {
       let clipDest = null; // one shared per-clip fx chain, built at play time
       const getDest = () => {
         if (!clipDest) {
-          clipDest = this.clipFxDest(this.ctx, this.trackInput(t.id), c, this.rev && this.rev.pre);
+          clipDest = this.clipFxDest(this.ctx, this.trackInput(t.id), c, this.rev && this.rev.pre, this.liveFxCtx());
           if (clipDest !== this.trackInput(t.id)) this.live.add({ kill: () => { try { clipDest.disconnect(); } catch (e) {} } });
         }
         return clipDest;
       };
+      const sp = c.speed || 1;   // pattern speed: squash/stretch note timing
       for (const n of c.notes) {
         if (n.start >= c.length) continue;
-        const b = this.swingBeat(c.start + n.start, t.swing);
-        const durB = Math.min(n.length, c.length - n.start);
+        const b = this.swingBeat(c.start + (n.start / sp), t.swing);
+        const durB = Math.min(n.length, c.length - n.start) / sp;
         const endB = b + durB;
         if (endB <= fromBeat + 1e-6) continue; // already finished
         const startBeat = Math.max(b, fromBeat);
         const remain = endB - startBeat;
         const midNote = startBeat > b + 1e-6; // seeked INTO this note
+        if (futureOnly && midNote) continue;  // don't re-trigger an already-sounding note
         ev.push({
           beat: startBeat,
           fn: (time) => {
-            const v = this.makeVoice(this.ctx, getDest(), t.instrument, n.pitch + (c.pitch || 0), time, (n.vel ?? 0.9) * (c.gain ?? 1), midNote);
+            const tv = automValueAt(t, 'transpose', b);          // transpose automation, stepped per note
+            const semis = tv == null ? 0 : Math.round(tv);
+            const v = this.makeVoice(this.ctx, getDest(), t.instrument, n.pitch + (c.pitch || 0) + semis + (c.detune || 0) / 100, time, (n.vel ?? 0.9) * (c.gain ?? 1), midNote);
             const end = time + remain * this.spb();
             v.stop(end);
             this.registerVoice(v, end);
+            // remember it so a live change to this clip's settings can reach a
+            // note that's still ringing (see applyLiveClipEdits)
+            if (n.id && c.id && this.sounding) {
+              const key = t.id + ':' + c.id + ':' + n.id;
+              this.sounding.set(key, { v, trackId: t.id, clipId: c.id, noteId: n.id, endTime: end, sig: this.noteSig(t, c, n) });
+            }
           }
         });
       }
@@ -915,14 +1021,14 @@ const Engine = {
       if (c.start + lenB <= fromBeat + 1e-6) return;
       if (c.start >= fromBeat - 1e-6) {
         ev.push({ beat: c.start, fn: (time) => this.scheduleAudioClip(this.ctx, this.trackInput(t.id), c, time, 0) });
-      } else {
+      } else if (!futureOnly) {
         const outOff = (fromBeat - c.start) * this.spb();
         ev.push({ beat: fromBeat, fn: (time) => this.scheduleAudioClip(this.ctx, this.trackInput(t.id), c, time, outOff) });
       }
     }
   },
 
-  collectEvents(fromBeat) {
+  collectEvents(fromBeat, futureOnly) {
     const ev = [];
     for (const t of S.tracks) {
       for (const c of t.clips) {
@@ -932,10 +1038,10 @@ const Engine = {
           for (const child of c.children) {
             const ot = getTrack(child.origTrackId) || t;
             const abs = Object.assign({}, child.clip, { start: c.start + (child.clip.start || 0) });
-            this.collectClipEvents(ev, abs, ot, fromBeat);
+            this.collectClipEvents(ev, abs, ot, fromBeat, futureOnly);
           }
         } else {
-          this.collectClipEvents(ev, c, t, fromBeat);
+          this.collectClipEvents(ev, c, t, fromBeat, futureOnly);
         }
       }
     }
@@ -947,7 +1053,9 @@ const Engine = {
     this.ensureCtx();
     this.ctx.resume();
     if (UI.playing) return;
+    this.scrubEnd(); // release any notes held from a scrub drag
     UI.playing = true;
+    this.sounding = new Map();
     this.startBeat = UI.playhead;
     this.startCtxTime = (atTime && atTime > this.ctx.currentTime + 0.005) ? atTime : this.ctx.currentTime + 0.08;
     this.events = this.collectEvents(this.startBeat);
@@ -962,20 +1070,31 @@ const Engine = {
 
   schedTick() {
     if (!UI.playing) return;
+    // drop finished notes from the sounding map so it stays small
+    if (this.sounding && this.sounding.size) {
+      const t = this.ctx.currentTime;
+      for (const [k, r] of this.sounding) if (t >= r.endTime) this.sounding.delete(k);
+    }
     const horizon = this.ctx.currentTime + 0.15;
     const horizonBeat = this.startBeat + (horizon - this.startCtxTime) / this.spb();
-    while (this.evIdx < this.events.length && this.events[this.evIdx].beat < horizonBeat) {
+    // guards: a single 25ms tick can never legitimately fire thousands of events
+    // or clicks. If a stale scheduler state made horizonBeat balloon, cap and
+    // resync instead of spinning the whole app to a freeze.
+    let evGuard = 0;
+    while (this.evIdx < this.events.length && this.events[this.evIdx].beat < horizonBeat && evGuard++ < 4096) {
       const e = this.events[this.evIdx++];
       e.fn(Math.max(this.beatToTime(e.beat), this.ctx.currentTime + 0.005));
     }
     if (S.metronome) {
-      while (this.nextClickBeat < horizonBeat) {
+      let clkGuard = 0;
+      while (this.nextClickBeat < horizonBeat && clkGuard++ < 512) {
         const t = this.beatToTime(this.nextClickBeat);
         if (t >= this.ctx.currentTime) {
           this.click(this.ctx, this.metroGain, t, this.nextClickBeat % 4 === 0);
         }
         this.nextClickBeat++;
       }
+      if (this.nextClickBeat < horizonBeat) this.nextClickBeat = Math.ceil(horizonBeat); // resync, don't spin
     }
   },
 
@@ -1010,20 +1129,131 @@ const Engine = {
     else App.onTransport();
   },
 
-  // Re-apply clip-level effect edits mid-playback without a full stop/start:
-  // kill what's sounding and reschedule from the current beat with the new
-  // settings. Track EQ/volume/pan already update live on their own.
+  // Scrubbing: while dragging the playhead (stopped), HOLD whatever melodic
+  // notes sit under it, like pressing keys. A note sounds the moment the
+  // playhead reaches it and releases the moment it leaves, so dragging over a
+  // chord sustains that chord and moving reveals the next one. No re-triggered
+  // bursts stacking up, no machine-gun attacks. Drums and audio clips are
+  // skipped (re-triggering them just sounds like noise).
+  _scrubDrum(instr) { return instr === 'drums' || instr === 'drumkit'; },
+  scrub(beat) {
+    this.ensureCtx();
+    this.ctx.resume();
+    const at = this.ctx.currentTime;
+    const active = this.scrubActive || (this.scrubActive = new Map());
+    const fxCache = this._scrubFx || (this._scrubFx = new Map());
+    const wanted = new Set();
+    const anySolo = S.tracks.some(t => t.solo);
+    // route each held note through its clip's effect chain (built once per clip
+    // for the drag, cached; null = clip has no fx, so use the bare track input)
+    const destFor = (trackId, clip) => {
+      const ti = this.trackInput(trackId);
+      if (fxCache.has(clip.id)) return fxCache.get(clip.id) || ti;
+      const d = this.clipFxDest(this.ctx, ti, clip, this.rev ? this.rev.pre : null);
+      fxCache.set(clip.id, d === ti ? null : d);
+      return d;
+    };
+    const hold = (instr, trackId, clip, pitch, vel, key) => {
+      wanted.add(key);
+      if (!active.has(key)) {
+        active.set(key, this.makeVoice(this.ctx, destFor(trackId, clip), instr, pitch, at, vel, true));
+      }
+    };
+    for (const t of S.tracks) {
+      if (t.mute || (anySolo && !t.solo)) continue;
+      for (const c of t.clips) {
+        if (c.kind === 'midi') {
+          if (this._scrubDrum(t.instrument)) continue;
+          for (const n of c.notes) {
+            const nb = c.start + n.start;
+            if (beat >= nb && beat < nb + Math.max(0.05, n.length))
+              hold(t.instrument, t.id, c, n.pitch + (c.pitch || 0), (n.vel ?? 0.9) * (c.gain ?? 1), t.id + ':' + c.id + ':' + n.id);
+          }
+        } else if (c.kind === 'group') {
+          for (const child of c.children) {
+            if (!child.clip || child.clip.kind !== 'midi') continue;
+            const ot = getTrack(child.origTrackId) || t;
+            if (this._scrubDrum(ot.instrument)) continue;
+            for (const n of child.clip.notes) {
+              const nb = c.start + child.clip.start + n.start;
+              if (beat >= nb && beat < nb + Math.max(0.05, n.length))
+                hold(ot.instrument, t.id, child.clip, n.pitch + (child.clip.pitch || 0), (n.vel ?? 0.9) * (child.clip.gain ?? 1), c.id + ':' + child.clip.id + ':' + n.id);
+            }
+          }
+        }
+      }
+    }
+    // release notes the playhead has moved off of
+    for (const [key, v] of active) {
+      if (!wanted.has(key)) { try { v.stop(at + 0.02); } catch (e) {} active.delete(key); }
+    }
+  },
+  // drag finished (or interrupted): let every held scrub note ring out, then
+  // tear down the per-clip effect chains built for this drag
+  scrubEnd() {
+    if (!this.scrubActive) return;
+    const at = this.ctx ? this.ctx.currentTime : 0;
+    for (const v of this.scrubActive.values()) { try { v.stop(at + 0.03); } catch (e) {} }
+    this.scrubActive.clear();
+    const fx = this._scrubFx; this._scrubFx = null;
+    if (fx && fx.size) setTimeout(() => {
+      for (const d of fx.values()) { if (d) { try { d.disconnect(); } catch (e) {} } }
+    }, 500);
+  },
+
+  // Apply edits mid-playback WITHOUT disturbing what's already sounding. We keep
+  // the timeline anchor and every live voice, and only replace the not-yet-
+  // scheduled future events with a freshly collected (edited) set. So changing a
+  // track's instrument, adding/moving/deleting future notes, etc. take hold for
+  // everything ahead of the playhead, while notes in progress just play out
+  // naturally — no stutter, no re-triggering, no "simulated" re-attack.
   reschedule() {
     if (!UI.playing || !this.ctx) return;
-    const beat = this.currentBeat();
-    for (const v of this.live) v.kill();
-    this.live.clear();
-    this.startBeat = beat;
-    this.startCtxTime = this.ctx.currentTime + 0.03;
-    this.events = this.collectEvents(beat);
+    // start just past the current scheduling horizon so we neither double a note
+    // that's already been scheduled nor re-trigger one that's already sounding
+    const fromBeat = this.startBeat + ((this.ctx.currentTime + 0.16) - this.startCtxTime) / this.spb();
+    this.events = this.collectEvents(fromBeat, true); // futureOnly
     this.evIdx = 0;
-    this.nextClickBeat = Math.ceil(beat - 1e-6);
-    this.schedTick();
+  },
+
+  // signature of a note's *sound* — pitch, level, instrument and the clip's
+  // effects. If this changes, a note still ringing needs re-voicing to hear it.
+  noteSig(t, c, n) {
+    const fx = c.fx ? c.fx.map(f => f.type + JSON.stringify(f.p || {}) + JSON.stringify(f.autom || {})).join('|') : '';
+    return [t.instrument, n.pitch + (c.pitch || 0) + (c.detune || 0) / 100, (n.vel ?? 0.9) * (c.gain ?? 1),
+      c.drive || 0, c.crush || 0, c.cutoff || 0, fx].join(',');
+  },
+
+  // A long note is already sounding and you change its clip's gain / transpose /
+  // drive / crush / filter / effects — re-voice just that note (seamless 4ms
+  // crossfade) so the change is actually heard, not only on the next note.
+  applyLiveClipEdits() {
+    if (!UI.playing || !this.ctx || !this.sounding || !this.sounding.size) return;
+    const now = this.ctx.currentTime;
+    for (const [key, rec] of this.sounding) {
+      if (now >= rec.endTime - 0.03) { this.sounding.delete(key); continue; }
+      const t = getTrack(rec.trackId);
+      const c = t && t.clips.find(x => x.id === rec.clipId); // top-level clips only
+      const n = c && c.notes && c.notes.find(x => x.id === rec.noteId);
+      if (!t || !c || !n) {                      // note/clip deleted -> stop it now
+        try { rec.v.stop(now + 0.02); } catch (e) {}
+        this.sounding.delete(key);
+        continue;
+      }
+      const sig = this.noteSig(t, c, n);
+      if (sig === rec.sig) continue;              // nothing that affects the sound changed
+      const sp = c.speed || 1;
+      const endBeat = this.swingBeat(c.start + (n.start / sp), t.swing) + Math.min(n.length, c.length - n.start) / sp;
+      const endTime = this.beatToTime(endBeat);
+      if (endTime <= now + 0.05) { this.sounding.delete(key); continue; }
+      try { rec.v.stop(now + 0.02); } catch (e) {}
+      const dest = this.clipFxDest(this.ctx, this.trackInput(t.id), c, this.rev && this.rev.pre, this.liveFxCtx());
+      if (dest !== this.trackInput(t.id)) this.live.add({ kill: () => { try { dest.disconnect(); } catch (e) {} } });
+      const v = this.makeVoice(this.ctx, dest, t.instrument, n.pitch + (c.pitch || 0) + (c.detune || 0) / 100, now, (n.vel ?? 0.9) * (c.gain ?? 1), true);
+      v.stop(endTime);
+      this.registerVoice(v, endTime);
+      rec.v = v; rec.sig = sig; rec.endTime = endTime;
+    }
   },
 
   // Any edit while the song plays (add/delete a clip or note, drop an effect,
@@ -1033,7 +1263,7 @@ const Engine = {
   liveEdit() {
     if (!UI.playing) return;
     clearTimeout(this._reTimer);
-    this._reTimer = setTimeout(() => { if (UI.playing) this.reschedule(); }, 150);
+    this._reTimer = setTimeout(() => { if (UI.playing) { this.reschedule(); this.applyLiveClipEdits(); } }, 150);
   },
 
   // ----- live keyboard playing -----
@@ -1221,7 +1451,7 @@ const Engine = {
     const src = ac.createBufferSource(); src.buffer = buf;
     src.playbackRate.value = Math.pow(2, (pitch - zone.root) / 12);
     src.connect(g);
-    const A = noAttack ? 0.02 : (m.attack ?? 0.005);
+    const A = noAttack ? 0.004 : (m.attack ?? 0.005);
     const R = m.release ?? 0.15;
     g.gain.setValueAtTime(0, t);
     g.gain.linearRampToValueAtTime(0.92 * vel, t + A);
@@ -1281,14 +1511,22 @@ const Engine = {
 
   async toggleRecord() {
     if (UI.recording) { this.stopRecord(); return; }
+    if (typeof Sync !== 'undefined' && Sync.connected && Sync.blockMic()) return;
     this.ensureCtx();
     this.ctx.resume();
     let stream;
     try {
       const id = this.micId();
-      // record the mic RAW — no echo cancel / noise suppression / auto-gain,
-      // which mangle music and vocals. And use the chosen input device.
-      const audio = { echoCancellation: false, noiseSuppression: false, autoGainControl: false };
+      // Record the mic RAW. Echo-cancel / noise-suppression / auto-gain and the
+      // "voice" pipeline mangle music AND drop the whole output to tinny "phone
+      // call" quality (Chromium routes playback through the AEC). Force them all
+      // off, standard + legacy Chromium hints, so playback stays full quality.
+      const audio = {
+        echoCancellation: false, noiseSuppression: false, autoGainControl: false,
+        voiceIsolation: false,
+        googEchoCancellation: false, googAutoGainControl: false,
+        googNoiseSuppression: false, googHighpassFilter: false, googAudioMirroring: false
+      };
       if (id) audio.deviceId = { exact: id };
       stream = await navigator.mediaDevices.getUserMedia({ audio });
     } catch (e) {
@@ -1307,10 +1545,14 @@ const Engine = {
     }
 
     this.recChunks = [];
-    this.mediaRec = new MediaRecorder(stream);
+    // pick a codec the browser actually supports (some default to an empty/odd
+    // container and the take comes back silent), and flush periodically
+    const mime = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4']
+      .find(m => window.MediaRecorder && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(m));
+    this.mediaRec = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
     this.mediaRec.ondataavailable = (e) => { if (e.data.size) this.recChunks.push(e.data); };
     this.mediaRec.onstop = () => this.finishRecording();
-    this.mediaRec.start();
+    this.mediaRec.start(250);
     UI.playhead = this.recStartBeat;
     if (!UI.playing) this.play(at);
     toast(tr('toast_recording', 'Recording'), 'red');
@@ -1407,6 +1649,57 @@ const Engine = {
 
   async exportWav() { return this.encodeWav(await this.renderSong()); },
 
+  // Render a set of clips (across tracks) offline into one stereo buffer, so a
+  // group can be flattened into a real audio clip. Each clip plays through its
+  // own track's chain (EQ, volume, effects, reverb) exactly as it sounds now.
+  async bounceClips(items, startBeat, lenBeats) {
+    this.ensureCtx();
+    const spb = this.spb();
+    const lead = 0;   // no lead-in: the bounce must line up exactly with the group's start
+    const sr = 44100;
+    const lenSec = Math.max(0.05, lenBeats * spb);   // exact footprint so it lines up on the grid
+    const oc = new OfflineAudioContext(2, Math.ceil(lenSec * sr), sr);
+    const master = oc.createGain(); master.gain.value = 1;
+    const rev = this.buildReverb(oc, master, master, this.ecoMode() ? 0 : 0.16);
+    master.connect(oc.destination);
+    const offFx = { curBeat: startBeat, time0: lead, beatToTime: (b) => lead + (b - startBeat) * spb };
+    this._offlineFx = offFx;
+    const tracks = new Map();
+    for (const it of items) if (!tracks.has(it.track.id)) tracks.set(it.track.id, it.track);
+    for (const [tid, track] of tracks) {
+      const chain = this.buildChain(oc, master, track);
+      chain.gain.gain.value = track.volume;   // bounce at the track's real volume, ignore mute/solo
+      this.scheduleAutomation(oc, chain, track, startBeat, lead, spb);
+      for (const it of items) {
+        if (it.track.id !== tid) continue;
+        const c = it.clip;
+        const offBeat = c.start - startBeat;
+        if (c.kind === 'midi') {
+          const clipDest = this.clipFxDest(oc, chain.input, c, rev.pre, offFx);
+          const sp = c.speed || 1;
+          for (const n of c.notes) {
+            if (n.start >= c.length) continue;
+            const time = lead + (offBeat + n.start / sp) * spb;
+            const durB = Math.min(n.length, c.length - n.start) / sp;
+            const v = this.makeVoice(oc, clipDest, track.instrument, n.pitch + (c.pitch || 0) + (c.detune || 0) / 100, time, (n.vel ?? 0.9) * (c.gain ?? 1));
+            v.stop(time + durB * spb);
+          }
+        } else {
+          this.scheduleAudioClip(oc, chain.input, c, lead + offBeat * spb, 0, false, rev.pre);
+        }
+      }
+    }
+    this._offlineFx = null;
+    const buf = await oc.startRendering();
+    // tiny fade at the hard cut so it doesn't click
+    const fade = Math.min(256, buf.length);
+    for (let ch = 0; ch < buf.numberOfChannels; ch++) {
+      const d = buf.getChannelData(ch);
+      for (let i = 0; i < fade; i++) d[buf.length - 1 - i] *= i / fade;
+    }
+    return buf;
+  },
+
   // Render the whole song offline into a stereo AudioBuffer.
   async renderSong() {
     this.ensureCtx();
@@ -1424,18 +1717,22 @@ const Engine = {
     const rev = this.buildReverb(oc, master, comp, 0.16);
     comp.connect(oc.destination);
 
+    // offline automation context so per-effect keyframes render into the export
+    const offFx = { curBeat: 0, time0: lead, beatToTime: (b) => lead + b * spb };
+    this._offlineFx = offFx;
     for (const t of S.tracks) {
       if (!this.audible(t)) continue;
       const chain = this.buildChain(oc, master, t);
       this.scheduleAutomation(oc, chain, t, 0, lead, spb);
       for (const c of t.clips) {
         if (c.kind === 'midi') {
-          const clipDest = this.clipFxDest(oc, chain.input, c, rev.pre);
+          const clipDest = this.clipFxDest(oc, chain.input, c, rev.pre, offFx);
+          const sp = c.speed || 1;
           for (const n of c.notes) {
             if (n.start >= c.length) continue;
-            const time = lead + (c.start + n.start) * spb;
-            const durB = Math.min(n.length, c.length - n.start);
-            const v = this.makeVoice(oc, clipDest, t.instrument, n.pitch + (c.pitch || 0), time, (n.vel ?? 0.9) * (c.gain ?? 1));
+            const time = lead + (c.start + n.start / sp) * spb;
+            const durB = Math.min(n.length, c.length - n.start) / sp;
+            const v = this.makeVoice(oc, clipDest, t.instrument, n.pitch + (c.pitch || 0) + (c.detune || 0) / 100, time, (n.vel ?? 0.9) * (c.gain ?? 1));
             v.stop(time + durB * spb);
           }
         } else {
@@ -1443,6 +1740,7 @@ const Engine = {
         }
       }
     }
+    this._offlineFx = null;
 
     return oc.startRendering();
   },

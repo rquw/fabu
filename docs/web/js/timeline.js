@@ -3,6 +3,15 @@
 
 const TRACK_H = 84;
 
+// grouped, readable instrument picker (replaces the long flat dropdown)
+const INSTR_CATS = [
+  { key: 'cat_keys', label: 'Keys & Piano', ids: ['keys', 'epiano', 'organ', 'rpiano'] },
+  { key: 'cat_mallets', label: 'Mallets & Bells', ids: ['rvibes', 'bell'] },
+  { key: 'cat_synth', label: 'Synth', ids: ['synth', 'pluck', 'strings'] },
+  { key: 'cat_bass', label: 'Bass', ids: ['bass'] },
+  { key: 'cat_drums', label: 'Drums', ids: ['drums', 'drumkit'] }
+];
+
 const Timeline = {
   lanes: null,
   ruler: null,
@@ -32,14 +41,17 @@ const Timeline = {
       this.setZoom(UI.zoom * (e.deltaY < 0 ? 1.1 : 1 / 1.1));
     }, { passive: false });
 
-    // click ruler = move playhead
+    // click ruler = move playhead; drag while stopped = scrub (hear it)
     this.ruler.addEventListener('mousedown', (e) => {
+      const scrubbing = !UI.playing && Engine.scrubOn();
       const move = (ev) => {
         const beat = snapBeat(this.xToBeat(ev.clientX), S.snap);
         Engine.seek(beat);
+        if (scrubbing) Engine.scrub(beat);
       };
       move(e);
       const up = () => {
+        if (scrubbing) Engine.scrubEnd();
         window.removeEventListener('mousemove', move);
         window.removeEventListener('mouseup', up);
       };
@@ -209,7 +221,10 @@ const Timeline = {
       this.lanes.appendChild(hint);
     }
 
-    this.lanes.style.height = (S.tracks.length * TRACK_H) + 'px';
+    // extra bottom room so the track-headers column can scroll far enough to
+    // fully reveal its "add track" slot past the sticky ruler + h-scrollbar
+    // (the CSS padding-bottom is eaten by border-box on an explicit height)
+    this.lanes.style.height = (S.tracks.length * TRACK_H + 90) + 'px';
     $('#playhead').style.height = (S.tracks.length * TRACK_H + 30) + 'px';
     this.renderHeads();
     this.drawRuler();
@@ -289,53 +304,12 @@ const Timeline = {
       const mid = document.createElement('div');
       mid.className = 'thead-mid';
       if (t.kind === 'midi') {
-        const sel = document.createElement('select');
-        sel.dataset.tip = tr('tip_track_instr', 'Instrument sound');
-        for (const k of Object.keys(INSTRUMENTS)) {
-          const o = document.createElement('option');
-          o.value = k; o.textContent = instrLabel(k);
-          sel.appendChild(o);
-        }
-        // merge the persistent library with this project's instruments
-        const customs = {};
-        for (const [id, def] of Object.entries(LIB)) customs[id] = def;
-        for (const [id, def] of Object.entries(S.instruments || {})) customs[id] = def;
-        const customList = Object.values(customs);
-        if (customList.length) {
-          const og = document.createElement('optgroup');
-          og.label = tr('samp_custom_group', 'Your instruments');
-          for (const inst of customList) {
-            const o = document.createElement('option');
-            o.value = inst.id; o.textContent = inst.name;
-            og.appendChild(o);
-          }
-          sel.appendChild(og);
-        }
-        const oNew = document.createElement('option');
-        oNew.value = '__new_sampler';
-        oNew.textContent = tr('instr_new', 'New from audio…');
-        sel.appendChild(oNew);
-        // a sound not in the list (e.g. a sound-FX loop) still shows its name
-        if (![...sel.options].some(o => o.value === t.instrument)) {
-          const o = document.createElement('option');
-          o.value = t.instrument; o.textContent = instrLabel(t.instrument);
-          sel.insertBefore(o, sel.firstChild);
-        }
-        sel.value = t.instrument;
-        sel.addEventListener('change', () => {
-          if (sel.value === '__new_sampler') { sel.value = t.instrument; Sampler.open(t.id); return; }
-          Undo.push('Change instrument');
-          const id = sel.value;
-          // pulling a library instrument into the project makes it self-contained
-          if (!S.instruments[id] && LIB[id]) S.instruments[id] = JSON.parse(JSON.stringify(LIB[id]));
-          t.instrument = id;
-          if (id === 'drumkit') Engine.ensureDrumkit();
-          if (typeof MELODIC !== 'undefined' && MELODIC[id]) Engine.ensureMelodic();
-          toast(tr('toast_instr_changed', '{name} to {instr}', { name: t.name, instr: instrLabel(id) }));
-          this.render();
-          KeysPanel.refreshTracks();
-        });
-        mid.appendChild(sel);
+        const btn = document.createElement('button');
+        btn.className = 'tinst-btn';
+        btn.dataset.tip = tr('tip_track_instr', 'Instrument sound');
+        btn.innerHTML = `<span class="tinst-name">${instrLabel(t.instrument)}</span><span class="tinst-chev">▾</span>`;
+        btn.addEventListener('click', (e) => { e.stopPropagation(); this.openInstrMenu(t, btn); });
+        mid.appendChild(btn);
         // edit + delete buttons for custom (sampler) instruments
         if (resolveInstrument(t.instrument)) {
           const edit = document.createElement('button');
@@ -400,6 +374,84 @@ const Timeline = {
     };
     slot.append(mkAdd('midi', 'i-note', 'add_instrument', 'Instrument'), mkAdd('audio', 'i-mic', 'add_audio', 'Audio'));
     box.appendChild(slot);
+  },
+
+  // apply an instrument choice to a track (shared by the picker)
+  setInstrument(track, id) {
+    Undo.push('Change instrument');
+    // pulling a library instrument into the project makes it self-contained
+    if (!S.instruments[id] && LIB[id]) S.instruments[id] = JSON.parse(JSON.stringify(LIB[id]));
+    track.instrument = id;
+    if (id === 'drumkit') Engine.ensureDrumkit();
+    if (typeof MELODIC !== 'undefined' && MELODIC[id]) Engine.ensureMelodic();
+    toast(tr('toast_instr_changed', '{name} to {instr}', { name: track.name, instr: instrLabel(id) }));
+    if (UI.playing) Engine.liveEdit();
+    this.render();
+    KeysPanel.refreshTracks();
+  },
+
+  // a grouped, searchable instrument picker so the sound list is easy to read
+  openInstrMenu(track, anchor) {
+    const old = document.getElementById('instrMenu');
+    if (old) old.remove();
+    const m = document.createElement('div');
+    m.id = 'instrMenu';
+    m.className = 'instr-menu';
+    const search = document.createElement('input');
+    search.className = 'instr-search';
+    search.placeholder = tr('instr_search', 'Search sounds');
+    search.spellcheck = false;
+    const list = document.createElement('div');
+    list.className = 'instr-list';
+    m.append(search, list);
+
+    const render = () => {
+      const q = search.value.trim().toLowerCase();
+      list.innerHTML = '';
+      const addCat = (label, pairs) => {
+        const frag = document.createDocumentFragment();
+        let any = false;
+        for (const [id, name] of pairs) {
+          if (q && !name.toLowerCase().includes(q)) continue;
+          any = true;
+          const it = document.createElement('button');
+          it.className = 'instr-item' + (id === track.instrument ? ' on' : '');
+          it.innerHTML = `<span>${name}</span>${id === track.instrument ? '<span class="instr-check">✓</span>' : ''}`;
+          it.addEventListener('click', () => { m.remove(); this.setInstrument(track, id); });
+          frag.appendChild(it);
+        }
+        if (any) {
+          const h = document.createElement('div'); h.className = 'instr-cat'; h.textContent = label;
+          list.append(h, frag);
+        }
+      };
+      for (const cat of INSTR_CATS) addCat(tr(cat.key, cat.label), cat.ids.map(id => [id, instrLabel(id)]));
+      const customs = {};
+      for (const [id, def] of Object.entries(LIB)) customs[id] = def;
+      for (const [id, def] of Object.entries(S.instruments || {})) customs[id] = def;
+      const cl = Object.values(customs);
+      if (cl.length) addCat(tr('samp_custom_group', 'Your instruments'), cl.map(inst => [inst.id, inst.name]));
+      // a sound not in any list (e.g. a loop FX) still shows as the current pick
+      const known = new Set([...INSTR_CATS.flatMap(c => c.ids), ...cl.map(i => i.id)]);
+      if (!known.has(track.instrument)) addCat(tr('cat_other', 'Other'), [[track.instrument, instrLabel(track.instrument)]]);
+      // always-available action
+      const nb = document.createElement('button');
+      nb.className = 'instr-item instr-new';
+      nb.innerHTML = `<svg class="ic"><use href="#i-mic"/></svg><span>${tr('instr_new', 'New from audio…')}</span>`;
+      nb.addEventListener('click', () => { m.remove(); Sampler.open(track.id); });
+      list.appendChild(nb);
+    };
+    search.addEventListener('input', render);
+    render();
+
+    document.body.appendChild(m);
+    const r = anchor.getBoundingClientRect();
+    m.style.minWidth = Math.max(r.width, 180) + 'px';
+    m.style.left = Math.min(r.left, window.innerWidth - m.offsetWidth - 8) + 'px';
+    m.style.top = Math.min(r.bottom + 4, window.innerHeight - m.offsetHeight - 8) + 'px';
+    setTimeout(() => search.focus(), 30);
+    const close = (ev) => { if (!m.contains(ev.target) && ev.target !== anchor) { m.remove(); window.removeEventListener('mousedown', close, true); } };
+    window.addEventListener('mousedown', close, true);
   },
 
   syncHeads() {
@@ -520,6 +572,7 @@ const Timeline = {
       add(tr('insp_delete', 'Delete group'), () => App.deleteSelectedClip(), true);
     } else {
       if (clip.kind === 'midi') add(tr('menu_pianoroll', 'Open piano roll'), () => PianoRoll.open(clip.id));
+      if (clip.bounce) add(tr('menu_ungroup', 'Ungroup'), () => App.ungroupClip(clip.id));
       add(tr('menu_settings', 'Clip settings'), () => Windows.openInspector());
       if (clip.fx && clip.fx.length) {
         const b = document.createElement('button');
@@ -529,6 +582,7 @@ const Timeline = {
         m.appendChild(b);
       }
       if (UI.selClipIds.size >= 2) add(tr('menu_group', 'Group into one'), () => App.groupSelectedClips());
+      else add(tr('menu_convert_audio', 'Convert to Audio'), () => App.convertToAudio());
       add(tr('insp_duplicate', 'Duplicate'), () => App.duplicateClip());
       add(tr('insp_split', 'Split at playhead'), () => App.splitSelectedClip());
       add(tr('insp_delete', 'Delete'), () => App.deleteSelectedClip(), true);
@@ -592,19 +646,25 @@ const Timeline = {
         ctx.fillText(tr('clip_missing', 'missing sample'), 6, h / 2);
         return;
       }
-      // waveform of the trimmed window only (min/max per pixel)
+      // waveform of the trimmed window only (min/max per pixel). With speed or
+      // pitch automation the pixel -> source mapping follows the rate integral,
+      // so stretched parts of the wave look stretched exactly where they sound it.
       const data = s.buffer.getChannelData(0);
       const sr = s.buffer.sampleRate;
       const first = Math.floor(clipOffSec(clip) * sr);
       const last = Math.min(data.length, Math.ceil((clipOffSec(clip) + clipDurSec(clip)) * sr));
       const spp = Math.max(1, (last - first) / w);
+      const auto = clipRateAutom(clip) ? clipAutoInfo(clip) : null;
+      const srcIdx = auto
+        ? (x) => first + Math.floor(auto.sourceAt((x / w) * auto.durSec) * sr)
+        : (x) => first + Math.floor(x * spp);
       const mid = h / 2;
       ctx.fillStyle = 'rgba(0,0,0,0.5)';
       ctx.beginPath();
       for (let x = 0; x < w; x++) {
         let mn = 1, mx = -1;
-        const i0 = first + Math.floor(x * spp);
-        const i1 = Math.min(last, first + Math.floor((x + 1) * spp) + 1);
+        const i0 = srcIdx(x);
+        const i1 = Math.min(last, srcIdx(x + 1) + 1);
         const step = Math.max(1, Math.floor((i1 - i0) / 50));
         for (let i = i0; i < i1; i += step) {
           const v = data[i];
@@ -616,7 +676,7 @@ const Timeline = {
       }
       ctx.fill();
       // fade triangles
-      const durOut = clipDurSec(clip) / (clip.speed || 1);
+      const durOut = auto ? auto.durSec : clipDurSec(clip) / (clip.speed || 1);
       const fiX = ((clip.fadeIn || 0) / durOut) * w;
       const foX = ((clip.fadeOut || 0) / durOut) * w;
       ctx.strokeStyle = 'rgba(0,0,0,0.75)';
@@ -764,17 +824,28 @@ const Timeline = {
         // drag freely (can pass over other clips); it snaps to the nearest free
         // slot on drop, so you can move a clip past its neighbours
         clip.start = Math.max(0, snapBeat(orig.start + dxBeats, S.snap));
-        // vertical move between tracks of the same kind (single clip only)
+        // vertical move between tracks (single clip only)
         if (!group.length) {
-          const laneIdx = clamp(
-            orig.trackIdx + Math.round((ev.clientY - startY) / TRACK_H),
-            0, S.tracks.length - 1);
-          const target = S.tracks[laneIdx];
-          const cur = getClip(clip.id).track;
-          if (target && target !== cur && target.kind === cur.kind) {
-            cur.clips.splice(cur.clips.indexOf(clip), 1);
-            target.clips.push(clip);
-            this.render();
+          const N = S.tracks.length;
+          const py = ev.clientY - this.lanes.getBoundingClientRect().top;
+          const laneF = py / TRACK_H;
+          const nb = Math.round(laneF);                 // nearest track boundary
+          const nearBoundary = Math.abs(laneF - nb) * TRACK_H < 18;
+          if (nearBoundary && nb >= 0 && nb <= N && py > -40 && py < N * TRACK_H + 60) {
+            // hovering a gap between/around tracks -> offer to make a new track here
+            this._clipInsertAt = nb;
+            this.showTrackInsert(nb);
+          } else {
+            this._clipInsertAt = null;
+            this.hideTrackInsert();
+            const laneIdx = clamp(Math.floor(laneF), 0, N - 1);
+            const target = S.tracks[laneIdx];
+            const cur = getClip(clip.id).track;
+            if (target && target !== cur && target.kind === cur.kind) {
+              cur.clips.splice(cur.clips.indexOf(clip), 1);
+              target.clips.push(clip);
+              this.render();
+            }
           }
         }
       }
@@ -794,7 +865,15 @@ const Timeline = {
       window.removeEventListener('mousemove', move);
       window.removeEventListener('mouseup', up);
       if (typeof Sync !== 'undefined') Sync.setLock(clipLock, false);
+      this.hideTrackInsert();
       if (moved) {
+        // dropped in a gap between tracks -> spin up a fresh track for it
+        if (this._clipInsertAt != null && !group.length && mode === 'move') {
+          const idx = this._clipInsertAt; this._clipInsertAt = null;
+          this.createTrackForClip(clip, idx);
+          return;
+        }
+        this._clipInsertAt = null;
         // snap to the nearest free slot so a single clip never lands overlapping
         if (!group.length) {
           const track = getClip(clip.id).track;
@@ -808,6 +887,44 @@ const Timeline = {
     };
     window.addEventListener('mousemove', move);
     window.addEventListener('mouseup', up);
+  },
+
+  // the "release here to make a new track" indicator between/around tracks
+  showTrackInsert(idx) {
+    let el = document.getElementById('trackInsert');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'trackInsert';
+      el.innerHTML = `<span class="ti-plus">+</span><span class="ti-label">${tr('drag_new_track', 'New track')}</span>`;
+      this.lanes.appendChild(el);
+    }
+    el.style.display = 'flex';
+    el.style.top = (idx * TRACK_H) + 'px';
+    el.style.width = Math.max(this.scroller.scrollWidth, this.scroller.clientWidth) + 'px';
+  },
+  hideTrackInsert() {
+    const el = document.getElementById('trackInsert');
+    if (el) el.style.display = 'none';
+  },
+
+  // move a clip out onto a brand-new track inserted at `idx`
+  createTrackForClip(clip, idx) {
+    const found = getClip(clip.id);
+    if (!found) return;
+    const src = found.track;
+    const nt = makeTrack(clip.kind === 'audio' ? 'audio' : 'midi');
+    if (clip.kind !== 'audio') nt.instrument = src.instrument;   // sound stays the same
+    src.clips.splice(src.clips.indexOf(clip), 1);
+    S.tracks.splice(clamp(idx, 0, S.tracks.length), 0, nt);
+    clip.start = this.nearestFreeStart(nt, clipBeats(clip), clip.start, clip);
+    nt.clips.push(clip);
+    Engine.rebuildTracks();
+    this.render();
+    Windows.refreshAll();
+    KeysPanel.refreshTracks();
+    App.selectClip(clip.id);
+    if (UI.playing) Engine.liveEdit();
+    toast(tr('toast_track_created', 'New track'), 'green');
   },
 
   // ---------- OS drag & drop of audio files ----------
