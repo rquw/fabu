@@ -487,7 +487,7 @@ const App = {
         <div class="home-card-art" style="--h:${hue}">
           <svg class="ic"><use href="#i-note"/></svg>
           <div class="card-acts">
-            <span class="card-act" data-act="listen" data-tip="${tr('recent_listen', 'Open and play')}"><svg class="ic"><use href="#i-play"/></svg></span>
+            <span class="card-act" data-act="listen" data-tip="${this.homePreviewPath === r.path ? tr('recent_stop', 'Stop') : tr('recent_listen', 'Open and play')}"><svg class="ic"><use href="#${this.homePreviewPath === r.path ? 'i-stop' : 'i-play'}"/></svg></span>
             <span class="card-act" data-act="edit" data-tip="${tr('recent_edit', 'Open to edit')}"><svg class="ic"><use href="#i-edit"/></svg></span>
           </div>
         </div>
@@ -495,7 +495,10 @@ const App = {
         <div class="home-card-sub">${this.agoText(r.at)}</div>`;
       card.addEventListener('click', (e) => {
         const act = e.target.closest && e.target.closest('.card-act');
-        if (act && act.dataset.act === 'listen') this.previewRecent(r.path);
+        if (act && act.dataset.act === 'listen') {
+          if (this.homePreviewPath === r.path) this.stopHomePreview();
+          else this.previewRecent(r.path);
+        }
         else this.openRecent(r.path);
       });
       card.addEventListener('contextmenu', (e) => {
@@ -528,7 +531,9 @@ const App = {
     if (!res.ok) { toast(tr('toast_open_failed', 'File could not be opened'), 'red'); this.removeRecent(path); return; }
     await this.loadFab(b64ToBuf(res.data), res.name, res.path);
     this.homePreviewing = true;
+    this.homePreviewPath = path;
     this.showHomePlayer(res.name || 'Untitled');
+    this.renderRecents();
     UI.playhead = 0;
     if (!UI.playing) this.togglePlay();
   },
@@ -551,9 +556,11 @@ const App = {
   stopHomePreview() {
     if (!this.homePreviewing) return;
     this.homePreviewing = false;
+    this.homePreviewPath = null;
     Engine.stop();
     const bar = document.getElementById('homePlayer');
     if (bar) bar.remove();
+    this.renderRecents();
   },
 
   // ---------- languages (file-driven i18n) ----------
@@ -782,6 +789,7 @@ const App = {
     Windows.refreshAll();
     KeysPanel.refreshTracks();
     this.selectTrack(t.id);
+    if (typeof Sync !== 'undefined') Sync.logAction('add_track', t.name);
     toast(tr('toast_track_added', '{name} added', { name: t.name }));
   },
 
@@ -789,6 +797,7 @@ const App = {
     const t = getTrack(id);
     if (!t) return;
     Undo.push('Delete track');
+    if (typeof Sync !== 'undefined') Sync.logAction('del_track', t.name);
     S.tracks.splice(S.tracks.indexOf(t), 1);
     if (UI.selTrackId === id) UI.selTrackId = null;
     if (UI.selClipId && !getClip(UI.selClipId)) UI.selClipId = null;
@@ -824,6 +833,7 @@ const App = {
     if (!found.length) return;
     Undo.push(found.length > 1 ? 'Delete clips' : 'Delete clip');
     for (const f of found) {
+      if (typeof Sync !== 'undefined') Sync.logAction('del_clip', f.clip.name || (f.clip.kind === 'midi' ? 'Pattern' : 'Audio'));
       f.track.clips.splice(f.track.clips.indexOf(f.clip), 1);
       if (PianoRoll.clipId === f.clip.id) PianoRoll.close();
     }
@@ -902,6 +912,7 @@ const App = {
     KeysPanel.refreshTracks();
     this.selectClip(clip.id);
     if (UI.playing) Engine.liveEdit();
+    if (typeof Sync !== 'undefined') Sync.logAction('group', clip.name);
     toast(tr('toast_grouped', 'Grouped {n} clips', { n: items.length }), 'green');
   },
 
@@ -940,6 +951,7 @@ const App = {
     KeysPanel.refreshTracks();
     this.selectClipSet(restored);
     if (UI.playing) Engine.liveEdit();
+    if (typeof Sync !== 'undefined') Sync.logAction('ungroup', group.name || 'Group');
     toast(tr('toast_ungrouped', 'Ungrouped'), 'green');
   },
 
@@ -973,6 +985,7 @@ const App = {
     KeysPanel.refreshTracks();
     this.selectClip(clip.id);
     if (UI.playing) Engine.liveEdit();
+    if (typeof Sync !== 'undefined') Sync.logAction('add_audio', name);
     toast(tr('toast_converted', 'Converted to audio'), 'green');
   },
 
@@ -1236,6 +1249,7 @@ const App = {
     Timeline.render();
     Windows.refreshAll();
     this.selectClip(track.clips[track.clips.length - 1].id);
+    if (typeof Sync !== 'undefined') for (const d of decoded) Sync.logAction('add_audio', d.file.name);
     toast(decoded.length > 1
       ? tr('toast_sounds_added', '{n} sounds added', { n: decoded.length })
       : tr('toast_sound_added', '{name} added', { name: decoded[0].file.name }), 'green');

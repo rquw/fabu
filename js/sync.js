@@ -25,6 +25,7 @@ const Sync = {
   pendingReqs: [],    // host only: [{id, name, ts}]
   pendingAudio: [],   // host only: [{reqId, from, name, sample, place, buffer, ts}]
   selPlayers: new Set(), // host only: shift-selected player ids (for kick-all-except)
+  history: [],        // host only: [{ ts, name, action, what }] notable room activity
   bans: {},           // host only: name -> untilTs
   locks: new Map(),   // key -> { id, name, ts }
   myLocks: new Set(),
@@ -94,8 +95,10 @@ const Sync = {
     name = name || (this.me && this.me.name);
     const ov = this.permOverride(name);
     if (ov && ov.customAudio != null && this.overrideLive(ov)) return ov.customAudio ? true : false;
-    if (this.settings.allowCustomAudio === false) return false;
+    // the two rules are independent: approval-mode routes sounds past the host
+    // even when free adding is off, so it never needs "allow" to be on first
     if (this.settings.approveAudio) return 'approve';
+    if (this.settings.allowCustomAudio === false) return false;
     return true;
   },
   canCustomAudio(name) {
@@ -171,13 +174,14 @@ const Sync = {
       } else {
         this.setStatus('connecting');
         this.send({ type: 'knock', id: this.me.id, name: this.me.name });
-        // if nobody answers, give up politely
+        // nobody answers = the code goes nowhere. Silent disconnect, or the
+        // "Left the room" toast instantly buries the "Invalid Code" one.
         this.knockTimer = setTimeout(() => {
           if (!this.admitted) {
+            this.disconnect(true);
             toast(tr('mp_no_answer', 'Invalid Code'), 'red');
-            this.disconnect();
           }
-        }, 12000);
+        }, 8000);
       }
       this.renderPanel();
     };
@@ -282,18 +286,16 @@ const Sync = {
   teardown(silent = false) {
     const was = this.connected;
     this.connected = false; this.admitted = false; this.isHost = false; this.synced = false;
-    this.following = null;
     clearInterval(this.periodTimer); clearInterval(this.presenceTimer);
     this.peers.clear(); this.locks.clear(); this.cursors.clear(); this.remotePH.clear(); this.pendingReqs = [];
-    this.pendingAudio = [];
-    const rev = document.getElementById('audioReview'); if (rev) rev.remove();
+    this.pendingAudio = []; this.history = [];
+    for (const id of ['audioReview','histModal','manageModal']) { const el = document.getElementById(id); if (el) el.remove(); }
     this.myLocks.clear();
     this.room = null;
     this.setStatus('offline');
     this.renderPanel();
     this.renderCursors();
     this.renderRemotePlayheads();
-    this.renderFollowBar();
     this.updateLockVisuals();
     if (was && !silent) { toast(tr('mp_left', 'Left the room')); Timeline.render(); }
   },
@@ -320,8 +322,7 @@ const Sync = {
 
       case 'presence': {
         const isNew = !this.peers.has(m.id);
-        this.peers.set(m.id, { name: m.name, color: m.color, host: m.host, joinTs: m.joinTs, following: m.following || null, lastSeen: Date.now() });
-        this.renderFollowBar(); // "X is following you" reflects their choice
+        this.peers.set(m.id, { name: m.name, color: m.color, host: m.host, joinTs: m.joinTs, lastSeen: Date.now() });
         if (m.host && m.settings) {
           this.settings = m.settings;
           this.started = !!m.started;
@@ -341,6 +342,7 @@ const Sync = {
         if (isNew) {
           this.sharedSamples.clear();   // re-send our samples so the newcomer hears everything
           if (this.admitted) toast(tr('mp_joined_room', '{name} joined', { name: m.name }), 'green');
+          if (this.isHost) this.pushHistory({ ts: Date.now(), name: m.name, action: 'joined' });
           this.renderPanel();
         }
         break;
@@ -373,6 +375,16 @@ const Sync = {
         }
         break;
 
+      case 'act':
+        // a guest reporting something notable they did, for the host's history
+        if (this.isHost && m.entry && m.entry.name) this.pushHistory(m.entry);
+        break;
+
+      case 'soundban':
+        // the host told this person their sound privileges were pulled
+        if (m.to === this.me.id) this.showSoundBanNotice(m.until);
+        break;
+
       case 'audioreq':
         if (this.isHost) this.handleAudioReq(m);
         break;
@@ -389,12 +401,7 @@ const Sync = {
         if (m.id !== this.me.id) {
           this.cursors.set(m.id, { beat: m.beat, y: m.y, fx: m.fx, fy: m.fy, over: m.over, ts: Date.now(), name: m.name, color: m.color });
           this.renderCursors();
-          this.applyFollowView(m);
         }
-        break;
-
-      case 'view':
-        if (m.id !== this.me.id) this.applyFollowView(m);
         break;
 
       case 'ph':
@@ -436,13 +443,14 @@ const Sync = {
         this.peers.delete(m.id);
         this.cursors.delete(m.id);
         this.remotePH.delete(m.id);
-        if (p) toast(tr('mp_left_room', '{name} left', { name: p.name }));
-        if (this.following === m.id) this.following = null; // followed peer left
+        if (p) {
+          toast(tr('mp_left_room', '{name} left', { name: p.name }));
+          if (this.isHost) this.pushHistory({ ts: Date.now(), name: p.name, action: 'left' });
+        }
         if (m.host || (p && p.host)) this.hostLost();
         this.renderPanel();
         this.renderCursors();
         this.renderRemotePlayheads();
-        this.renderFollowBar();
         break;
       }
     }
@@ -645,6 +653,7 @@ const Sync = {
     this.sharedSamples.clear(); this.lastSent = '';
     this.broadcast(true);
     this.send({ type: 'audiookay', to: req.from, reqId: req.reqId });
+    this.pushHistory({ ts: Date.now(), name: req.name, action: 'sound_approved', what: req.sample.name });
     toast(tr('mp_audio_added', 'Added {name} from {who}', { name: req.sample.name, who: req.name }), 'green');
     this.pendingAudio = this.pendingAudio.filter(r => r !== req);
     this.showAudioReview();
@@ -673,6 +682,7 @@ const Sync = {
     const finish = () => { this.pendingAudio = this.pendingAudio.filter(r => r !== req); this.showAudioReview(); };
     wrap.querySelector('.ar-just-deny').addEventListener('click', () => {
       this.send({ type: 'audiodeny', to: req.from, reqId: req.reqId });
+      this.pushHistory({ ts: Date.now(), name: req.name, action: 'sound_denied', what: req.sample.name });
       finish();
     });
     wrap.querySelector('.ar-ban-go').addEventListener('click', () => {
@@ -680,6 +690,7 @@ const Sync = {
       const unit = parseInt(wrap.querySelector('.ar-ban-unit').value) || 60000;
       this.setAudioBan(req.name, n * unit);
       this.send({ type: 'audiodeny', to: req.from, reqId: req.reqId });
+      this.pushHistory({ ts: Date.now(), name: req.name, action: 'sound_denied', what: req.sample.name });
       finish();
     });
   },
@@ -688,9 +699,34 @@ const Sync = {
   setAudioBan(name, durMs) {
     if (!this.settings.perms) this.settings.perms = {};
     const prev = this.settings.perms[name] || {};
-    this.settings.perms[name] = Object.assign({}, prev, { customAudio: false, customAudioUntil: durMs > 0 ? Date.now() + durMs : 0 });
+    const until = durMs > 0 ? Date.now() + durMs : 0;
+    this.settings.perms[name] = Object.assign({}, prev, { customAudio: false, customAudioUntil: until });
     this.sendPresence();
+    // tell them directly, so it isn't a silent "why can't I add anything?"
+    for (const [id, p] of this.peers) if (p.name === name) this.send({ type: 'soundban', to: id, until });
     toast(tr('mp_audio_banned', '{name} can no longer add sounds', { name }), 'red');
+  },
+
+  // banned person's own notice: what happened and for how long
+  showSoundBanNotice(until) {
+    const old = document.getElementById('soundBanModal');
+    if (old) old.remove();
+    const ms = until ? until - Date.now() : 0;
+    let howLong;
+    if (!until) howLong = tr('mp_ban_until_host', 'until the host allows it again');
+    else if (ms < 60 * 60e3) howLong = tr('mp_ban_for_mins', 'for {n} minutes', { n: Math.max(1, Math.round(ms / 60e3)) });
+    else howLong = tr('mp_ban_for_hours', 'for {n} hours', { n: Math.max(1, Math.round(ms / 3600e3)) });
+    const wrap = document.createElement('div');
+    wrap.id = 'soundBanModal';
+    wrap.className = 'modal-back';
+    wrap.innerHTML = `
+      <div class="modal-card">
+        <div class="modal-title">${tr('mp_soundban_title', 'You can no longer add sounds')}</div>
+        <div class="modal-sub">${tr('mp_soundban_sub', 'The host turned off your custom sounds {how}.', { how: howLong })}</div>
+        <div class="modal-btns"><button class="fbtn accent">OK</button></div>
+      </div>`;
+    document.body.appendChild(wrap);
+    wrap.querySelector('button').addEventListener('click', () => wrap.remove());
   },
 
   // host: let expired audio bans lapse and tell everyone
@@ -706,6 +742,79 @@ const Sync = {
       }
     }
     if (changed) this.sendPresence();
+  },
+
+  // ---------- change history (host sees who did what) ----------
+  // Only the notable, hard-to-undo things: adding or deleting clips, tracks and
+  // sounds. Note edits, parameter tweaks and undo/redo are far too noisy.
+
+  // called locally whenever something notable happens; the host records it,
+  // everyone else reports it up so the host's log is complete
+  logAction(action, what) {
+    if (!this.connected || !this.admitted || !this.me) return;
+    const entry = { ts: Date.now(), name: this.me.name, action, what: String(what || '').slice(0, 60) };
+    if (this.isHost) this.pushHistory(entry);
+    else this.send({ type: 'act', entry });
+  },
+  pushHistory(entry) {
+    this.history.push(entry);
+    if (this.history.length > 500) this.history.splice(0, this.history.length - 500);
+    this.renderHistory();
+  },
+  historyText(e) {
+    const map = {
+      add_pattern: tr('hist_add_pattern', '{name} added pattern "{what}"'),
+      add_audio: tr('hist_add_audio', '{name} added sound "{what}"'),
+      del_clip: tr('hist_del_clip', '{name} removed "{what}"'),
+      add_track: tr('hist_add_track', '{name} added track "{what}"'),
+      del_track: tr('hist_del_track', '{name} removed track "{what}"'),
+      group: tr('hist_group', '{name} grouped clips into "{what}"'),
+      ungroup: tr('hist_ungroup', '{name} ungrouped "{what}"'),
+      joined: tr('hist_joined', '{name} joined'),
+      left: tr('hist_left', '{name} left'),
+      kicked: tr('hist_kicked', '{name} was removed'),
+      sound_approved: tr('hist_sound_ok', '{name} got sound "{what}" approved'),
+      sound_denied: tr('hist_sound_no', '{name} had sound "{what}" denied')
+    };
+    return (map[e.action] || '{name}: {what}').replace('{name}', e.name).replace('{what}', e.what || '');
+  },
+
+  openHistory() { this.renderHistory(true); },
+
+  renderHistory(create = false) {
+    let wrap = document.getElementById('histModal');
+    if (!wrap && !create) return;
+    if (!this.isHost) { if (wrap) wrap.remove(); return; }
+    if (!wrap) {
+      wrap = document.createElement('div');
+      wrap.id = 'histModal';
+      wrap.className = 'modal-back';
+      wrap.addEventListener('mousedown', (e) => { if (e.target === wrap) wrap.remove(); });
+      document.body.appendChild(wrap);
+      wrap.innerHTML = `
+        <div class="modal-card mg-card">
+          <div class="modal-title">${tr('mp_history', 'Change history')}</div>
+          <div class="modal-sub">${tr('mp_history_sub', 'What people have added or removed in this room.')}</div>
+          <div id="histList" class="mg-list"></div>
+          <div class="modal-btns"><button id="histClose" class="fbtn">${tr('close', 'Close')}</button></div>
+        </div>`;
+      wrap.querySelector('#histClose').addEventListener('click', () => wrap.remove());
+    }
+    const list = wrap.querySelector('#histList');
+    list.innerHTML = '';
+    if (!this.history.length) {
+      list.innerHTML = `<div class="req-empty">${tr('mp_history_empty', 'Nothing yet.')}</div>`;
+      return;
+    }
+    for (const e of [...this.history].reverse()) {
+      const row = document.createElement('div');
+      row.className = 'hist-row';
+      const t = new Date(e.ts);
+      row.innerHTML = `<span class="hist-time">${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}</span>
+        <span class="jam-pdot" style="background:${hashColor(e.name)}"></span>
+        <span class="hist-text">${this.historyText(e)}</span>`;
+      list.appendChild(row);
+    }
   },
 
   // ---------- manage people (host): permissions + bans ----------
@@ -756,22 +865,26 @@ const Sync = {
     }
     const filter = ((wrap.querySelector('#mgSearch') || {}).value || '').toLowerCase();
     const now = Date.now();
+    // build the shell once; re-rendering it on every keystroke stole focus from
+    // the search box after each letter
+    const fresh = !wrap.querySelector('#mgList');
     const inRoom = new Set([this.me && this.me.name, ...[...this.peers.values()].map(p => p.name)]);
     const names = new Set([...inRoom]);
     for (const n of Object.keys(this.settings.perms || {})) names.add(n);
     for (const [n, until] of Object.entries(this.bans || {})) if (until > now) names.add(n);
     const list = [...names].filter(n => n && n !== (this.me && this.me.name) && n.toLowerCase().includes(filter)).sort();
 
-    wrap.innerHTML = `
+    if (fresh) wrap.innerHTML = `
       <div class="modal-card mg-card">
         <div class="modal-title">${tr('mp_manage', 'Manage people')}</div>
         <div class="modal-sub">${tr('mp_manage_sub', 'Choose who can add custom sounds or record from the mic, and lift bans.')}</div>
-        <input id="mgSearch" type="text" placeholder="${tr('mp_search', 'Search names')}" value="${filter}">
+        <input id="mgSearch" type="text" placeholder="${tr('mp_search', 'Search names')}">
         <div class="mg-head"><span class="mg-h-name"></span><span class="mg-h-col">${tr('mp_col_mic', 'Mic')}</span><span class="mg-h-col">${tr('mp_col_sounds', 'Sounds')}</span></div>
         <div id="mgList" class="mg-list"></div>
         <div class="modal-btns"><button id="mgClose" class="fbtn">${tr('close', 'Close')}</button></div>
       </div>`;
     const listEl = wrap.querySelector('#mgList');
+    listEl.innerHTML = '';
     if (!list.length) {
       listEl.innerHTML = `<div class="req-empty">${tr('mp_manage_empty', 'Nobody to manage yet.')}</div>`;
     }
@@ -801,14 +914,16 @@ const Sync = {
       }
       listEl.appendChild(row);
     }
-    wrap.querySelector('#mgSearch').addEventListener('input', () => this.renderManage());
-    wrap.querySelector('#mgClose').addEventListener('click', () => wrap.remove());
+    if (fresh) {
+      wrap.querySelector('#mgSearch').addEventListener('input', () => this.renderManage());
+      wrap.querySelector('#mgClose').addEventListener('click', () => wrap.remove());
+    }
   },
 
   sendPresence() {
     const p = {
       type: 'presence', id: this.me.id, name: this.me.name, color: this.me.color,
-      host: this.isHost, joinTs: this.me.joinTs, following: this.following || null
+      host: this.isHost, joinTs: this.me.joinTs
     };
     if (this.isHost) { p.settings = this.settings; p.started = this.started; }
     this.send(p);
@@ -896,6 +1011,7 @@ const Sync = {
     this.send({ type: 'kick', to: peerId, until });
     this.peers.delete(peerId);
     this.cursors.delete(peerId);
+    this.pushHistory({ ts: Date.now(), name: p.name, action: 'kicked' });
     toast(tr('mp_kicked_toast', '{name} was removed', { name: p.name }));
     this.renderPanel();
     this.renderCursors();
@@ -987,8 +1103,6 @@ const Sync = {
 
   // ---------- live cursors ----------
 
-  following: null, // peer id whose screen we're mirroring
-
   viewportData() {
     const sc = document.getElementById('tlScroll');
     return { sl: sc ? sc.scrollLeft : 0, st: sc ? sc.scrollTop : 0, zoom: UI.zoom };
@@ -1017,8 +1131,6 @@ const Sync = {
     const sc = document.getElementById('tlScroll');
     if (sc) sc.addEventListener('scroll', () => {
       if (!this.admitted) return;
-      if (this._applyingView) return;          // our own view moved because WE follow someone
-      if (this.following) this.unfollow(true);  // manual scroll breaks follow (Figma-style)
       const now = performance.now();
       if (now - lastV < 60) return;
       lastV = now;
@@ -1026,65 +1138,6 @@ const Sync = {
     });
   },
 
-  // mirror a followed peer's viewport (scroll + zoom) onto our own screen
-  applyFollowView(m) {
-    if (this.following !== m.id || m.sl == null) return;
-    this._applyingView = true;
-    if (m.zoom && Math.abs(m.zoom - UI.zoom) > 0.01) Timeline.setZoom(m.zoom);
-    const sc = document.getElementById('tlScroll');
-    if (sc) { sc.scrollLeft = m.sl; sc.scrollTop = m.st; }
-    clearTimeout(this._applyViewT);
-    this._applyViewT = setTimeout(() => { this._applyingView = false; }, 80);
-  },
-
-  follow(peerId) {
-    if (peerId === this.me.id) return;
-    this.following = (this.following === peerId) ? null : peerId;
-    this.sendPresence();       // tell everyone who we're watching
-    this.renderFollowBar();
-    this.renderPanel();
-    const p = this.peers.get(peerId);
-    if (this.following && p) toast(tr('mp_following', 'Following {name}', { name: p.name }));
-  },
-  unfollow(silent) {
-    if (!this.following) return;
-    this.following = null;
-    this.sendPresence();
-    this.renderFollowBar();
-    this.renderPanel();
-  },
-
-  // "Following X" + "X is following you" / "N people are following you"
-  renderFollowBar() {
-    let bar = document.getElementById('followBar');
-    const followers = [...this.peers.values()].filter(p => p.following === this.me.id);
-    const followingPeer = this.following ? this.peers.get(this.following) : null;
-    if (!this.admitted || (!followingPeer && !followers.length)) { if (bar) bar.remove(); return; }
-    if (!bar) {
-      bar = document.createElement('div');
-      bar.id = 'followBar';
-      document.body.appendChild(bar);
-    }
-    let html = '';
-    if (followingPeer) {
-      bar.style.setProperty('--fc', followingPeer.color);
-      html += `<span class="fb-following">${tr('mp_following', 'Following {name}', { name: followingPeer.name })}
-        <button id="fbStop" class="fb-stop">✕</button></span>`;
-    }
-    if (followers.length) {
-      const names = followers.map(p => p.name);
-      let txt;
-      if (followers.length === 1) txt = tr('mp_follows_you_1', '{a} is following you', { a: names[0] });
-      else if (followers.length <= 5) {
-        const last = names.pop();
-        txt = tr('mp_follows_you_n', '{list} and {last} are following you', { list: names.join(', '), last });
-      } else txt = tr('mp_follows_you_many', '{n} people are following you', { n: followers.length });
-      html += `<span class="fb-followers">${txt}</span>`;
-    }
-    bar.innerHTML = html;
-    const stop = bar.querySelector('#fbStop');
-    if (stop) stop.addEventListener('click', () => this.unfollow());
-  },
 
   // Reuse one element per cursor so the CSS transition can glide it. Canvas
   // cursors live in #cursorLayer (content coords); cursors over the rest of the
@@ -1345,19 +1398,19 @@ const Sync = {
         <span class="jam-status">${players.length}/${this.settings.maxPlayers}</span></div>
       <div class="jam-code-row">
         <button id="jamCode" class="jam-code" data-tip="${tr('mp_code_tip', 'Click to reveal, again to copy, again to hide')}">${tr('mp_code_hidden', 'Code: click to reveal')}</button>
-        ${this.isHost ? `<button id="jamCycle" class="jam-cycle" data-tip="${tr('mp_cycle_tip', 'New code — the old one stops working, everyone here stays')}"><svg class="ic"><use href="#i-redo"/></svg></button>` : ''}
+        ${this.isHost ? `<button id="jamCycle" class="jam-cycle" data-tip="${tr('mp_cycle_tip', 'New code, old one gets made invalid but everyone stays')}"><svg class="ic"><use href="#i-redo"/></svg></button>` : ''}
       </div>
       <div id="jamPlayers"></div>
       ${this.isHost && this.settings.approve ? `<button id="jamReqBtn" class="fbtn jam-req">${tr('mp_requests', 'Requests')}${this.pendingReqs.length ? `<span class="req-badge">${this.pendingReqs.length}</span>` : ''}</button>` : ''}
       ${this.isHost ? `
       <div class="jam-set">
-        <label class="jam-check"><input type="checkbox" id="jamAllowLate" ${this.settings.allowLate ? 'checked' : ''}> ${tr('mp_allow_late', 'Allow joining after start')}</label>
         <label class="jam-check"><input type="checkbox" id="jamApprove" ${this.settings.approve ? 'checked' : ''}> ${tr('mp_approve', 'Approve joining')}</label>
         <label class="jam-check">${tr('mp_max_players', 'Max players')} <input type="number" id="jamMax" min="2" max="100" value="${this.settings.maxPlayers}"></label>
         <div class="jam-set-sep">${tr('mp_rules', 'Room rules')}</div>
         <label class="jam-check"><input type="checkbox" id="jamAllowMic" ${this.settings.allowMic !== false ? 'checked' : ''}> ${tr('mp_allow_mic', 'Allow microphone recording for everybody')}</label>
         <label class="jam-check"><input type="checkbox" id="jamAllowAudio" ${this.settings.allowCustomAudio !== false ? 'checked' : ''}> ${tr('mp_allow_audio', 'Allow custom audio files from everybody')}</label>
-        <label class="jam-check jam-check-sub"><input type="checkbox" id="jamApproveAudio" ${this.settings.approveAudio ? 'checked' : ''} ${this.settings.allowCustomAudio === false ? 'disabled' : ''}> ${tr('mp_approve_audio', 'Manually approve custom audio files')}</label>
+        <label class="jam-check"><input type="checkbox" id="jamApproveAudio" ${this.settings.approveAudio ? 'checked' : ''}> ${tr('mp_approve_audio', 'Manually approve custom audio files')}</label>
+        <button id="jamHistory" class="fbtn jam-manage">${tr('mp_history', 'Change history')}</button>
         <button id="jamManage" class="fbtn jam-manage">${tr('mp_manage', 'Manage people')}</button>
       </div>` : ''}
       <div class="jam-row"><button id="jamLeave" class="fbtn danger" style="flex:1">${tr('jam_disconnect', 'Leave')}</button></div>`;
@@ -1379,25 +1432,22 @@ const Sync = {
     for (const pl of players) {
       const row = document.createElement('div');
       const sel = this.isHost && this.selPlayers.has(pl.id);
-      row.className = 'jam-player' + (this.following === pl.id ? ' following' : '') + (pl.me ? '' : ' clickable') + (sel ? ' mp-selected' : '');
+      row.className = 'jam-player' + (sel ? ' mp-selected' : '') + (this.isHost && !pl.me ? ' clickable' : '');
       row.innerHTML = `
         <span class="jam-pdot" style="background:${pl.color}"></span>
         <span class="jam-pname">${pl.name}${pl.me ? ' <i>(' + tr('mp_you', 'you') + ')</i>' : ''}</span>
-        ${pl.host ? `<span class="jam-crown" data-tip="${tr('mp_host', 'Host')}">♛</span>` : ''}
-        ${this.following === pl.id ? `<span class="jam-eye" data-tip="${tr('mp_following_tip', 'Following — click to stop')}"><svg class="ic"><use href="#i-eye"/></svg></span>` : ''}`;
-      if (!pl.me) {
-        row.dataset.tip = this.following === pl.id ? tr('mp_stop_follow', 'Click to stop following') : tr('mp_click_follow', 'Click to follow their screen');
+        ${pl.host ? `<span class="jam-crown" data-tip="${tr('mp_host', 'Host')}">♛</span>` : ''}`;
+      if (!pl.me && this.isHost) {
+        row.dataset.tip = tr('mp_player_tip', 'Shift-click to select, right-click for options');
         row.addEventListener('click', (e) => {
           if (e.target.closest('.jam-kick')) return;
           // host: shift-click multi-selects players for "kick all except"
-          if (this.isHost && e.shiftKey) {
+          if (e.shiftKey) {
             if (this.selPlayers.has(pl.id)) this.selPlayers.delete(pl.id); else this.selPlayers.add(pl.id);
             this.renderPanel();
-            return;
           }
-          this.follow(pl.id);
         });
-        if (this.isHost) row.addEventListener('contextmenu', (e) => { e.preventDefault(); this.openPlayerMenu(e.clientX, e.clientY, pl.id, pl.name); });
+        row.addEventListener('contextmenu', (e) => { e.preventDefault(); this.openPlayerMenu(e.clientX, e.clientY, pl.id, pl.name); });
       }
       if (this.isHost && !pl.me) {
         const kick = document.createElement('button');
@@ -1415,12 +1465,12 @@ const Sync = {
     p.querySelector('#jamLeave').addEventListener('click', () => this.disconnect());
 
     if (this.isHost) {
-      p.querySelector('#jamAllowLate').addEventListener('change', (e) => { this.settings.allowLate = e.target.checked; this.sendPresence(); });
       p.querySelector('#jamApprove').addEventListener('change', (e) => { this.settings.approve = e.target.checked; this.sendPresence(); this.renderPanel(); });
       p.querySelector('#jamMax').addEventListener('change', (e) => { this.settings.maxPlayers = clamp(parseInt(e.target.value) || 100, 2, 100); this.sendPresence(); });
       p.querySelector('#jamAllowMic').addEventListener('change', (e) => { this.settings.allowMic = e.target.checked; this.sendPresence(); toast(tr(e.target.checked ? 'mp_mic_on' : 'mp_mic_off', 'Mic recording ' + (e.target.checked ? 'allowed' : 'off'))); });
-      p.querySelector('#jamAllowAudio').addEventListener('change', (e) => { this.settings.allowCustomAudio = e.target.checked; if (!e.target.checked) this.settings.approveAudio = false; this.sendPresence(); this.renderPanel(); toast(tr(e.target.checked ? 'mp_audio_on' : 'mp_audio_off', 'Custom sounds ' + (e.target.checked ? 'allowed' : 'off'))); });
+      p.querySelector('#jamAllowAudio').addEventListener('change', (e) => { this.settings.allowCustomAudio = e.target.checked; this.sendPresence(); toast(tr(e.target.checked ? 'mp_audio_on' : 'mp_audio_off', 'Custom sounds ' + (e.target.checked ? 'allowed' : 'off'))); });
       p.querySelector('#jamApproveAudio').addEventListener('change', (e) => { this.settings.approveAudio = e.target.checked; this.sendPresence(); });
+      p.querySelector('#jamHistory').addEventListener('click', () => this.openHistory());
       p.querySelector('#jamManage').addEventListener('click', () => this.openManage());
     }
   },
@@ -1619,13 +1669,12 @@ const MP = {
           ${recents.map((r, i) => `<button class="fbtn mp-proj" data-proj="${i}">${r.name}</button>`).join('')}
         </div>
         <div class="jam-set" style="margin-top:12px">
-          <label class="jam-check"><input type="checkbox" id="mpAllowLate" checked> ${tr('mp_allow_late', 'Allow joining after start')}</label>
           <label class="jam-check"><input type="checkbox" id="mpApprove"> ${tr('mp_approve', 'Approve joining')}</label>
           <label class="jam-check">${tr('mp_max_players', 'Max players')} <input type="number" id="mpMax" min="2" max="100" value="100"></label>
           <div class="jam-set-sep">${tr('mp_rules', 'Room rules')}</div>
           <label class="jam-check"><input type="checkbox" id="mpAllowMic" checked> ${tr('mp_allow_mic', 'Allow microphone recording for everybody')}</label>
           <label class="jam-check"><input type="checkbox" id="mpAllowAudio" checked> ${tr('mp_allow_audio', 'Allow custom audio files from everybody')}</label>
-          <label class="jam-check jam-check-sub"><input type="checkbox" id="mpApproveAudio"> ${tr('mp_approve_audio', 'Manually approve custom audio files')}</label>
+          <label class="jam-check"><input type="checkbox" id="mpApproveAudio"> ${tr('mp_approve_audio', 'Manually approve custom audio files')}</label>
         </div>
         <div class="modal-btns">
           <button class="fbtn" id="mpCback">${tr('cancel', 'Cancel')}</button>
@@ -1640,23 +1689,14 @@ const MP = {
     }));
     wrap.querySelector('#mpCback').addEventListener('click', () => wrap.remove());
     wrap.addEventListener('mousedown', (e) => { if (e.target === wrap) wrap.remove(); });
-    // manual approval only makes sense while custom audio is allowed at all
-    const mpAudio = wrap.querySelector('#mpAllowAudio');
-    const mpApproveAudio = wrap.querySelector('#mpApproveAudio');
-    const syncApprove = () => {
-      mpApproveAudio.disabled = !mpAudio.checked;
-      if (!mpAudio.checked) mpApproveAudio.checked = false;
-    };
-    mpAudio.addEventListener('change', syncApprove);
-    syncApprove();
     wrap.querySelector('#mpCgo').addEventListener('click', async () => {
       const settings = {
-        allowLate: wrap.querySelector('#mpAllowLate').checked,
+        allowLate: true,
         approve: wrap.querySelector('#mpApprove').checked,
         maxPlayers: clamp(parseInt(wrap.querySelector('#mpMax').value) || 100, 2, 100),
         allowMic: wrap.querySelector('#mpAllowMic').checked,
-        allowCustomAudio: mpAudio.checked,
-        approveAudio: mpApproveAudio.checked,
+        allowCustomAudio: wrap.querySelector('#mpAllowAudio').checked,
+        approveAudio: wrap.querySelector('#mpApproveAudio').checked,
         perms: {}
       };
       wrap.remove();
