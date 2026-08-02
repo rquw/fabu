@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>fabu</title>
-<link rel="stylesheet" href="styles.css?v=39">
+<link rel="stylesheet" href="styles.css?v=43">
 </head>
 <body>
 
@@ -50,6 +50,13 @@
     <div id="logo" data-tip="Back to home" data-i18n-tip="tip_home"><span class="logo-fab">fab</span><span class="logo-u">u</span></div>
     <button id="btnHome" class="tbtn" data-tip="Home menu" data-i18n-tip="tip_home"><svg class="ic"><use href="#i-home"/></svg></button>
     <input id="projName" value="Untitled" spellcheck="false" data-tip="Project name" data-i18n-tip="tip_project_name">
+    <div class="tb-sep"></div>
+    <button id="btnUndo" class="tbtn" data-tip="Undo (Cmd Z)" data-i18n-tip="tip_undo"><svg class="ic"><use href="#i-undo"/></svg></button>
+    <button id="btnRedo" class="tbtn" data-tip="Redo (Cmd Y)" data-i18n-tip="tip_redo"><svg class="ic"><use href="#i-redo"/></svg></button>
+    <div class="tb-sep"></div>
+    <button id="btnOpen" class="tbtn" data-tip="Open project (Cmd O)" data-i18n-tip="tip_open"><svg class="ic"><use href="#i-folder"/></svg></button>
+    <button id="btnSave" class="tbtn" data-tip="Save project (Cmd S)" data-i18n-tip="tip_save"><svg class="ic"><use href="#i-save"/></svg></button>
+    <button id="btnExport" class="tbtn" data-tip="Export song as WAV (Cmd E)" data-i18n-tip="tip_export"><svg class="ic"><use href="#i-export"/></svg></button>
   </div>
 
   <div class="tb-group tb-transport">
@@ -63,6 +70,8 @@
     <div id="posDisplay" data-tip="Bar and beat. Click the ruler to move." data-i18n-tip="tip_position">
       <span id="posBars">1.1</span><span id="posTime">0:00.0</span>
     </div>
+
+    <div class="tb-sep"></div>
 
     <div class="tb-field" data-tip="Tempo. Drag or type." data-i18n-tip="tip_tempo">
       <label>BPM</label>
@@ -86,18 +95,9 @@
       </select>
     </div>
 
-    <button id="btnZoomOut" class="tbtn" data-tip="Zoom out" data-i18n-tip="tip_zoom_out"><svg class="ic"><use href="#i-zoomout"/></svg></button>
-    <button id="btnZoomIn" class="tbtn" data-tip="Zoom in" data-i18n-tip="tip_zoom_in"><svg class="ic"><use href="#i-zoomin"/></svg></button>
   </div>
 
   <div class="tb-group">
-    <button id="btnUndo" class="tbtn" data-tip="Undo (Cmd Z)" data-i18n-tip="tip_undo"><svg class="ic"><use href="#i-undo"/></svg></button>
-    <button id="btnRedo" class="tbtn" data-tip="Redo (Cmd Y)" data-i18n-tip="tip_redo"><svg class="ic"><use href="#i-redo"/></svg></button>
-    <div class="tb-sep"></div>
-    <button id="btnOpen" class="tbtn" data-tip="Open project (Cmd O)" data-i18n-tip="tip_open"><svg class="ic"><use href="#i-folder"/></svg></button>
-    <button id="btnSave" class="tbtn" data-tip="Save project (Cmd S)" data-i18n-tip="tip_save"><svg class="ic"><use href="#i-save"/></svg></button>
-    <button id="btnExport" class="tbtn" data-tip="Export song as WAV (Cmd E)" data-i18n-tip="tip_export"><svg class="ic"><use href="#i-export"/></svg></button>
-    <div class="tb-sep"></div>
     <button id="btnKeys" class="tbtn toggle labeled" data-tip="Play with your keyboard (K)" data-i18n-tip="tip_keys"><svg class="ic"><use href="#i-piano"/></svg><span class="tbtn-label" data-i18n="lbl_keys">Keys</span></button>
     <button id="btnMixer" class="tbtn toggle labeled" data-tip="Mixer and EQ (X)" data-i18n-tip="tip_mixer"><svg class="ic"><use href="#i-mixer"/></svg><span class="tbtn-label" data-i18n="lbl_mixer">Mixer</span></button>
     <button id="btnFx" class="tbtn toggle labeled" data-tip="Effects to drag onto clips" data-i18n-tip="tip_fx"><svg class="ic"><use href="#i-fx"/></svg><span class="tbtn-label" data-i18n="lbl_fx">Effects</span></button>
@@ -105,6 +105,9 @@
     <button id="btnJam" class="tbtn toggle labeled" data-tip="Jam together (live multiplayer)" data-i18n-tip="tip_jam"><svg class="ic"><use href="#i-users"/></svg><span class="tbtn-label" data-i18n="lbl_jam">Jam</span></button>
     <button id="btnSettings" class="tbtn toggle labeled" data-tip="Settings" data-i18n-tip="tip_settings"><svg class="ic"><use href="#i-gear"/></svg><span class="tbtn-label" data-i18n="lbl_settings">Settings</span></button>
     <button id="btnHelp" class="tbtn toggle" data-tip="Shortcuts (F1)" data-i18n-tip="tip_help"><svg class="ic"><use href="#i-help"/></svg></button>
+    <div class="tb-sep tb-zoom-sep"></div>
+    <button id="btnZoomOut" class="tbtn tb-zoom" data-tip="Zoom out" data-i18n-tip="tip_zoom_out"><svg class="ic"><use href="#i-zoomout"/></svg></button>
+    <button id="btnZoomIn" class="tbtn tb-zoom" data-tip="Zoom in" data-i18n-tip="tip_zoom_in"><svg class="ic"><use href="#i-zoomin"/></svg></button>
   </div>
 </header>
 
@@ -205,23 +208,23 @@
 <div id="toasts"></div>
 <div id="tooltip" class="hidden"></div>
 
-<script src="js/vendor/lame.min.js?v=39"></script>
-<script src="js/vendor/WasmMediaEncoder.min.js?v=39"></script>
-<script src="js/vendor/ogg.wasm.js?v=39"></script>
-<script src="js/util.js?v=39"></script>
-<script src="js/state.js?v=39"></script>
-<script src="js/audio.js?v=39"></script>
-<script src="js/windows.js?v=39"></script>
-<script src="js/timeline.js?v=39"></script>
-<script src="js/pianoroll.js?v=39"></script>
-<script src="js/automation.js?v=39"></script>
-<script src="js/sampler.js?v=39"></script>
-<script src="js/profanity.js?v=39"></script>
-<script src="js/auth.js?v=39"></script>
-<script src="js/app.js?v=39"></script>
-<script src="js/midi.js?v=39"></script>
-<script src="js/tutor.js?v=39"></script>
-<script src="js/sync.js?v=39"></script>
-<script src="js/webnudge.js?v=39"></script>
+<script src="js/vendor/lame.min.js?v=43"></script>
+<script src="js/vendor/WasmMediaEncoder.min.js?v=43"></script>
+<script src="js/vendor/ogg.wasm.js?v=43"></script>
+<script src="js/util.js?v=43"></script>
+<script src="js/state.js?v=43"></script>
+<script src="js/audio.js?v=43"></script>
+<script src="js/windows.js?v=43"></script>
+<script src="js/timeline.js?v=43"></script>
+<script src="js/pianoroll.js?v=43"></script>
+<script src="js/automation.js?v=43"></script>
+<script src="js/sampler.js?v=43"></script>
+<script src="js/profanity.js?v=43"></script>
+<script src="js/auth.js?v=43"></script>
+<script src="js/app.js?v=43"></script>
+<script src="js/midi.js?v=43"></script>
+<script src="js/tutor.js?v=43"></script>
+<script src="js/sync.js?v=43"></script>
+<script src="js/webnudge.js?v=43"></script>
 </body>
 </html>
