@@ -365,6 +365,8 @@ const Timeline = {
       const dot = document.createElement('div');
       dot.className = 'tcolor';
       dot.style.background = t.color;
+      dot.dataset.tip = tr('tip_track_color', 'Track colour');
+      dot.addEventListener('click', (e) => { e.stopPropagation(); this.openColorMenu(t, dot); });
       const name = document.createElement('input');
       name.className = 'tname';
       name.value = t.name;
@@ -456,6 +458,50 @@ const Timeline = {
     };
     slot.append(mkAdd('midi', 'i-note', 'add_instrument', 'Instrument'), mkAdd('audio', 'i-mic', 'add_audio', 'Audio'));
     box.appendChild(slot);
+  },
+
+  // pick a track colour: the swatches, or any colour you like
+  openColorMenu(track, anchor) {
+    const old = document.getElementById('colorMenu');
+    if (old) old.remove();
+    const m = document.createElement('div');
+    m.id = 'colorMenu';
+    m.className = 'color-menu';
+    const grid = document.createElement('div');
+    grid.className = 'color-grid';
+    for (const c of TRACK_COLORS) {
+      const b = document.createElement('button');
+      b.className = 'color-sw' + (c.toLowerCase() === String(track.color).toLowerCase() ? ' on' : '');
+      b.style.background = c;
+      b.addEventListener('click', () => { m.remove(); this.setTrackColor(track, c); });
+      grid.appendChild(b);
+    }
+    m.appendChild(grid);
+    const row = document.createElement('label');
+    row.className = 'color-custom';
+    row.innerHTML = `<span>${tr('color_custom', 'Custom')}</span>`;
+    const inp = document.createElement('input');
+    inp.type = 'color';
+    inp.value = /^#[0-9a-f]{6}$/i.test(track.color) ? track.color : '#e0894a';
+    inp.addEventListener('input', () => this.setTrackColor(track, inp.value, true));
+    inp.addEventListener('change', () => { this.setTrackColor(track, inp.value); m.remove(); });
+    row.appendChild(inp);
+    m.appendChild(row);
+    document.body.appendChild(m);
+    const r = anchor.getBoundingClientRect();
+    m.style.left = Math.min(r.left - 4, window.innerWidth - m.offsetWidth - 8) + 'px';
+    m.style.top = Math.min(r.bottom + 6, window.innerHeight - m.offsetHeight - 8) + 'px';
+    const close = (ev) => { if (!m.contains(ev.target)) { m.remove(); window.removeEventListener('mousedown', close, true); } };
+    window.addEventListener('mousedown', close, true);
+  },
+
+  // live = dragging the colour wheel, so do not spam the undo stack
+  setTrackColor(track, color, live) {
+    if (!live) Undo.push('Track colour');
+    track.color = color;
+    UI.dirty = UI.fileDirty = true;
+    this.render();
+    if (typeof Windows !== 'undefined') Windows.refreshAll();
   },
 
   // apply an instrument choice to a track (shared by the picker)
@@ -1080,9 +1126,14 @@ const Timeline = {
       // a loop from the Samples browser
       const sampleId = e.dataTransfer.getData('text/fabu-sample');
       if (sampleId) { App.addSampleToProject(sampleId, beat, S.tracks[laneIdx] ? laneIdx : null); return; }
-      const files = [...e.dataTransfer.files].filter(f =>
+      const dropped = [...e.dataTransfer.files];
+      // .mid becomes editable patterns, not audio, so it is checked first (a
+      // MIDI file's type can read as audio/midi and get caught by the filter)
+      const midis = dropped.filter(f => MidiFile.isMidiFile(f));
+      if (midis.length) { await MidiFile.importFiles(midis, beat); return; }
+      const files = dropped.filter(f =>
         /\.(wav|mp3|ogg|m4a|aac|flac|aiff?|webm|opus)$/i.test(f.name) || f.type.startsWith('audio/'));
-      if (!files.length) { toast(tr('toast_not_audio', 'That is not an audio file'), 'red'); return; }
+      if (!files.length) { toast(tr('toast_not_audio', 'That is not an audio or MIDI file'), 'red'); return; }
       await App.importAudioFiles(files, beat, S.tracks[laneIdx]);
     });
   },

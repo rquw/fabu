@@ -16,7 +16,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onUpdateProgress: (cb) => ipcRenderer.on('update-progress', (e, pct) => cb(pct)),
   onUpdateError: (cb) => ipcRenderer.on('update-error', (e, msg) => cb(msg)),
   onUpdateRestarting: (cb) => ipcRenderer.on('update-restarting', () => cb()),
-  onUpdateDownloaded: (cb) => ipcRenderer.on('update-downloaded', () => cb()),
+  onUpdateDownloaded: (cb) => ipcRenderer.on('update-downloaded', (_e, backupPath) => cb(backupPath)),
   onFullscreen: (cb) => ipcRenderer.on('fullscreen-changed', (e, fs) => cb(fs)),
   restartNow: () => ipcRenderer.send('restart-now'),
   getVersion: () => ipcRenderer.invoke('get-version'),

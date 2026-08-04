@@ -44,6 +44,103 @@ const Sync = {
   pending: null,
   rev: 0,             // state revision: rejects late/stale states that would undo newer edits
 
+  // ---------- connection health ----------
+  // The relay is a free Render instance. It sleeps when idle (a cold start was
+  // measured at 13 seconds), it gets swapped out on deploys, and a swap drops
+  // every socket on it at once. So the client assumes the connection WILL die
+  // and is built to come back on its own instead of dumping people out.
+  lastRx: 0,          // when we last heard anything from the relay
+  lastTx: 0,
+  rtt: null,          // ms, from ping/pong
+  quality: 'good',    // good | slow | bad
+  retryTries: 0,
+  retryTimer: null,
+  healthTimer: null,
+  hostGraceUntil: 0,  // don't elect a new host while the old one may still be reconnecting
+  sendFails: 0,
+  banner: null,
+
+  // Every way the room can break, in plain words. No silent failures: if one of
+  // these happens the user is told which one, and what happens next.
+  FAIL: {
+    no_socket:    ['Could not open a connection', 'Your browser or network blocked the connection to the server.'],
+    dns:          ['Cannot reach the server', 'The multiplayer server did not answer. It may be restarting.'],
+    offline:      ['You are offline', 'Your internet connection dropped. Waiting for it to come back.'],
+    server_down:  ['Servers went down', 'The multiplayer server stopped responding. Trying to get back in.'],
+    server_sleep: ['Waking up the server', 'The server was asleep. This might take a minute.'],
+    timeout:      ['The server stopped answering', 'No reply for a while, so the connection was treated as dead.'],
+    host_gone:    ['Host disconnected', 'Waiting a moment in case they come back.'],
+    host_lost:    ['Host left the session', '{name} is the host now.'],
+    room_gone:    ['The room is gone', 'Everyone else disconnected and the room closed.'],
+    kicked_out:   ['You were removed from this room', ''],
+    room_full:    ['That room is full', 'The host set a player limit and it has been reached.'],
+    bad_code:     ['Invalid code', 'No room is using that code right now.'],
+    denied:       ['The host declined your request', ''],
+    send_fail:    ['Your changes are not going through', 'The connection is up but the server is not accepting messages.'],
+    gave_up:      ['Could not reconnect', 'Your work is safe and saved locally. You can try again any time.'],
+    reconnected:  ['Back in the room', ''],
+    unknown:      ['Something went wrong with the connection', 'The connection closed for an unknown reason.']
+  },
+  failText(code, params) {
+    const f = this.FAIL[code] || this.FAIL.unknown;
+    return {
+      title: tr('mpf_' + code + '_t', f[0], params),
+      body: f[1] ? tr('mpf_' + code + '_b', f[1], params) : ''
+    };
+  },
+
+  // A toast disappears. A connection problem should stay on screen until it is
+  // actually resolved, so this is a persistent banner instead.
+  // kind: 'working' (spinner, we are retrying) | 'bad' (stopped, offer Retry) | 'ok' (auto-hides)
+  showBanner(code, kind, params, onRetry) {
+    const t = this.failText(code, params);
+    let b = this.banner;
+    if (!b || !b.isConnected) {
+      b = document.createElement('div');
+      b.id = 'mpBanner';
+      document.body.appendChild(b);
+      this.banner = b;
+    }
+    b.className = 'mpb-' + kind;
+    b.innerHTML =
+      `<div class="mpb-dot"></div>
+       <div class="mpb-text"><div class="mpb-title"></div>${t.body ? '<div class="mpb-body"></div>' : ''}</div>
+       <div class="mpb-actions"></div>`;
+    b.querySelector('.mpb-title').textContent = t.title;
+    if (t.body) b.querySelector('.mpb-body').textContent = t.body;
+    const acts = b.querySelector('.mpb-actions');
+    if (kind === 'bad' && onRetry) {
+      const r = document.createElement('button');
+      r.className = 'fbtn';
+      r.textContent = tr('mp_retry', 'Try again');
+      r.addEventListener('click', () => { this.hideBanner(); onRetry(); });
+      acts.appendChild(r);
+    }
+    if (kind !== 'working') {
+      const x = document.createElement('button');
+      x.className = 'fbtn ghost mpb-x';
+      x.textContent = '×';
+      x.title = tr('mp_dismiss', 'Dismiss');
+      x.addEventListener('click', () => this.hideBanner());
+      acts.appendChild(x);
+    }
+    clearTimeout(this._bannerHide);
+    if (kind === 'ok') this._bannerHide = setTimeout(() => this.hideBanner(), 4000);
+  },
+
+  hideBanner() {
+    clearTimeout(this._bannerHide);
+    if (this.banner) { this.banner.remove(); this.banner = null; }
+  },
+
+  // Single funnel for everything that can go wrong, so nothing fails silently.
+  fail(code, params, opts = {}) {
+    const t = this.failText(code, params);
+    if (opts.banner === false) toast(t.title, opts.tone || 'red');
+    else this.showBanner(code, opts.kind || 'bad', params, opts.retry);
+    if (opts.log !== false) console.warn('[jam] ' + code, params || '');
+  },
+
   // don't yank the project out from under someone mid-interaction: typing a
   // name, an open dropdown (re-render closes it), or an open context menu
   typingBusy() {
@@ -154,18 +251,43 @@ const Sync = {
     this.setStatus('connecting');
 
     this._manualClose = false;
-    try { this.ws = new WebSocket(this.relayUrl); } catch (e) { this.setStatus('offline'); return; }
+    this.retryTries = 0;
+    this._lastConnect = { room, asHost, settings };
+    this.hideBanner();
+
+    if (!navigator.onLine) {
+      this.fail('offline', null, { retry: () => this.connect(room, asHost, settings) });
+      this.setStatus('offline');
+      return;
+    }
+    try { this.ws = new WebSocket(this.relayUrl); } catch (e) {
+      this.setStatus('offline');
+      this.fail('no_socket', null, { retry: () => this.connect(room, asHost, settings) });
+      return;
+    }
     this.wireSocket();
 
-    // the free relay sleeps when idle; warn if the first connect is slow
+    // the free relay sleeps when idle; a cold start was measured at 13 seconds,
+    // so say so rather than leaving the user staring at nothing
     clearTimeout(this._slowTimer);
     this._slowTimer = setTimeout(() => {
-      if (!this.connected) toast(tr('mp_waking', 'Waking up the server… this can take a minute'));
-    }, 4000);
+      if (!this.connected) this.showBanner('server_sleep', 'working');
+    }, 3000);
+    // and if it never comes up at all, say that too instead of hanging forever
+    clearTimeout(this._openTimer);
+    this._openTimer = setTimeout(() => {
+      if (this.connected) return;
+      this.disconnect(true);
+      this.fail('dns', null, { retry: () => this.connect(room, asHost, settings) });
+    }, 60000);
 
     this.ws.onopen = () => {
       clearTimeout(this._slowTimer);
+      clearTimeout(this._openTimer);
+      this.hideBanner();
       this.connected = true;
+      this.lastRx = this.lastTx = Date.now();
+      this.startHealth();
       this.send({ type: 'join', room });
       if (asHost) {
         this.setStatus('online');
@@ -180,7 +302,7 @@ const Sync = {
         this.knockTimer = setTimeout(() => {
           if (!this.admitted) {
             this.disconnect(true);
-            toast(tr('mp_no_answer', 'Invalid Code'), 'red');
+            this.fail('bad_code');
           }
         }, 8000);
       }
@@ -199,58 +321,237 @@ const Sync = {
       else return;
       let msg;
       try { msg = JSON.parse(text); } catch (e) { return; }
-      this.onMessage(msg);
-    };
-    this.ws.onclose = () => {
-      // an unexpected drop (relay hiccup, sleep, wifi blip) tries to get back in
-      // quietly instead of dumping the user out of the room
-      if (!this._manualClose && this.admitted) this.tryReconnect();
-      else this.teardown();
-    };
-    this.ws.onerror = () => { this.setStatus('offline'); };
-  },
-
-  tryReconnect() {
-    const room = this.room, wasHost = this.isHost, me = this.me;
-    const settings = this.settings, started = this.started, rev = this.rev;
-    this.connected = false;
-    this.setStatus('connecting');
-    toast(tr('mp_reconnecting', 'Connection lost, reconnecting…'));
-    clearInterval(this.periodTimer); clearInterval(this.presenceTimer);
-    let tries = 0;
-    const attempt = () => {
-      if (this._manualClose) return;
-      if (tries++ >= 5) {
-        this.teardown();
-        toast(tr('mp_reconnect_failed', 'Could not reconnect'), 'red');
+      this.lastRx = Date.now();
+      this.sendFails = 0;
+      if (msg.type === 'pong' && msg.to === (this.me && this.me.id)) {
+        this.rtt = Date.now() - (msg.t || Date.now());
         return;
       }
-      try { this.ws = new WebSocket(this.relayUrl); } catch (e) { setTimeout(attempt, 1500 * tries); return; }
-      this.wireSocket();
-      this.ws.onclose = () => { setTimeout(attempt, 1500 * tries); };
-      this.ws.onopen = () => {
-        // keep the same identity so the others never see us leave
-        this.connected = true;
-        this.room = room; this.me = me; this.isHost = wasHost;
-        this.settings = settings; this.started = started; this.rev = rev;
-        this.ws.onclose = () => {
-          if (!this._manualClose && this.admitted) this.tryReconnect();
-          else this.teardown();
-        };
-        this.send({ type: 'join', room });
-        if (wasHost) {
-          this.afterAdmit();
-          toast(tr('mp_reconnected', 'Reconnected'), 'green');
-        } else {
-          this.admitted = false;
-          this.send({ type: 'knock', id: me.id, name: me.name });
-          this.knockTimer = setTimeout(() => {
-            if (!this.admitted) { this.teardown(); toast(tr('mp_reconnect_failed', 'Could not reconnect'), 'red'); }
-          }, 15000);
-        }
-      };
+      if (msg.type === 'ping' && msg.id && this.me && msg.id !== this.me.id) {
+        this.send({ type: 'pong', to: msg.id, t: msg.t });
+        return;
+      }
+      this.onMessage(msg);
     };
-    setTimeout(attempt, 800);
+    this.ws.onclose = (ev) => {
+      // An unexpected drop (relay hiccup, instance swap on deploy, sleep, wifi
+      // blip) tries to get back in quietly instead of dumping the user out.
+      if (this._manualClose) { this.teardown(); return; }
+      if (this.room) this.tryReconnect(ev);
+      else this.teardown();
+    };
+    this.ws.onerror = () => {
+      // onerror always precedes onclose; let onclose decide what to do, but
+      // stop pretending the connection is fine in the meantime
+      this.connected = false;
+      this.setStatus('connecting');
+      this.updatePill();
+    };
+  },
+
+  // ---------- reconnect ----------
+  // Sized for the real failure modes: a Render cold start took 13s when
+  // measured, and an instance swap drops everyone at once, so a handful of
+  // 1.5s attempts would give up before the server is even awake. This backs
+  // off up to 30s between tries and keeps trying for about four minutes.
+  MAX_RETRIES: 14,
+
+  retryDelay() {
+    const base = Math.min(30000, 1200 * Math.pow(1.8, this.retryTries));
+    return base + Math.random() * 600;   // jitter, so 100 clients don't all hit at once
+  },
+
+  // a socket we are done with must be silenced, not just abandoned: a half-dead
+  // one still delivers messages and would duplicate everything it handles
+  killSocket(sock) {
+    if (!sock) return;
+    sock.onopen = sock.onmessage = sock.onclose = sock.onerror = null;
+    try { sock.close(); } catch (e) {}
+  },
+
+  tryReconnect(ev) {
+    if (this._manualClose || this.retryTimer) return;
+    const wasAdmitted = this.admitted;
+    this.killSocket(this.ws);
+    this.ws = null;
+    this.connected = false;
+    this.admitted = false;
+    this.setStatus('connecting');
+    clearInterval(this.periodTimer); clearInterval(this.presenceTimer);
+    clearInterval(this.healthTimer); this.healthTimer = null;
+    this.updatePill();
+    // whatever happens next, the project is not lost
+    this.saveRecovery();
+    // give the host a grace window before anyone elects a replacement, since
+    // the host is probably reconnecting through this exact same code path
+    this.hostGraceUntil = Date.now() + 45000;
+
+    if (!navigator.onLine) this.showBanner('offline', 'working');
+    else if (wasAdmitted) this.showBanner('server_down', 'working');
+    else this.showBanner('dns', 'working');
+
+    this.attemptReconnect();
+  },
+
+  attemptReconnect() {
+    clearTimeout(this.retryTimer); this.retryTimer = null;
+    if (this._manualClose || !this.room) return;
+
+    // no point burning attempts while the machine has no internet at all;
+    // the 'online' listener kicks this straight back off
+    if (!navigator.onLine) {
+      this.showBanner('offline', 'working');
+      this.retryTimer = setTimeout(() => this.attemptReconnect(), 2000);
+      return;
+    }
+    if (this.retryTries >= this.MAX_RETRIES) {
+      this.giveUp();
+      return;
+    }
+    this.retryTries++;
+
+    const room = this.room, wasHost = this.isHost, me = this.me;
+    const settings = this.settings, started = this.started, rev = this.rev;
+
+    let sock;
+    try { sock = new WebSocket(this.relayUrl); } catch (e) {
+      this.retryTimer = setTimeout(() => this.attemptReconnect(), this.retryDelay());
+      return;
+    }
+    this.killSocket(this.ws);   // an attempt that is being replaced must not linger
+    this.ws = sock;
+    this.wireSocket();
+
+    // an attempt that neither opens nor closes (silently blackholed) must not
+    // stall the whole loop
+    const giveUpOnThis = setTimeout(() => {
+      if (sock.readyState === 1) return;
+      try { sock.onclose = null; sock.close(); } catch (e) {}
+      this.retryTimer = setTimeout(() => this.attemptReconnect(), this.retryDelay());
+    }, 30000);
+
+    sock.onclose = () => {
+      clearTimeout(giveUpOnThis);
+      if (this._manualClose) return;
+      this.retryTimer = setTimeout(() => this.attemptReconnect(), this.retryDelay());
+    };
+
+    sock.onopen = () => {
+      clearTimeout(giveUpOnThis);
+      // keep the same identity, so from everyone else's side we never left
+      this.connected = true;
+      this.lastRx = this.lastTx = Date.now();
+      this.room = room; this.me = me; this.isHost = wasHost;
+      this.settings = settings; this.started = started; this.rev = rev;
+      this.wireSocket();                       // restore the normal close handler
+      this.send({ type: 'join', room });
+      this.startHealth();
+      if (wasHost) {
+        this.retryTries = 0;
+        this.afterAdmit();
+        this.showBanner('reconnected', 'ok');
+      } else {
+        this.admitted = false;
+        this.send({ type: 'knock', id: me.id, name: me.name });
+        clearTimeout(this.knockTimer);
+        this.knockTimer = setTimeout(() => {
+          if (this.admitted) return;
+          // socket is up but nobody answered: the room itself is gone
+          if (this.retryTries >= this.MAX_RETRIES) { this.giveUp('room_gone'); return; }
+          try { this.ws.close(); } catch (e) {}
+        }, 12000);
+      }
+    };
+  },
+
+  // called from 'admit' once a reconnecting guest is back in
+  reconnectSucceeded() {
+    this.retryTries = 0;
+    clearTimeout(this.retryTimer); this.retryTimer = null;
+    this.showBanner('reconnected', 'ok');
+  },
+
+  giveUp(code) {
+    clearTimeout(this.retryTimer); this.retryTimer = null;
+    const last = this._lastConnect;
+    this.saveRecovery();
+    this.teardown(true);
+    this.fail(code || 'gave_up', null, {
+      retry: last ? () => this.connect(last.room, last.asHost, last.settings) : null
+    });
+  },
+
+  // ---------- health ----------
+  // A WebSocket can sit at readyState 1 long after the other end is gone
+  // (instance swap, NAT timeout, laptop lid). Nothing tells us; we have to
+  // notice ourselves, or the user sits in a room that stopped existing.
+  startHealth() {
+    clearInterval(this.healthTimer);
+    this.healthTimer = setInterval(() => this.checkHealth(), 4000);
+  },
+
+  checkHealth() {
+    if (!this.connected || !this.ws) return;
+    const now = Date.now();
+
+    if (this.ws.readyState > 1) {   // closed under us without firing onclose
+      if (!this._manualClose && this.room) this.tryReconnect();
+      return;
+    }
+    // keep the free instance from idling out, and give us a liveness signal
+    if (now - this.lastTx > 15000) this.send({ type: 'ping', id: this.me && this.me.id, t: now });
+
+    const silent = now - this.lastRx;
+    // alone in the room there is nobody to answer, so silence is normal
+    const expectReplies = this.peers.size > 0;
+    if (expectReplies && silent > 45000) {
+      this.fail('timeout', null, { kind: 'working' });
+      try { this.ws.close(); } catch (e) {}   // onclose starts the reconnect
+      return;
+    }
+    const q = !expectReplies ? 'good' : silent > 20000 ? 'bad' : silent > 8000 ? 'slow' : 'good';
+    if (q !== this.quality) { this.quality = q; this.updatePill(); }
+  },
+
+  // A lobby death must never cost anyone their work.
+  saveRecovery() {
+    try {
+      if (!S || !S.tracks || !S.tracks.length) return;
+      localStorage.setItem('fabu.jamRecovery', JSON.stringify({
+        ts: Date.now(), room: this.room, name: S.name || 'Jam', state: S
+      }));
+    } catch (e) {}   // quota, private mode: not worth breaking the room over
+  },
+
+  clearRecovery() { try { localStorage.removeItem('fabu.jamRecovery'); } catch (e) {} },
+
+  // If the app died while the room was falling apart, the work is still here.
+  // Only offer it when there is nothing to lose by asking (empty project).
+  offerRecovery() {
+    let r;
+    try { r = JSON.parse(localStorage.getItem('fabu.jamRecovery') || 'null'); } catch (e) { return; }
+    if (!r || !r.state || Date.now() - r.ts > 24 * 3600e3) return;
+    const empty = !S.tracks || !S.tracks.some(t => (t.clips || []).length);
+    if (!empty) return;
+    this.showBanner('gave_up', 'bad', null, null);
+    const b = this.banner;
+    if (!b) return;
+    b.querySelector('.mpb-title').textContent = tr('mp_recovered', 'Recovered your project from the last session');
+    b.querySelector('.mpb-body').textContent = r.name || '';
+    const btn = document.createElement('button');
+    btn.className = 'fbtn';
+    btn.textContent = tr('mp_restore', 'Restore');
+    btn.addEventListener('click', () => {
+      try {
+        Undo.push('Restore session');
+        Object.assign(S, r.state);
+        App.rebuildAll ? App.rebuildAll() : (Timeline.render(), Mixer && Mixer.render && Mixer.render());
+        toast(tr('mp_recovered', 'Recovered your project from the last session'), 'green');
+      } catch (e) { toast(tr('mp_restore_fail', 'That backup could not be opened'), 'red'); }
+      this.clearRecovery();
+      this.hideBanner();
+    });
+    b.querySelector('.mpb-actions').prepend(btn);
   },
 
   afterAdmit() {
@@ -276,10 +577,15 @@ const Sync = {
 
   disconnect(silent = false) {
     this._manualClose = true;
+    if (!silent) this.clearRecovery();   // leaving on purpose is not a crash
     if (this.connected && this.me) this.send({ type: 'bye', id: this.me.id, host: this.isHost });
     clearTimeout(this.knockTimer);
     clearTimeout(this._slowTimer);
-    if (this.ws) { this.ws.onclose = null; try { this.ws.close(); } catch (e) {} }
+    clearTimeout(this._openTimer);
+    clearTimeout(this.retryTimer); this.retryTimer = null;
+    clearInterval(this.healthTimer); this.healthTimer = null;
+    this.retryTries = 0;
+    if (this.ws) { this.ws.onclose = null; this.ws.onerror = null; try { this.ws.close(); } catch (e) {} }
     this.ws = null;
     this.teardown(silent);
   },
@@ -288,6 +594,9 @@ const Sync = {
     const was = this.connected;
     this.connected = false; this.admitted = false; this.isHost = false; this.synced = false;
     clearInterval(this.periodTimer); clearInterval(this.presenceTimer);
+    clearInterval(this.healthTimer); this.healthTimer = null;
+    this._hostWait = 0; this._electing = false; this.quality = 'good'; this.rtt = null;
+    this._cursorsOffNoted = false;   // a new room deserves the explanation again
     this.peers.clear(); this.locks.clear(); this.cursors.clear(); this.remotePH.clear(); this.pendingReqs = [];
     this.pendingAudio = []; this.history = [];
     for (const id of ['audioReview','histModal','manageModal']) { const el = document.getElementById(id); if (el) el.remove(); }
@@ -302,14 +611,29 @@ const Sync = {
   },
 
   send(obj) {
-    if (!this.ws || this.ws.readyState !== 1) return;
+    if (!this.ws || this.ws.readyState !== 1) return false;
     obj.room = this.room;
-    try { this.ws.send(JSON.stringify(obj)); } catch (e) {}
+    try {
+      this.ws.send(JSON.stringify(obj));
+      this.lastTx = Date.now();
+      return true;
+    } catch (e) {
+      // the socket claims to be open but will not take messages: our edits are
+      // silently not reaching anyone, which is the worst way for this to fail
+      if (++this.sendFails === 3) this.fail('send_fail', null, { kind: 'working' });
+      if (this.sendFails > 6) { try { this.ws.close(); } catch (e2) {} }
+      return false;
+    }
   },
 
   // ---------- message handling ----------
 
   onMessage(m) {
+    // Never process our own message. The relay excludes the sending SOCKET, not
+    // the sending user, so during a reconnect the old socket (not yet reaped by
+    // the server) receives what the new socket sends — and we would file
+    // ourselves as a second player, complete with our own host crown.
+    if (m.id && this.me && m.id === this.me.id) return;
     // a kicked client that simply ignores the kick still gets ignored here
     if (this.isHost && m.id && this.kicked && this.kicked.has(m.id)) return;
     if (this.isHost && m.from && this.kicked && this.kicked.has(m.from)) return;
@@ -339,6 +663,7 @@ const Sync = {
           this.settings = m.settings;
           this.started = !!m.started;
         }
+        if (m.host) this.hostSeen();   // a host is alive, so stop the "host gone" wait
         // two hosts can briefly coexist after a false host-loss; the earliest
         // joiner keeps the crown and everyone else steps down, so we self-heal
         // instead of getting stuck with two hosts.
@@ -368,22 +693,21 @@ const Sync = {
         if (m.to === this.me.id && !this.admitted) {
           this.settings = m.settings || this.settings;
           this.started = !!m.started;
-          toast(tr('mp_admitted', 'Joined room {room}', { room: this.room }), 'green');
+          const wasRetrying = this.retryTries > 0;
           this.afterAdmit();
+          if (wasRetrying) this.reconnectSucceeded();
+          else toast(tr('mp_admitted', 'Joined room {room}', { room: this.room }), 'green');
         }
         break;
 
       case 'deny':
         if (m.to === this.me.id && !this.admitted) {
-          const reasons = {
-            full: tr('mp_deny_full', 'That room is full'),
-            closed: tr('mp_deny_closed', 'That session has already started'),
-            denied: tr('mp_deny_denied', 'The host declined your request'),
-            banned: tr('mp_banned', 'You were removed from this room. Try again later.')
-          };
+          const codes = { full: 'room_full', closed: 'closed', denied: 'denied', banned: 'kicked_out' };
           if (m.until) localStorage.setItem(this.banKey(this.room), String(m.until));
-          toast(reasons[m.reason] || reasons.denied, 'red');
+          this._manualClose = true;              // a refusal is final, do not retry into it
           this.disconnect(true);
+          if (m.reason === 'closed') toast(tr('mp_deny_closed', 'That session has already started'), 'red');
+          else this.fail(codes[m.reason] || 'denied');
         }
         break;
 
@@ -432,6 +756,7 @@ const Sync = {
       case 'kick':
         if (m.to === this.me.id) {
           localStorage.setItem(this.banKey(this.room), String(m.until || 0));
+          this._manualClose = true;              // being kicked must not trigger a reconnect
           this.disconnect(true);
           this.showKickedModal(m.until);
         }
@@ -995,56 +1320,56 @@ const Sync = {
     if (changed) { this.renderPanel(); this.renderCursors(); }
   },
 
-  // ---------- host loss & roulette election ----------
+  // ---------- host loss & handover ----------
+  // No wheel, no ceremony. The host dropping is a problem, not a game show:
+  // say what happened, wait in case they are just reconnecting, then hand over
+  // quietly to the earliest joiner (deterministic, so every client agrees).
 
   hostLost() {
     if (!this.admitted || this._electing) return;
+
+    // The host is very likely mid-reconnect, especially on a cold relay. Do not
+    // steal the room out from under them the second their presence goes stale.
+    if (Date.now() < this.hostGraceUntil) return;
+    if (!this._hostWait) {
+      this._hostWait = Date.now();
+      this.showBanner('host_gone', 'working');
+      return;
+    }
+    if (Date.now() - this._hostWait < 15000) return;   // grace period
+    this._hostWait = 0;
+
     this._electing = true;
-    // deterministic winner: earliest joiner still here (same result on every client)
-    const cands = [{ id: this.me.id, name: this.me.name, color: this.me.color, joinTs: this.me.joinTs }];
-    for (const [id, p] of this.peers) cands.push({ id, name: p.name, color: p.color, joinTs: p.joinTs });
-    cands.sort((a, b) => a.joinTs - b.joinTs);
+    const cands = [{ id: this.me.id, name: this.me.name, joinTs: this.me.joinTs }];
+    for (const [id, p] of this.peers) cands.push({ id, name: p.name, joinTs: p.joinTs });
+    cands.sort((a, b) => (a.joinTs - b.joinTs) || (a.id < b.id ? -1 : 1));
     const winner = cands[0];
-    this.showRoulette(cands, winner, () => {
+
+    if (cands.length === 1) {
+      // everyone else is gone too: the room no longer exists
       this._electing = false;
-      if (winner.id === this.me.id) {
-        this.isHost = true;
-        this.sendPresence();
-        toast(tr('mp_you_host', 'You are the new host'), 'green');
-      }
-      this.renderPanel();
-    });
+      this.saveRecovery();
+      this.disconnect(true);
+      this.fail('room_gone');
+      return;
+    }
+
+    this._electing = false;
+    if (winner.id === this.me.id) {
+      this.isHost = true;
+      this.sendPresence();
+      this.showBanner('host_lost', 'ok', { name: tr('mp_you', 'You') });
+      toast(tr('mp_you_host', 'You are the host now'), 'green');
+    } else {
+      this.showBanner('host_lost', 'ok', { name: winner.name });
+    }
+    this.renderPanel();
   },
 
-  showRoulette(cands, winner, done) {
-    const old = document.getElementById('rouletteOverlay');
-    if (old) old.remove();
-    const ov = document.createElement('div');
-    ov.id = 'rouletteOverlay';
-    ov.innerHTML = `
-      <div class="roul-box">
-        <div class="roul-title">${tr('mp_host_left', 'Host left the session')}</div>
-        <div class="roul-sub">${tr('mp_selecting', 'A new host is being selected')}</div>
-        <div class="roul-name" id="roulName">…</div>
-      </div>`;
-    document.body.appendChild(ov);
-    const nameEl = ov.querySelector('#roulName');
-    let i = 0, delay = 70;
-    const spin = () => {
-      const c = cands[i % cands.length];
-      nameEl.textContent = c.name;
-      nameEl.style.color = c.color;
-      i++;
-      delay *= 1.13;                       // slow down like a wheel
-      if (delay < 420) setTimeout(spin, delay);
-      else {
-        nameEl.textContent = winner.name;   // land on the deterministic winner
-        nameEl.style.color = winner.color;
-        nameEl.classList.add('roul-winner');
-        setTimeout(() => { ov.classList.add('out'); setTimeout(() => { ov.remove(); done(); }, 350); }, 1400);
-      }
-    };
-    spin();
+  // the old host came back (or someone re-asserted): stop waiting
+  hostSeen() {
+    this._hostWait = 0;
+    if (this.banner && this.banner.classList.contains('mpb-working')) this.hideBanner();
   },
 
   // ---------- kick ----------
@@ -1157,13 +1482,41 @@ const Sync = {
     return { sl: sc ? sc.scrollLeft : 0, st: sc ? sc.scrollTop : 0, zoom: UI.zoom };
   },
 
+  // ---------- cursor rate control ----------
+  // The relay fans every message out to everyone else, so cursor traffic is
+  // quadratic: N players each sending at 1/T costs N*(N-1)/T messages per
+  // second server-side. At 100 players and 60ms that is ~165,000/s, which no
+  // instance survives. So instead of a fixed rate, spend a fixed budget: pick
+  // the interval that keeps the relay under CURSOR_BUDGET messages a second.
+  CURSOR_BUDGET: 1500,   // relay messages/sec allowed for cursor chatter
+  CURSOR_MAX_ROOM: 40,   // past this, cursors cost more than they are worth
+
+  cursorInterval() {
+    const n = this.peers.size + 1;
+    if (n > this.CURSOR_MAX_ROOM) return 0;          // 0 = do not send at all
+    let ms = (n * (n - 1)) / this.CURSOR_BUDGET * 1000;
+    // a struggling connection is not the moment to push more packets
+    if (this.quality === 'slow') ms *= 2;
+    else if (this.quality === 'bad') ms *= 4;
+    return clamp(ms, 55, 1000);
+  },
+
+  // tell people once why their cursors vanished, instead of letting it look broken
+  noteCursorsOff() {
+    if (this._cursorsOffNoted) return;
+    this._cursorsOffNoted = true;
+    toast(tr('mp_cursors_off', 'Live cursors are off in rooms this big, to keep the room stable.'));
+  },
+
   initCursors() {
     let lastC = 0, lastV = 0;
     // cursors follow the mouse anywhere in the window, not just the timeline
     document.addEventListener('mousemove', (e) => {
       if (!this.admitted) return;
+      const iv = this.cursorInterval();
+      if (!iv) { this.noteCursorsOff(); return; }
       const now = performance.now();
-      if (now - lastC < 55) return;
+      if (now - lastC < iv) return;
       lastC = now;
       const r = Timeline.lanes.getBoundingClientRect();
       const overCanvas = e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
@@ -1173,15 +1526,19 @@ const Sync = {
         fx: e.clientX / window.innerWidth, fy: e.clientY / window.innerHeight
       };
       if (overCanvas) { msg.beat = (e.clientX - r.left) / UI.zoom; msg.y = e.clientY - r.top; }
-      Object.assign(msg, this.viewportData());
+      // viewport data is only used to follow someone's scroll; in a big room
+      // it is dead weight on every single packet
+      if (this.peers.size < 12) Object.assign(msg, this.viewportData());
       this.send(msg);
     });
     // keep followers in sync when we scroll/zoom without moving the mouse
     const sc = document.getElementById('tlScroll');
     if (sc) sc.addEventListener('scroll', () => {
       if (!this.admitted) return;
+      const iv = this.cursorInterval();
+      if (!iv) return;
       const now = performance.now();
-      if (now - lastV < 60) return;
+      if (now - lastV < Math.max(60, iv)) return;
       lastV = now;
       this.send(Object.assign({ type: 'view', id: this.me.id }, this.viewportData()));
     });
@@ -1234,7 +1591,14 @@ const Sync = {
   sendPlayhead(beat, playing) {
     if (!this.admitted) return;
     const now = performance.now();
-    if (playing && this._lastPh && now - this._lastPh < 80) return;
+    // a moving playhead is the same quadratic cost as a moving cursor, so it
+    // rides the same budget. Start/stop always goes through: that is a state
+    // change, not a stream, and people need to see it.
+    if (playing) {
+      const iv = Math.max(80, this.cursorInterval());
+      if (!this.cursorInterval()) return;
+      if (this._lastPh && now - this._lastPh < iv) return;
+    }
     this._lastPh = now;
     this.send({ type: 'ph', id: this.me.id, name: this.me.name, color: this.me.color, beat, playing });
   },
@@ -1536,7 +1900,16 @@ const Sync = {
     if (this.connected && this.admitted) {
       pill.classList.remove('hidden');
       const n = this.peers.size + 1;
-      pill.innerHTML = `<span class="jam-dot" style="background:var(--green)"></span> ${n}`;
+      const col = this.quality === 'bad' ? 'var(--red)' : this.quality === 'slow' ? 'var(--yellow, #d9a441)' : 'var(--green)';
+      pill.innerHTML = `<span class="jam-dot" style="background:${col}"></span> ${n}`;
+      pill.dataset.tip = this.quality === 'good'
+        ? tr('mp_players_tip', 'Players in this room')
+        : tr('mp_quality_poor', 'Connection is struggling. Your changes may be delayed.');
+    } else if (this.room) {
+      // mid-reconnect: keep the pill visible so the room does not look gone
+      pill.classList.remove('hidden');
+      pill.innerHTML = `<span class="jam-dot" style="background:var(--red)"></span> …`;
+      pill.dataset.tip = tr('mp_reconnecting', 'Connection lost, reconnecting…');
     } else {
       pill.classList.add('hidden');
     }
@@ -1807,3 +2180,24 @@ document.addEventListener('pointerdown', (e) => {
 }, true);
 
 window.addEventListener('beforeunload', () => { if (Sync.connected) Sync.disconnect(true); });
+window.addEventListener('DOMContentLoaded', () => { try { Sync.offerRecovery(); } catch (e) {} });
+
+// The machine losing wifi looks identical to the server dying from inside the
+// socket, but the browser knows the difference, so use it: say the true reason
+// and stop hammering a network that is not there.
+window.addEventListener('offline', () => {
+  if (!Sync.room) return;
+  Sync.showBanner('offline', 'working');
+  if (Sync.ws) { try { Sync.ws.close(); } catch (e) {} }
+});
+window.addEventListener('online', () => {
+  if (!Sync.room || Sync._manualClose || Sync.connected) return;
+  Sync.retryTries = 0;                       // a fresh network deserves a fresh budget
+  clearTimeout(Sync.retryTimer); Sync.retryTimer = null;
+  Sync.attemptReconnect();
+});
+// coming back from a closed lid or a background tab: verify the socket is
+// really alive rather than trusting readyState
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && Sync.connected) Sync.checkHealth();
+});

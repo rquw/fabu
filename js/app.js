@@ -63,7 +63,7 @@ const App = {
       }
       // update finished downloading: let the user pick when to restart
       if (window.electronAPI.onUpdateDownloaded) {
-        window.electronAPI.onUpdateDownloaded(() => this.showRestartPrompt());
+        window.electronAPI.onUpdateDownloaded((backupPath) => this.showRestartPrompt(backupPath));
       }
       // macOS traffic lights overlap the top-left unless we reserve space when
       // windowed; reclaim that gutter in fullscreen (no traffic lights there)
@@ -133,17 +133,23 @@ const App = {
   },
 
   // the update finished downloading — ask when to restart so work can be saved
-  showRestartPrompt() {
+  showRestartPrompt(backupPath) {
     const banner = document.getElementById('updateBanner');
     if (banner) banner.remove();
     if (document.getElementById('restartModal')) return;
     const wrap = document.createElement('div');
     wrap.id = 'restartModal';
     wrap.className = 'modal-back';
+    // Windows installs by replacing the app, so name where the spare installer
+    // is: if the install ever fails, that file is the way back in.
+    const fallback = backupPath
+      ? `<div class="modal-sub" style="font-size:11.5px;opacity:.75">${tr('upd_backup_note', 'A copy of the installer is in your Downloads folder, in case anything goes wrong.')}</div>`
+      : '';
     wrap.innerHTML = `
       <div class="modal-card">
         <div class="modal-title">${tr('upd_ready_title', 'Update ready to install')}</div>
         <div class="modal-sub" id="rsSub">${tr('upd_ready_sub', 'The new version is downloaded. fabu needs to restart to finish. Save your work first.')}</div>
+        ${fallback}
         <div class="modal-btns" style="flex-direction:column;align-items:stretch">
           <button id="rsNow" class="fbtn accent">${tr('upd_restart_now', 'Restart fabu now')}</button>
           <button id="rsSoon" class="fbtn">${tr('upd_restart_soon', 'Restart in 1 minute')}</button>
@@ -363,10 +369,11 @@ const App = {
   newProject(announce = true) {
     if (UI.playing || UI.recording) { Engine.stopRecord && Engine.stopRecord(); Engine.stop && Engine.stop(); }
     S = freshProject();
+    const piano = makeTrack('midi'); piano.name = 'Grand Piano'; piano.instrument = 'rpiano';
     const drums = makeTrack('midi'); drums.name = 'Drums'; drums.instrument = 'drums';
-    const keys = makeTrack('midi'); keys.name = 'Keys'; keys.instrument = 'keys';
+    const bass = makeTrack('midi'); bass.name = '808 Bass'; bass.instrument = 'sub';
     const audio = makeTrack('audio');
-    S.tracks.push(drums, keys, audio);
+    S.tracks.push(piano, drums, bass, audio);
     Undo.undoStack.length = 0;
     Undo.redoStack.length = 0;
     UI.playhead = 0;
@@ -1746,6 +1753,17 @@ const App = {
     window.addEventListener('keydown', (e) => {
       const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName || '');
       const mod = e.metaKey || e.ctrlKey;
+
+      // dev-only load test. This has to be checked BEFORE the mod block below:
+      // that block ends in a bare return, so anything Cmd-based placed after it
+      // is unreachable. On macOS Alt also rewrites e.key, so match on e.code.
+      if (mod && e.altKey && e.shiftKey && e.code === 'KeyP') {
+        e.preventDefault();
+        if (typeof LoadTest === 'undefined') return;
+        if (!LoadTest.enabled()) { toast(tr('lt_off', 'Developer mode is off.')); return; }
+        LoadTest.spawn(1);
+        return;
+      }
 
       // --- command shortcuts ---
       if (mod) {
