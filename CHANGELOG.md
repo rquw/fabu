@@ -1,5 +1,31 @@
 # Changelog
 
+## 1.2.2
+
+**Windows: please download this one from the website.**
+Updating from inside the app is broken on Windows and has been for a while. It half-installs, gives up, and leaves you with no fabu at all. That is fixed, but the fix lives in this version, so it cannot rescue the update *into* it. Grab the installer from the site this once and in-app updates will work normally from here on. Sorry about that one.
+
+**Drop a MIDI file on the timeline.**
+It turns into real patterns you can open and edit, not a locked block of audio. Each part of the file gets its own track, and parts that came in at different times stay where they were, so a bass that entered two bars late still does. Everything lands on Grand Piano to start with.
+
+**Jam rooms hold together now.**
+The server this runs on goes to sleep when nobody is using it and can take a few seconds to wake up. Before, the app gave up long before that, so the room just died. Now it keeps trying, quietly, and puts you back in without anyone seeing you leave. Lose your wifi and get it back, and you land in the same room you were in.
+
+**And when something does go wrong, it says so.**
+Every way a room can break now has an actual sentence attached. "Servers went down." "You are offline." "Host disconnected." No more sitting there wondering whether it is you, your internet, or the app. If it can be retried, there is a button. If your work was in danger, it was already saved.
+
+**Big rooms stay smooth.**
+Cursors used to be sent so often that a full room drowned the server in its own chatter. They now slow down as the room fills and switch off entirely past 40 people, which is the difference between a hundred-person room working and falling over. Small rooms feel exactly as they did.
+
+**The host leaving is no longer a game show.**
+The spinning name-picker is gone. If the host drops, it waits a moment in case they are just reconnecting, then hands over quietly and tells you who has it now.
+
+**Smaller things**
+- New projects start with Grand Piano, Drums, 808 Bass and an audio track, so you can start writing instead of setting up.
+- You can change a track's colour. Click the dot next to its name.
+- Reconnecting no longer puts a second copy of you in the player list, wearing your own crown.
+- The 808 no longer clicks at the very start of a note.
+
 ## 1.2.1
 - "Restart in 1 minute" no longer traps you. It now counts down in a small bar in the corner so you can keep working and save, restart early, or cancel it.
 - Section markers work again. Naming one opened a dialog the desktop app cannot show, so right-clicking the ruler often did nothing at all.

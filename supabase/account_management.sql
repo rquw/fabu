@@ -33,3 +33,21 @@ revoke all on function public.fabu_change_password(text, text, text) from public
 revoke all on function public.fabu_delete_account(text, text) from public;
 grant execute on function public.fabu_change_password(text, text, text) to anon, authenticated;
 grant execute on function public.fabu_delete_account(text, text) to anon, authenticated;
+
+-- Does an account with this name exist?
+-- Used for two things: telling someone "no account called that, want to create
+-- one?" instead of a vague failure, and dropping a cached login whose account
+-- was deleted or renamed straight in the database.
+--
+-- This deliberately answers for any caller, which does mean someone can test
+-- whether a username is taken. That is the same thing the sign-up form reveals,
+-- and it returns nothing else about the account: no password, no dates, no id.
+create or replace function public.fabu_user_exists(u text)
+returns boolean language plpgsql security definer set search_path = public, extensions as $$
+begin
+  return exists (select 1 from public.accounts where username = u);
+end;
+$$;
+
+revoke all on function public.fabu_user_exists(text) from public;
+grant execute on function public.fabu_user_exists(text) to anon, authenticated;

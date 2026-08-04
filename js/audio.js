@@ -480,13 +480,20 @@ const Engine = {
       const og = ac.createGain(); og.gain.value = 1;
       o.connect(og); og.connect(g);
       oscs.push(o);
-      const click = ac.createOscillator();
-      click.type = 'triangle'; click.frequency.value = f * 8;
+      // Attack transient: a very short filtered noise knock. This used to be a
+      // triangle at 8x the fundamental over 30ms, but a tone that long IS a
+      // note, so every 808 started with a little chiptune blip. Noise has no
+      // pitch, and 7ms reads as a click rather than something you can hum.
+      const nz = ac.createBufferSource();
+      nz.buffer = this.noise(ac);
+      const nf = ac.createBiquadFilter();
+      nf.type = 'bandpass';
+      nf.frequency.value = 1900; nf.Q.value = 0.8;
       const cg = ac.createGain();
-      cg.gain.setValueAtTime(0.28 * vel * (0.35 + 0.65 * low), t);
-      cg.gain.exponentialRampToValueAtTime(0.0005, t + 0.03);
-      click.connect(cg); cg.connect(g);
-      oscs.push(click);
+      cg.gain.setValueAtTime(0.5 * vel * (0.4 + 0.6 * low), t);
+      cg.gain.exponentialRampToValueAtTime(0.0004, t + 0.007);
+      nz.connect(nf); nf.connect(cg); cg.connect(g);
+      oscs.push(nz);
       A = 0.004; D = 0.9; SUS = 0.55; R = 0.42; peak = 0.72;
     } else if (instr === 'pad') {
       // wide, slow-blooming saw/triangle stack behind a gentle filter

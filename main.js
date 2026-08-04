@@ -159,6 +159,57 @@ async function applyUpdateMac() {
   if (win) win.webContents.send('update-downloaded');
 }
 
+// Windows.
+// The NSIS one-click installer UNINSTALLS the old version before installing the
+// new one, so anything that makes the install step fail leaves the machine with
+// no app at all — which is exactly what kept happening. Two causes, both fixed
+// here by doing what macOS already does instead of handing off to
+// electron-updater's installer:
+//   1. the app was still running when the installer tried to replace its files,
+//      so the copy failed after the uninstall had already happened;
+//   2. every release ships an installer called plain "fabu.exe", so a stale or
+//      half-written file from an earlier attempt could be the one that ran.
+// Now: download the FULL installer ourselves to a version-stamped path, verify
+// its sha512 against the release manifest, and only then quit and hand over —
+// and the app is completely gone before the installer starts.
+async function applyUpdateWin() {
+  const files = (updateInfo && updateInfo.files) || [];
+  const meta = files.find((f) => f.url && /\.exe$/i.test(f.url));
+  if (!meta) throw new Error('no installer in this release');
+  const tmp = app.getPath('temp');
+  const dest = path.join(tmp, 'fabu-update-' + updateInfo.version + '.exe');
+  try {
+    await downloadAsset(meta, dest);
+  } catch (e) {
+    await new Promise((r) => setTimeout(r, 1500));   // one quiet retry
+    if (win) win.webContents.send('update-progress', 0);
+    await downloadAsset(meta, dest);
+  }
+
+  // A verified installer also goes to Downloads, so that if the install still
+  // fails the user has a known-good copy to run instead of an empty machine.
+  let backup = null;
+  try {
+    backup = path.join(app.getPath('downloads'), 'fabu-' + updateInfo.version + '-installer.exe');
+    fs.copyFileSync(dest, backup);
+  } catch (e) { backup = null; }
+
+  pendingRestart = () => {
+    quitOk = true;
+    const { spawn } = require('child_process');
+    // Start the installer through cmd with a short wait, detached from us. The
+    // delay is the point: we must be fully exited before it touches a file,
+    // otherwise the uninstall succeeds and the install cannot.
+    try {
+      spawn('cmd.exe', ['/c', 'timeout /t 4 /nobreak >nul & start "" "' + dest + '" --force-run'], {
+        detached: true, stdio: 'ignore', windowsHide: true
+      }).unref();
+    } catch (e) { /* fall through to quitting; the backup copy is the way out */ }
+    setTimeout(() => app.quit(), 300);
+  };
+  if (win) win.webContents.send('update-downloaded', backup);
+}
+
 // the renderer asks to actually restart (either "now" or after its 1-minute wait)
 ipcMain.on('restart-now', () => {
   if (!pendingRestart) return;
@@ -176,9 +227,9 @@ ipcMain.on('install-update', () => {
   if (process.platform === 'darwin') {
     // macOS can't use electron-updater unsigned, so we swap the .app ourselves
     applyUpdateMac().catch(fail);
+  } else if (process.platform === 'win32') {
+    applyUpdateWin().catch(fail);
   } else {
-    // Windows: electron-updater downloads then installs (fires download-progress
-    // + update-downloaded above)
     if (!updater) { fail(new Error('no updater')); return; }
     updater.downloadUpdate().catch(fail);
   }
