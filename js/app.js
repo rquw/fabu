@@ -745,6 +745,30 @@ const App = {
   },
 
   // repeat a section while you work on it
+  // Nudge about the L key, but only when the user has actually shown they want
+  // it: replaying the same passage over and over, or fighting a loop that is
+  // holding the playhead in. Each nudge is said once and then never again.
+  _loopHinted: {},
+  hintLoop(kind) {
+    if (this._loopHinted[kind]) return;
+    this._loopHinted[kind] = true;
+    const msg = {
+      made: tr('hint_loop_made', 'Press L to repeat this section'),
+      repeat: tr('hint_loop_repeat', 'Playing that part a lot? Press L to repeat it automatically'),
+      escape: tr('hint_loop_escape', 'Repeat is on, so the playhead stays in the loop. Press L to turn it off.')
+    }[kind];
+    if (msg) toast(msg);
+  },
+
+  // Count deliberate replays of roughly the same spot. Three is enough to say
+  // the user is looping by hand.
+  noteReplay(beat) {
+    const near = this._lastPlayFrom != null && Math.abs(beat - this._lastPlayFrom) < 1;
+    this._replays = near ? (this._replays || 1) + 1 : 1;
+    this._lastPlayFrom = beat;
+    if (this._replays >= 3 && !S.loopOn) this.hintLoop('repeat');
+  },
+
   setLoop(v) {
     S.loopOn = v;
     const b = document.getElementById('btnLoop');
@@ -1736,7 +1760,14 @@ const App = {
         window.removeEventListener('mouseup', up);
         if (overlay) overlay.remove();
         if (dragging && opts.onEnd) opts.onEnd();
-        if (!dragging && el.select) { el.focus(); el.select(); }   // it was a click: type away
+        if (!dragging && el.select) {
+          // A click means "let me type a number". Focusing alone leaves the old
+          // value sitting there to be deleted by hand, so select it: the first
+          // keystroke replaces it. select() works on number inputs even though
+          // selectionStart does not report it.
+          el.focus();
+          try { el.select(); } catch (e) { /* older engines */ }
+        }
       };
       window.addEventListener('mousemove', move);
       window.addEventListener('mouseup', up);

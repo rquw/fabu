@@ -1897,3 +1897,6 @@ input[type="range"].locked { opacity: 0.45; filter: saturate(0.4); }
   padding: 7px 2px; font-size: 12.5px; }
 .set-row select { background: var(--panel2); color: var(--text); border: 1px solid var(--line);
   border-radius: 7px; padding: 4px 8px; font-size: 12px; }
+
+/* the BPM field is drag-to-change, but a click should let you just type */
+#bpmInput { user-select: text; -webkit-user-select: text; }
