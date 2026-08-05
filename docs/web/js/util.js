@@ -363,9 +363,9 @@ const SAMPLE_LIB = [
   { id: 'jz_stabs', cat: 'jazz', name: 'Horn Stabs', instrument: 'rtrumpet', length: 4,
     notes: _chords([[0, [72, 76], 0.3], [1.5, [74, 77], 0.3], [2.5, [71, 76], 0.3], [3, [72, 79], 0.7]]) },
 ];
-const SAMPLE_CATS = ['drums', 'bass', 'melodic', 'jazz'];
+const SAMPLE_CATS = ['mine', 'drums', 'bass', 'melodic', 'jazz'];
 function sampleCatName(c) {
-  const fallback = { drums: 'Drums', bass: 'Bass', melodic: 'Melodic', jazz: 'Jazz', fx: 'Sound FX' };
+  const fallback = { mine: 'Yours', drums: 'Drums', bass: 'Bass', melodic: 'Melodic', jazz: 'Jazz', fx: 'Sound FX' };
   return tr('samp_cat_' + c, fallback[c] || c);
 }
 
@@ -517,3 +517,108 @@ document.addEventListener('dragover', (e) => {
 document.addEventListener('drop', () => DragGhost.stop());
 document.addEventListener('dragend', () => DragGhost.stop());
 window.DragGhost = DragGhost;
+
+// ---------- your own loops ----------
+// A loop is notes plus an instrument, which is why it costs kilobytes rather
+// than megabytes: nothing is recorded, the instruments are already in the app.
+// That is what makes saving and sharing them cheap enough to be free.
+const MyLoops = {
+  KEY: 'fabu.myLoops',
+  EXT: '.fabloop',
+
+  all() {
+    try {
+      const raw = JSON.parse(localStorage.getItem(this.KEY) || '[]');
+      return Array.isArray(raw) ? raw.filter(l => l && l.id && Array.isArray(l.notes)) : [];
+    } catch (e) { return []; }
+  },
+
+  save(list) {
+    try { localStorage.setItem(this.KEY, JSON.stringify(list)); return true; }
+    catch (e) { toast(tr('loop_save_fail', 'There is no room left to save loops.'), 'red'); return false; }
+  },
+
+  // Build one from a pattern on the timeline. Notes are normalised to start at
+  // zero so a loop taken from bar 30 still begins at the beginning.
+  fromClip(clip, track) {
+    if (!clip || clip.kind !== 'midi' || !clip.notes || !clip.notes.length) return null;
+    let first = Infinity;
+    for (const n of clip.notes) first = Math.min(first, n.start);
+    if (!isFinite(first)) first = 0;
+    return {
+      id: uid('myloop'),
+      name: (clip.name || tr('loop_untitled', 'My loop')).slice(0, 40),
+      instrument: (track && track.instrument) || 'rpiano',
+      length: Math.max(1, clip.length || 4),
+      notes: clip.notes.map(n => ({
+        pitch: n.pitch, start: +(n.start - first).toFixed(4),
+        length: n.length, vel: n.vel ?? 0.85
+      })),
+      sustain: clip.sustain ? clip.sustain.map(e => ({ beat: e.beat, on: !!e.on })) : undefined,
+      made: Date.now()
+    };
+  },
+
+  add(loop) {
+    if (!loop) return null;
+    const list = this.all();
+    list.push(loop);
+    return this.save(list) ? loop : null;
+  },
+
+  update(id, patch) {
+    const list = this.all();
+    const i = list.findIndex(l => l.id === id);
+    if (i < 0) return false;
+    Object.assign(list[i], patch);
+    return this.save(list);
+  },
+
+  remove(id) {
+    return this.save(this.all().filter(l => l.id !== id));
+  },
+
+  // ---------- sharing ----------
+  // A .fabloop is a small JSON file. Deliberately plain text: anyone can look
+  // inside one, and it will still open in ten years.
+  toFile(loop) {
+    return JSON.stringify({ fabloop: 1, name: loop.name, instrument: loop.instrument,
+                            length: loop.length, notes: loop.notes, sustain: loop.sustain }, null, 1);
+  },
+
+  parseFile(text) {
+    let d;
+    try { d = JSON.parse(text); } catch (e) { return null; }
+    if (!d || !d.fabloop || !Array.isArray(d.notes) || !d.notes.length) return null;
+    const clean = d.notes
+      .filter(n => n && typeof n.pitch === 'number' && typeof n.start === 'number')
+      .map(n => ({
+        pitch: clamp(Math.round(n.pitch), 0, 127),
+        start: Math.max(0, +n.start || 0),
+        length: Math.max(1 / 32, +n.length || 0.25),
+        vel: clamp(+n.vel || 0.85, 0.05, 1)
+      }));
+    if (!clean.length) return null;
+    const instr = (typeof INSTRUMENTS !== 'undefined' && INSTRUMENTS[d.instrument]) ? d.instrument : 'rpiano';
+    return {
+      id: uid('myloop'),
+      name: String(d.name || tr('loop_untitled', 'My loop')).slice(0, 40),
+      instrument: instr,
+      length: Math.max(1, +d.length || 4),
+      notes: clean,
+      sustain: Array.isArray(d.sustain) ? d.sustain : undefined,
+      made: Date.now()
+    };
+  },
+
+  isLoopFile(f) { return /\.fabloop$/i.test(f.name) || /\.fabloop\.json$/i.test(f.name); },
+
+  // shaped like a SAMPLE_LIB entry so everything downstream treats them alike
+  asPresets() {
+    return this.all().map(l => ({
+      id: l.id, cat: 'mine', name: l.name, instrument: l.instrument,
+      length: l.length, notes: l.notes, sustain: l.sustain, mine: true
+    }));
+  }
+};
+window.MyLoops = MyLoops;

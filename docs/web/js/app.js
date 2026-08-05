@@ -1345,7 +1345,9 @@ const App = {
   // Add a preset loop as an editable pattern clip. Drops onto a matching-
   // instrument track, otherwise spins up a fresh track with the right sound.
   addSampleToProject(id, beat = null, laneIdx = null) {
-    const preset = SAMPLE_LIB.find(s => s.id === id);
+    // your own loops are placed exactly like the built-in ones
+    const preset = SAMPLE_LIB.find(s => s.id === id)
+      || (typeof MyLoops !== 'undefined' && MyLoops.asPresets().find(s => s.id === id));
     if (!preset) return;
     if (beat == null) beat = snapBeat(UI.playing ? Engine.currentBeat() : UI.playhead, S.snap || 1);
     Undo.push('Add loop');
@@ -1364,6 +1366,8 @@ const App = {
       start: Timeline.firstFreeStart(track, preset.length, beat, null), length: preset.length,
       notes: preset.notes.map(n => ({ id: uid('note'), pitch: n.pitch, start: n.start, length: n.length, vel: n.vel }))
     };
+    // a loop you saved from a pattern keeps its pedal
+    if (preset.sustain && preset.sustain.length) clip.sustain = preset.sustain.map(e => ({ beat: e.beat, on: !!e.on }));
     track.clips.push(clip);
     Timeline.render();
     Windows.refreshAll();

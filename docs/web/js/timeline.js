@@ -727,6 +727,22 @@ const Timeline = {
     rsR.dataset.tip = clip.kind === 'midi' ? tr('tip_pattern_len', 'Drag to change length') : tr('tip_trim_end', 'Drag to trim the end');
     el.append(rsL, rsR);
 
+    // Dragging a pattern OUT (to the loop browser) has to coexist with dragging
+    // it around the timeline. The label strip is the handle for taking it out;
+    // everywhere else keeps the ordinary move and trim behaviour.
+    if (clip.kind === 'midi') {
+      const label = el.querySelector('.clip-label');
+      if (label) {
+        label.draggable = true;
+        label.addEventListener('dragstart', (e) => {
+          e.dataTransfer.setData('text/fabu-clip', clip.id);
+          e.dataTransfer.effectAllowed = 'copy';
+          e.stopPropagation();
+          DragGhost.start(el, e);
+        });
+        label.addEventListener('mousedown', (e) => e.stopPropagation());
+      }
+    }
     el.addEventListener('mousedown', (e) => this.clipMouseDown(e, clip, track, el));
     el.addEventListener('dblclick', (e) => {
       e.stopPropagation();

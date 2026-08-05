@@ -624,9 +624,11 @@ const Windows = {
     const render = () => {
       const q = search.value.trim().toLowerCase();
       list.innerHTML = '';
+      // your own loops sit at the top, since they are the ones you went looking for
+      const pool = MyLoops.asPresets().concat(SAMPLE_LIB);
       for (const cat of SAMPLE_CATS) {
-        const items = SAMPLE_LIB.filter(s => s.cat === cat && (!q || s.name.toLowerCase().includes(q)));
-        if (!items.length) continue;
+        const items = pool.filter(s => s.cat === cat && (!q || s.name.toLowerCase().includes(q)));
+        if (!items.length && cat !== 'mine') continue;
         const head = document.createElement('div');
         head.className = 'samp-cat';
         head.textContent = sampleCatName(cat);
@@ -649,14 +651,148 @@ const Windows = {
           // click hears it (drag or double-click still adds it to the song)
           item.addEventListener('click', () => Engine.auditionSample(s));
           item.addEventListener('dblclick', () => { Engine.stopAudition(); App.addSampleToProject(s.id); });
+          if (s.mine) {
+            item.classList.add('samp-mine');
+            const edit = document.createElement('button');
+            edit.className = 'samp-edit';
+            edit.dataset.tip = tr('loop_edit_tip', 'Rename, change the instrument, share or delete');
+            edit.innerHTML = '<svg class="ic"><use href="#i-edit"/></svg>';
+            edit.addEventListener('click', (e) => { e.stopPropagation(); this.editMyLoop(s.id, render); });
+            item.appendChild(edit);
+          }
           list.appendChild(item);
         }
+        // the tile that takes a new one, sitting with your own loops
+        if (cat === 'mine' && !q) list.appendChild(this.newLoopTile(render));
       }
       if (!list.children.length) list.innerHTML = `<div style="color:var(--faint);font-size:11.5px;padding:6px 2px">${tr('samp_none', 'No loop matches that.')}</div>`;
     };
+    this._sampRender = render;
     search.addEventListener('input', render);
     render();
     App.syncWindowButtons();
+  },
+
+  // The tile that takes a new loop: same size and shape as a loop, hollow, with
+  // a plus. Clicking it does not open anything, it just says what to do, because
+  // the thing you do here is drop something on it.
+  newLoopTile(rerender) {
+    const tile = document.createElement('div');
+    tile.className = 'samp-new';
+    tile.innerHTML = `<span class="samp-new-plus">+</span>`;
+    const say = () => {
+      tile.classList.add('samp-new-hint');
+      const hint = tile.querySelector('.samp-new-say') || document.createElement('span');
+      hint.className = 'samp-new-say';
+      hint.textContent = tr('loop_new_hint', 'Drag a pattern or a .fabloop file here to add it to your Loops!');
+      tile.appendChild(hint);
+      clearTimeout(tile._t);
+      tile._t = setTimeout(() => { tile.classList.remove('samp-new-hint'); hint.remove(); }, 4000);
+    };
+    tile.addEventListener('click', say);
+
+    const take = (loop) => {
+      if (!loop) { toast(tr('loop_bad_file', 'That file is not a loop fabu can read.'), 'red'); return; }
+      if (!MyLoops.add(loop)) return;
+      rerender();
+      toast(tr('loop_added', '{name} added to your loops', { name: loop.name }), 'green');
+      this.editMyLoop(loop.id, rerender);
+    };
+
+    tile.addEventListener('dragover', (e) => {
+      const types = [...e.dataTransfer.types];
+      if (!types.includes('text/fabu-clip') && !types.includes('Files')) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
+      tile.classList.add('samp-new-over');
+    });
+    tile.addEventListener('dragleave', () => tile.classList.remove('samp-new-over'));
+    tile.addEventListener('drop', async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      tile.classList.remove('samp-new-over');
+      // a pattern dragged off the timeline
+      const clipId = e.dataTransfer.getData('text/fabu-clip');
+      if (clipId) {
+        const f = getClip(clipId);
+        if (!f) return;
+        const loop = MyLoops.fromClip(f.clip, f.track);
+        if (!loop) { toast(tr('loop_empty', 'That pattern has no notes in it.'), 'red'); return; }
+        take(loop);
+        return;
+      }
+      // or a .fabloop someone sent you
+      const file = [...(e.dataTransfer.files || [])].find(f => MyLoops.isLoopFile(f));
+      if (!file) { toast(tr('loop_bad_file', 'That file is not a loop fabu can read.'), 'red'); return; }
+      take(MyLoops.parseFile(await file.text()));
+    });
+    return tile;
+  },
+
+  // Rename it, pick what it plays on, send it to someone, or throw it away.
+  editMyLoop(id, rerender) {
+    const loop = MyLoops.all().find(l => l.id === id);
+    if (!loop) return;
+    const old = document.getElementById('loopEdit');
+    if (old) old.remove();
+    const wrap = document.createElement('div');
+    wrap.id = 'loopEdit';
+    wrap.className = 'modal-back';
+    const opts = INSTR_CATS.map(c =>
+      `<optgroup label="${tr(c.key, c.label)}">` +
+      c.ids.filter(i => INSTRUMENTS[i]).map(i =>
+        `<option value="${i}"${i === loop.instrument ? ' selected' : ''}>${instrLabel(i)}</option>`).join('') +
+      '</optgroup>').join('');
+    wrap.innerHTML = `
+      <div class="modal-card">
+        <div class="modal-title">${tr('loop_edit_title', 'Your loop')}</div>
+        <label class="loop-field"><span>${tr('loop_name', 'Name')}</span>
+          <input id="loopName" type="text" maxlength="40" spellcheck="false"></label>
+        <label class="loop-field"><span>${tr('loop_instr', 'Plays on')}</span>
+          <select id="loopInstr">${opts}</select></label>
+        <div class="loop-meta" id="loopMeta"></div>
+        <div class="modal-btns" style="flex-wrap:wrap">
+          <button id="loopShare" class="fbtn">${tr('loop_share', 'Share as file')}</button>
+          <button id="loopDelete" class="fbtn danger-outline">${tr('loop_delete', 'Delete')}</button>
+          <button id="loopDone" class="fbtn accent">${tr('loop_done', 'Done')}</button>
+        </div>
+      </div>`;
+    document.body.appendChild(wrap);
+    const nameI = wrap.querySelector('#loopName');
+    const instrI = wrap.querySelector('#loopInstr');
+    nameI.value = loop.name;
+    wrap.querySelector('#loopMeta').textContent =
+      tr('loop_meta', '{n} notes, {b} beats', { n: loop.notes.length, b: +loop.length.toFixed(2) });
+
+    const commit = () => {
+      const nm = nameI.value.trim().slice(0, 40) || tr('loop_untitled', 'My loop');
+      MyLoops.update(id, { name: nm, instrument: instrI.value });
+      rerender && rerender();
+    };
+    const close = () => { commit(); wrap.remove(); };
+    nameI.addEventListener('keydown', (e) => { if (e.key === 'Enter') close(); });
+    instrI.addEventListener('change', commit);
+    wrap.querySelector('#loopDone').addEventListener('click', close);
+    wrap.addEventListener('mousedown', (e) => { if (e.target === wrap) close(); });
+    wrap.querySelector('#loopShare').addEventListener('click', () => {
+      commit();
+      const l = MyLoops.all().find(x => x.id === id);
+      const safe = (l.name || 'loop').replace(/[\\/:*?"<>|]/g, '') || 'loop';
+      App.browserDownload(new Blob([MyLoops.toFile(l)], { type: 'application/json' }), safe + MyLoops.EXT);
+      toast(tr('loop_shared', 'Saved {name}{ext}, send it to anyone', { name: safe, ext: MyLoops.EXT }), 'green');
+    });
+    wrap.querySelector('#loopDelete').addEventListener('click', async () => {
+      const yes = await App.askYesNo({
+        title: tr('loop_del_title', 'Delete this loop?'),
+        body: tr('loop_del_body', 'It is only stored on this computer, so this cannot be undone.'),
+        yes: tr('loop_delete', 'Delete'), no: tr('cancel', 'Cancel')
+      });
+      if (!yes) return;
+      MyLoops.remove(id);
+      wrap.remove();
+      rerender && rerender();
+    });
+    setTimeout(() => { nameI.focus(); nameI.select(); }, 40);
   },
 
   // ---------- Settings ----------

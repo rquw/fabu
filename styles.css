@@ -2086,3 +2086,41 @@ body.shift-held .fx-item:not(.samp-item) { position: relative; overflow: visible
   animation: ghostDust 0.62s cubic-bezier(.25,.6,.4,1) forwards;
 }
 .ghost-dust.paint { background: var(--green); }
+
+/* ---- your own loops ---- */
+/* the tile that takes a new one: a loop-shaped hole waiting to be filled */
+.samp-new {
+  display: flex; align-items: center; justify-content: center; position: relative;
+  min-height: 30px; margin-top: 4px; padding: 6px 9px;
+  border: 1.5px dashed var(--line); border-radius: 8px;
+  background: transparent; color: var(--faint);
+  cursor: pointer; transition: border-color .15s, color .15s, background .15s;
+}
+.samp-new:hover { border-color: var(--dim); color: var(--dim); }
+.samp-new-plus { font-size: 17px; font-weight: 300; line-height: 1; }
+.samp-new-over { border-color: var(--accent); color: var(--accent); background: rgba(224,122,63,.08); }
+.samp-new.samp-new-hint { flex-direction: column; gap: 4px; padding: 9px; }
+.samp-new-say { font-size: 10.5px; line-height: 1.35; text-align: center; color: var(--dim); }
+
+.samp-item.samp-mine { padding-right: 26px; }
+.samp-edit {
+  position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
+  width: 20px; height: 20px; padding: 0; border: 0; border-radius: 5px;
+  background: transparent; color: var(--faint); cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+.samp-item.samp-mine { position: relative; }
+.samp-edit:hover { background: var(--panel3); color: var(--text); }
+.samp-edit .ic { width: 12px; height: 12px; }
+
+.loop-field { display: flex; align-items: center; gap: 9px; margin-top: 9px; font-size: 12px; }
+.loop-field > span { flex: 0 0 66px; color: var(--dim); }
+.loop-field input, .loop-field select {
+  flex: 1; background: var(--panel2); border: 1px solid var(--line); border-radius: 7px;
+  padding: 6px 9px; color: var(--text); outline: none; font-size: 12px;
+}
+.loop-meta { font-size: 11px; color: var(--faint); margin: 9px 0 2px; }
+
+/* the pattern's name strip is the handle for taking it out to the loop panel */
+.clip-label { cursor: grab; }
+.clip-label:active { cursor: grabbing; }
