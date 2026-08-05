@@ -54,7 +54,7 @@ const MidiFile = {
     const ppq = division;
 
     const tracks = [];
-    let tempoBpm = null;
+    let tempoBpm = null, timeSig = null;
 
     for (let t = 0; t < ntrks && p + 8 <= buf.byteLength; t++) {
       if (tag(p) !== 'MTrk') {                 // unknown chunk: the spec says skip it
@@ -68,6 +68,7 @@ const MidiFile = {
       const notes = [];
       const open = new Map();                  // (channel<<8|pitch) -> [{tick, vel}]
       const prog = new Map();                  // channel -> instrument in force right now
+      const pedal = new Map();                 // channel -> [{ beat, on }] from CC64
       let tick = 0, status = 0, name = '';
 
       const varint = () => {
@@ -90,6 +91,9 @@ const MidiFile = {
           if (meta === 0x51 && mlen === 3) {
             const us = (u8[p] << 16) | (u8[p + 1] << 8) | u8[p + 2];
             if (us > 0 && tempoBpm == null) tempoBpm = 60000000 / us;
+          } else if (meta === 0x58 && mlen >= 2 && !timeSig) {
+            // numerator, then denominator as a power of two (3, 2 => 3/4)
+            timeSig = [u8[p], Math.pow(2, u8[p + 1])];
           } else if ((meta === 0x03 || meta === 0x01) && mlen && !name) {
             let s = '';
             for (let i = 0; i < mlen; i++) s += String.fromCharCode(u8[p + i]);
@@ -128,6 +132,17 @@ const MidiFile = {
           continue;
         }
 
+        // sustain pedal (CC64). Without this, exported piano parts come in
+        // sounding clipped and short, because the pedal is where most of a
+        // piano performance's length actually lives.
+        if (type === 0xb0 && u8[p] === 64) {
+          const on = u8[p + 1] >= 64;
+          if (!pedal.has(chan)) pedal.set(chan, []);
+          const list = pedal.get(chan);
+          if (!list.length || !!list[list.length - 1].on !== on) list.push({ beat: tick / ppq, on });
+          p += 2;
+          continue;
+        }
         // program change picks a new instrument for this channel from here on
         if (type === 0xc0) { prog.set(chan, u8[p]); p += 1; continue; }
         // channel aftertouch carries one data byte, everything else two
@@ -153,7 +168,7 @@ const MidiFile = {
       const byPart = new Map();
       for (const n of notes) {
         const key = n.chan + ':' + (n.prog || 0);
-        if (!byPart.has(key)) byPart.set(key, { name, chan: n.chan, prog: n.prog || 0, notes: [] });
+        if (!byPart.has(key)) byPart.set(key, { name, chan: n.chan, prog: n.prog || 0, notes: [], pedal: pedal.get(n.chan) || [] });
         byPart.get(key).notes.push(n);
       }
       for (const part of byPart.values()) if (part.notes.length) tracks.push(part);
@@ -161,7 +176,7 @@ const MidiFile = {
     }
 
     if (!tracks.length) throw new Error('empty');
-    return { ppq, tempoBpm, tracks };
+    return { ppq, tempoBpm, timeSig, tracks };
   },
 
   isMidiFile(f) { return /\.(mid|midi|smf)$/i.test(f.name) || f.type === 'audio/midi' || f.type === 'audio/x-midi'; },
@@ -185,6 +200,28 @@ const MidiFile = {
     }
 
     Undo.push('Import MIDI');
+
+    // An empty project has no opinions worth protecting, so the file's own
+    // tempo and time signature are adopted rather than forced into 120 / 4-4.
+    // A project with work in it keeps its settings; we only report the file's.
+    const emptyProject = !S.tracks.some(t => (t.clips || []).length);
+    let adopted = null;
+    if (emptyProject) {
+      const bpm = midi.tempoBpm ? Math.round(midi.tempoBpm) : null;
+      if (bpm && bpm >= 20 && bpm <= 400) S.bpm = bpm;
+      if (midi.timeSig && midi.timeSig[0] > 0 && midi.timeSig[1] > 0) S.timeSig = [midi.timeSig[0], midi.timeSig[1]];
+      const base = (file.name || '').replace(/\.(mid|midi|smf)$/i, '').trim();
+      if (base && (!S.name || S.name === 'Untitled')) S.name = base;
+      adopted = { bpm: S.bpm, sig: S.timeSig[0] + '/' + S.timeSig[1] };
+      // the tempo box, the bar grid and the project title all read these
+      const bpmInput = document.getElementById('bpmInput');
+      if (bpmInput) bpmInput.value = S.bpm;
+      const nameInput = document.getElementById('projName');
+      if (nameInput && S.name) nameInput.value = S.name;
+      Timeline.drawRuler();
+    }
+    this._adopted = adopted;
+
     const start = Math.max(0, atBeat || 0);
     const multi = midi.tracks.length > 1;
     let total = 0, firstClip = null;
@@ -207,8 +244,10 @@ const MidiFile = {
         length: n.length,
         vel: n.vel
       }));
-      // round out to whole bars so the clip lines up with the grid
-      const length = Math.max(4, Math.ceil((end - offset) / 4) * 4);
+      // round out to whole bars so the clip lines up with the grid. Uses the
+      // project's actual bar length, so a 3/4 file is not padded to 4/4.
+      const bpb = beatsPerBar();
+      const length = Math.max(bpb, Math.ceil((end - offset) / bpb) * bpb);
 
       const track = makeTrack('midi');
       track.name = multi ? tr('midi_track_n', 'Imported Midi {n}', { n: i + 1 }) : tr('midi_track', 'Imported Midi');
@@ -225,6 +264,12 @@ const MidiFile = {
         name: label || track.name,
         start, length, notes
       };
+      // the pedal moves with the notes and is trimmed to the clip
+      const ped = (mt.pedal || [])
+        .map(e => ({ beat: e.beat - offset, on: e.on }))
+        .filter(e => e.beat >= -1e-9 && e.beat <= length + 1e-9);
+      if (ped.length && ped[0].on === false) ped.shift();   // a lift with no press
+      if (ped.length) clip.sustain = ped;
       track.clips.push(clip);
       if (!firstClip) firstClip = clip;
       total += notes.length;
@@ -240,9 +285,14 @@ const MidiFile = {
     // The file's own tempo is not forced onto the project (that would rewrite
     // the timing of everything already there), but the user should be told it.
     const bpm = midi.tempoBpm ? Math.round(midi.tempoBpm) : null;
-    toast(bpm && Math.abs(bpm - S.bpm) >= 1
-      ? tr('midi_added_bpm', '{n} notes imported. The file was written at {bpm} BPM.', { n: total, bpm })
-      : tr('midi_added', '{n} notes imported', { n: total }), 'green');
+    if (this._adopted) {
+      toast(tr('midi_adopted', '{n} notes imported. Project set to {bpm} BPM, {sig}.',
+        { n: total, bpm: this._adopted.bpm, sig: this._adopted.sig }), 'green');
+    } else {
+      toast(bpm && Math.abs(bpm - S.bpm) >= 1
+        ? tr('midi_added_bpm', '{n} notes imported. The file was written at {bpm} BPM.', { n: total, bpm })
+        : tr('midi_added', '{n} notes imported', { n: total }), 'green');
+    }
   }
 };
 window.MidiFile = MidiFile;

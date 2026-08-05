@@ -54,6 +54,10 @@ const Engine = {
   evIdx: 0,
   nextClickBeat: 0,
 
+  // sustain pedal (live playing)
+  pedalDown: false,
+  pedalHeld: new Set(),   // keys let go of while the pedal is down
+
   // recording
   mediaRec: null,
   recChunks: [],
@@ -1044,7 +1048,11 @@ const Engine = {
       for (const n of c.notes) {
         if (n.start >= c.length) continue;
         const b = this.swingBeat(c.start + (n.start / sp), t.swing);
-        const durB = Math.min(n.length, c.length - n.start) / sp;
+        // Sustain pedal: a note that ends while the pedal is down keeps ringing
+        // until the pedal comes up, exactly like a real one. Applied here in the
+        // scheduler so playback, export and bouncing all agree by construction.
+        const rawDur = sustainedLength(c, n.start, Math.min(n.length, c.length - n.start));
+        const durB = rawDur / sp;
         const endB = b + durB;
         if (endB <= fromBeat + 1e-6) continue; // already finished
         const startBeat = Math.max(b, fromBeat);
@@ -1163,7 +1171,7 @@ const Engine = {
       while (this.nextClickBeat < horizonBeat && clkGuard++ < 512) {
         const t = this.beatToTime(this.nextClickBeat);
         if (t >= this.ctx.currentTime) {
-          this.click(this.ctx, this.metroGain, t, this.nextClickBeat % 4 === 0);
+          this.click(this.ctx, this.metroGain, t, this.nextClickBeat % beatsPerBar() === 0);
         }
         this.nextClickBeat++;
       }
@@ -1358,11 +1366,18 @@ const Engine = {
 
   noteOff(trackId, pitch) {
     const key = trackId + ':' + pitch;
-    const v = this.liveKeys.get(key);
-    if (v) {
-      v.stop(this.ctx.currentTime);
-      this.liveKeys.delete(key);
+    // Pedal down: let go of the key but not of the note, like a real piano.
+    // The recorder is told the key was released at the right moment either way,
+    // so what gets written down is the notes you played plus a pedal span.
+    if (this.pedalDown) {
+      if (this.liveKeys.has(key)) this.pedalHeld.add(key);
+      if (this.midiRec) {
+        const h = this.midiRec.held.get(key);
+        if (h) { this.midiRec.held.delete(key); this.commitRecNote(h, this.currentBeat()); }
+      }
+      return;
     }
+    this.releaseKey(key);
     if (this.midiRec) {
       const h = this.midiRec.held.get(key);
       if (h) {
@@ -1370,6 +1385,44 @@ const Engine = {
         this.commitRecNote(h, this.currentBeat());
       }
     }
+  },
+
+  releaseKey(key) {
+    const v = this.liveKeys.get(key);
+    if (v) {
+      // the pedal can be pressed and let go before a note has ever sounded,
+      // and there is no audio context until then
+      v.stop(this.ctx ? this.ctx.currentTime : 0);
+      this.liveKeys.delete(key);
+    }
+    this.pedalHeld.delete(key);
+  },
+
+  // ----- sustain pedal -----
+  // One flag the whole app agrees on, whatever pushed it: the keyboard, a real
+  // pedal on a MIDI keyboard, or the on-screen button.
+  setPedal(down) {
+    down = !!down;
+    if (down === this.pedalDown) return;
+    this.pedalDown = down;
+    if (!down) {
+      // pedal up: everything it was holding is released now
+      for (const key of [...this.pedalHeld]) this.releaseKey(key);
+      this.pedalHeld.clear();
+    }
+    // write it into the take being recorded, so it plays back as you played it
+    if (this.midiRec && UI.playing) this.recordPedal(down);
+    if (typeof KeysPanel !== 'undefined' && KeysPanel.showPedal) KeysPanel.showPedal(down);
+  },
+
+  recordPedal(down) {
+    const rec = this.midiRec;
+    if (!rec || !rec.clip) return;
+    const beat = this.currentBeat() - rec.clip.start;
+    if (beat < 0) return;
+    if (!rec.clip.sustain) rec.clip.sustain = [];
+    rec.clip.sustain.push({ beat, on: down });
+    rec.clip.sustain.sort((a, b) => a.beat - b.beat);
   },
 
   // ----- record played notes into a pattern clip -----

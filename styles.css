@@ -1887,3 +1887,13 @@ input[type="range"].locked { opacity: 0.45; filter: saturate(0.4); }
 #mpBanner.mpb-ok { border-color: var(--green); }
 #mpBanner.mpb-ok .mpb-dot { background: var(--green); }
 @keyframes mpbPulse { 0%,100% { opacity: 1; } 50% { opacity: .25; } }
+
+/* sustain pedal button in the keyboard panel */
+#keysPedal { padding: 4px 12px; font-size: 12px; }
+#keysPedal.on { background: var(--accent); color: #16130f; border-color: var(--accent); }
+
+/* time signature row in settings */
+.set-row { display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 7px 2px; font-size: 12.5px; }
+.set-row select { background: var(--panel2); color: var(--text); border: 1px solid var(--line);
+  border-radius: 7px; padding: 4px 8px; font-size: 12px; }

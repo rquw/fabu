@@ -1754,6 +1754,13 @@ const App = {
       const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName || '');
       const mod = e.metaKey || e.ctrlKey;
 
+      // Sustain pedal. Held, not toggled, so it behaves like the real thing.
+      if ((e.code === 'ShiftLeft' || e.code === 'ShiftRight') && !mod && !e.altKey && !typing
+          && KeysPanel.visible && !e.repeat) {
+        Engine.setPedal(true);
+        return;
+      }
+
       // dev-only load test. This has to be checked BEFORE the mod block below:
       // that block ends in a bare return, so anything Cmd-based placed after it
       // is unreachable. On macOS Alt also rewrites e.key, so match on e.code.
@@ -1852,6 +1859,9 @@ const App = {
     });
 
     window.addEventListener('keyup', (e) => {
+      // let the pedal up on release no matter what else was going on, so it can
+      // never get stuck down after a shortcut or a lost focus
+      if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') Engine.setPedal(false);
       const h = this.heldKeys.get(e.code);
       if (h) {
         Engine.noteOff(h.trackId, h.pitch);
@@ -1859,6 +1869,8 @@ const App = {
         KeysPanel.highlight(e.code, false);
       }
     });
+    // focus lost mid-press (alt-tab) would otherwise leave the pedal held
+    window.addEventListener('blur', () => Engine.setPedal(false));
   }
 };
 
@@ -1866,6 +1878,12 @@ const App = {
 
 const KeysPanel = {
   visible: false,
+
+  // reflect the pedal wherever it came from: Shift, the button, or hardware
+  showPedal(down) {
+    const b = document.getElementById('keysPedal');
+    if (b) b.classList.toggle('on', !!down);
+  },
 
   init() {
     // controls steal keyboard focus, which then swallows the note keys until you
@@ -1875,6 +1893,9 @@ const KeysPanel = {
     $('#octUp').addEventListener('click', (e) => { this.setOctave(UI.keysOctave + 1); blurSoon(e.currentTarget); });
     $('#keysTrackSel').addEventListener('change', (e) => { UI.keysTrackId = e.target.value; blurSoon(e.target); });
     $('#keysRecBtn').addEventListener('click', (e) => { Engine.toggleMidiRecord(); blurSoon(e.currentTarget); });
+    // the pedal: click to latch, or hold Shift, or use a real one over MIDI
+    const ped = $('#keysPedal');
+    if (ped) ped.addEventListener('click', (e) => { Engine.setPedal(!Engine.pedalDown); blurSoon(e.currentTarget); });
 
     // a close button (X) on the keyboard panel
     const close = document.createElement('button');

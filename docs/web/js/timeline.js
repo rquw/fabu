@@ -242,7 +242,7 @@ const Timeline = {
     }
 
     const beat = UI.zoom;
-    const bar = UI.zoom * 4;
+    const bar = UI.zoom * beatsPerBar();
     let clipCount = 0;
     const firstMidiIdx = S.tracks.findIndex(t => t.kind === 'midi');
     // Only build the clips inside (or near) the visible window. A long song can
@@ -306,11 +306,12 @@ const Timeline = {
     ctx.scale(dpr, dpr);
     ctx.clearRect(0, 0, w, h);
     const scrollX = this.scroller.scrollLeft;
-    const firstBar = Math.floor(scrollX / (UI.zoom * 4));
-    const lastBar = Math.ceil((scrollX + w) / (UI.zoom * 4));
+    const bpb = beatsPerBar();
+    const firstBar = Math.floor(scrollX / (UI.zoom * bpb));
+    const lastBar = Math.ceil((scrollX + w) / (UI.zoom * bpb));
     ctx.font = '600 10px -apple-system, sans-serif';
     for (let b = firstBar; b <= lastBar; b++) {
-      const x = b * UI.zoom * 4 - scrollX;
+      const x = b * UI.zoom * bpb - scrollX;
       ctx.fillStyle = 'rgba(255,255,255,0.25)';
       ctx.fillRect(x, 14, 1, 16);
       ctx.fillStyle = '#8b91a7';
@@ -1039,8 +1040,9 @@ const Timeline = {
       add(tr('menu_loop_clear', 'Clear repeat region'), () => App.clearLoop(), true);
     } else {
       add(tr('menu_loop_here', 'Repeat this bar'), () => {
-        const bar = Math.floor(beat / 4) * 4;
-        S.loopStart = bar; S.loopEnd = bar + 4;
+        const bpb = beatsPerBar();
+        const bar = Math.floor(beat / bpb) * bpb;
+        S.loopStart = bar; S.loopEnd = bar + bpb;
         App.setLoop(true);
       });
     }
@@ -1114,8 +1116,9 @@ const Timeline = {
       ghost.style.height = (TRACK_H - 6) + 'px';
       ghost.innerHTML = `<span class="dp-name">${samp ? samp.name : tr('drop_audio', 'Audio')}</span>`;
       if (samp) this.drawGhostNotes(ghost, samp, lenB * UI.zoom - 2);
-      setHint(samp ? tr('hint_drop_loop', 'Drop to add this loop at bar {bar}.', { bar: Math.floor(beat / 4) + 1 })
-        : tr('hint_drop_at_bar', 'Drop to place the sound at bar {bar}.', { bar: Math.floor(beat / 4) + 1 }));
+      const dropBar = Math.floor(beat / beatsPerBar()) + 1;
+      setHint(samp ? tr('hint_drop_loop', 'Drop to add this loop at bar {bar}.', { bar: dropBar })
+        : tr('hint_drop_at_bar', 'Drop to place the sound at bar {bar}.', { bar: dropBar }));
     });
     area.addEventListener('dragleave', () => { ghost.style.display = 'none'; ghost.className = ''; ghost.innerHTML = ''; });
     area.addEventListener('drop', async (e) => {
@@ -1201,8 +1204,9 @@ const Timeline = {
     const now = performance.now();
     if (this._posBars && (!this._lastTxt || now - this._lastTxt > 100)) {
       this._lastTxt = now;
-      const bars = Math.floor(beat / 4) + 1;
-      const beats = Math.floor(beat % 4) + 1;
+      const bpb = beatsPerBar();
+      const bars = Math.floor(beat / bpb) + 1;
+      const beats = Math.floor(beat % bpb) + 1;
       this._posBars.textContent = bars + '.' + beats;
       this._posTime.textContent = fmtSec(beat * (60 / S.bpm));
     }

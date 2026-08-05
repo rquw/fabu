@@ -824,5 +824,13 @@
   "midi_smpte": "Diese MIDI-Datei nutzt Film-Timing und hat kein Taktraster.",
   "drop_midi": "MIDI",
   "upd_backup_note": "Eine Kopie des Installers liegt in deinem Downloads-Ordner, falls etwas schiefgeht.",
-  "lt_off": "Entwicklermodus ist aus."
+  "lt_off": "Entwicklermodus ist aus.",
+  "sustain": "Haltepedal",
+  "set_timesig": "Taktart",
+  "tip_timesig": "Wie viele Schläge in einem Takt sind",
+  "toast_timesig": "Taktart: {v}",
+  "tip_pedal": "Haltepedal (Shift halten)",
+  "midi_adopted": "{n} Noten importiert. Projekt auf {bpm} BPM, {sig} gesetzt.",
+  "help_pedal": "Haltepedal",
+  "proll_pedal": "Ziehe den Streifen unter den Taktzahlen, um das Haltepedal zu halten"
 }

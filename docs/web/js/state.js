@@ -10,6 +10,7 @@ function freshProject() {
     app: 'fabu',
     version: 1,
     bpm: 120,
+    timeSig: [4, 4],  // [beats per bar, note value] — 3/4, 6/8 and friends
     snap: 1,          // grid in beats (0 = off)
     metronome: false,
     countIn: false,   // 1-2-3-4 before recording (off by default)
@@ -21,6 +22,97 @@ function freshProject() {
     instruments: {},   // id -> custom sampler instrument { name, sampleId, root, start, end, attack, release }
     tracks: []
   };
+}
+
+// How many quarter-note beats are in one bar. Everything in the app counts in
+// quarter beats, so 3/4 is 3 and 6/8 is 3 as well (six eighths). Old projects
+// saved before time signatures existed have no timeSig and stay 4/4.
+function beatsPerBar() {
+  const ts = (S && S.timeSig) || [4, 4];
+  const n = Math.max(1, ts[0] || 4), d = Math.max(1, ts[1] || 4);
+  return n * (4 / d);
+}
+
+// ---------- Sustain pedal ----------
+// A clip's pedal is a list of { beat, on } events in clip-relative beats, kept
+// sorted. Notes are never rewritten: the pedal is applied when a note is
+// scheduled, so lifting it gives you the original notes back untouched.
+
+function pedalEvents(clip) {
+  const s = clip && clip.sustain;
+  return (s && s.length) ? s : null;
+}
+
+// Is the pedal held at this point in the clip?
+function pedalDownAt(clip, beat) {
+  const ev = pedalEvents(clip);
+  if (!ev) return false;
+  let down = false;
+  for (const e of ev) {
+    if (e.beat > beat + 1e-9) break;
+    down = !!e.on;
+  }
+  return down;
+}
+
+// How long a note actually rings once the pedal is taken into account: to the
+// next pedal lift if one is holding it, otherwise its own length.
+function sustainedLength(clip, noteStart, dur) {
+  const ev = pedalEvents(clip);
+  if (!ev) return dur;
+  const noteEnd = noteStart + dur;
+  if (!pedalDownAt(clip, noteEnd)) return dur;
+  let lift = clip.length;                     // still down at the end: ring to the clip end
+  for (const e of ev) {
+    if (e.beat > noteEnd + 1e-9 && !e.on) { lift = e.beat; break; }
+  }
+  return Math.max(dur, Math.min(lift, clip.length) - noteStart);
+}
+
+// Add a pedal span, merging into whatever is already there so overlapping
+// presses cannot leave the pedal stuck down.
+function setPedalSpan(clip, from, to) {
+  if (!clip.sustain) clip.sustain = [];
+  // keep every existing span: the merge below joins whatever overlaps. Dropping
+  // overlapping ones first would swallow the part of an earlier press that
+  // reached further back than the new one.
+  const spans = pedalSpans(clip);
+  spans.push({ from: Math.max(0, from), to: Math.max(from, to) });
+  spans.sort((a, b) => a.from - b.from);
+  // merge touching spans
+  const merged = [];
+  for (const s of spans) {
+    const last = merged[merged.length - 1];
+    if (last && s.from <= last.to + 1e-9) last.to = Math.max(last.to, s.to);
+    else merged.push({ from: s.from, to: s.to });
+  }
+  clip.sustain = [];
+  for (const s of merged) { clip.sustain.push({ beat: s.from, on: true }, { beat: s.to, on: false }); }
+}
+
+// The pedal as spans rather than events, which is what the UI draws
+function pedalSpans(clip) {
+  const ev = pedalEvents(clip);
+  if (!ev) return [];
+  const out = [];
+  let start = null;
+  for (const e of ev) {
+    if (e.on && start == null) start = e.beat;
+    else if (!e.on && start != null) { out.push({ from: start, to: e.beat }); start = null; }
+  }
+  if (start != null) out.push({ from: start, to: clip.length });
+  return out;
+}
+
+function clearPedalRange(clip, from, to) {
+  const spans = [];
+  for (const s of pedalSpans(clip)) {
+    if (s.to <= from || s.from >= to) { spans.push(s); continue; }
+    if (s.from < from) spans.push({ from: s.from, to: from });
+    if (s.to > to) spans.push({ from: to, to: s.to });
+  }
+  clip.sustain = [];
+  for (const s of spans) if (s.to > s.from + 1e-9) clip.sustain.push({ beat: s.from, on: true }, { beat: s.to, on: false });
 }
 
 // Runtime-only UI state (not saved, not undoable)
