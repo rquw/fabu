@@ -567,7 +567,18 @@ const Sync = {
       }
       this.broadcast();
     }, 150);
-    this.presenceTimer = setInterval(() => { this.sendPresence(); this.sweep(); }, 2000);
+    // Presence is also fanned out to everyone, so it is quadratic too. Measured
+    // against the real relay, 100 players heartbeating every 2s was ~4,950
+    // messages a second, more than three times what all the cursors cost. It
+    // slows down as the room fills; the peer timeout grows with it so nobody
+    // gets swept for being quiet.
+    this._lastPresence = 0;
+    this.presenceTimer = setInterval(() => {
+      const now = Date.now();
+      if (now - this._lastPresence >= this.presenceInterval()) { this._lastPresence = now; this.sendPresence(); }
+      this.sweep();
+    }, 1000);
+    this._lastPresence = Date.now();
     this.sendPresence();
     if (this.isHost) this.broadcast(true);
     this.setStatus('online');
@@ -735,7 +746,16 @@ const Sync = {
 
       case 'cursor':
         if (m.id !== this.me.id) {
-          this.cursors.set(m.id, { beat: m.beat, y: m.y, fx: m.fx, fy: m.fy, over: m.over, ts: Date.now(), name: m.name, color: m.color });
+          // name and colour are not on the wire any more: presence already told
+          // us both, and repeating them on the highest-frequency message in the
+          // app was most of its size. Fall back only if a cursor beats presence.
+          const p = this.peers.get(m.id);
+          const prev = this.cursors.get(m.id);
+          const name = m.name || (p && p.name) || (prev && prev.name) || '';
+          this.cursors.set(m.id, {
+            beat: m.beat, y: m.y, fx: m.fx, fy: m.fy, over: m.over, ts: Date.now(),
+            name, color: m.color || (p && p.color) || (prev && prev.color) || hashColor(name)
+          });
           this.renderCursors();
         }
         break;
@@ -1307,7 +1327,7 @@ const Sync = {
     for (const [id, p] of this.peers) {
       // presence beats every 2s; only declare someone gone after ~6 missed beats
       // so a laggy connection doesn't trigger a phantom "host left".
-      if (now - p.lastSeen > 12000) {
+      if (now - p.lastSeen > this.peerTimeout()) {
         this.peers.delete(id);
         this.cursors.delete(id);
         if (p.host) lostHost = true;
@@ -1502,6 +1522,16 @@ const Sync = {
   },
 
   // tell people once why their cursors vanished, instead of letting it look broken
+  // heartbeat every 2s in a small room, easing to 8s in a full one
+  presenceInterval() {
+    const n = this.peers.size + 1;
+    return clamp(2000 * Math.ceil(n / 20), 2000, 8000);
+  },
+
+  // how long a peer may go unheard before we treat them as gone. Always a few
+  // heartbeats' worth, or slowing the heartbeat would sweep everybody.
+  peerTimeout() { return this.presenceInterval() * 3 + 3000; },
+
   noteCursorsOff() {
     if (this._cursorsOffNoted) return;
     this._cursorsOffNoted = true;
@@ -1520,12 +1550,16 @@ const Sync = {
       lastC = now;
       const r = Timeline.lanes.getBoundingClientRect();
       const overCanvas = e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
+      // Every byte here is multiplied by the number of people in the room, so
+      // this carries only what cannot be worked out at the other end, rounded
+      // to the precision a cursor is actually drawn at.
+      const r3 = (v) => Math.round(v * 1000) / 1000;
       const msg = {
-        type: 'cursor', id: this.me.id, name: this.me.name, color: this.me.color,
+        type: 'cursor', id: this.me.id,
         over: overCanvas ? 'c' : 'w',
-        fx: e.clientX / window.innerWidth, fy: e.clientY / window.innerHeight
+        fx: r3(e.clientX / window.innerWidth), fy: r3(e.clientY / window.innerHeight)
       };
-      if (overCanvas) { msg.beat = (e.clientX - r.left) / UI.zoom; msg.y = e.clientY - r.top; }
+      if (overCanvas) { msg.beat = r3((e.clientX - r.left) / UI.zoom); msg.y = Math.round(e.clientY - r.top); }
       // viewport data is only used to follow someone's scroll; in a big room
       // it is dead weight on every single packet
       if (this.peers.size < 12) Object.assign(msg, this.viewportData());
