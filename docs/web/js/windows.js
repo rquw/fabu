@@ -592,7 +592,9 @@ const Windows = {
         item.addEventListener('dragstart', (e) => {
           e.dataTransfer.setData('text/fabu-fx', type);
           e.dataTransfer.effectAllowed = 'copy';
+          item.classList.add('card-sway');
         });
+        item.addEventListener('dragend', () => item.classList.remove('card-sway'));
         list.appendChild(item);
       }
       if (!list.children.length) list.innerHTML = `<div style="color:var(--faint);font-size:11.5px;padding:6px 2px">${tr('fx_none', 'No effect matches that.')}</div>`;
@@ -634,8 +636,9 @@ const Windows = {
             e.dataTransfer.setData('text/fabu-sample', s.id);
             e.dataTransfer.effectAllowed = 'copy';
             Windows._dragSample = s;   // so the timeline can preview its size
+            item.classList.add('card-sway');
           });
-          item.addEventListener('dragend', () => { Windows._dragSample = null; });
+          item.addEventListener('dragend', () => { Windows._dragSample = null; item.classList.remove('card-sway'); });
           // click hears it (drag or double-click still adds it to the song)
           item.addEventListener('click', () => Engine.auditionSample(s));
           item.addEventListener('dblclick', () => { Engine.stopAudition(); App.addSampleToProject(s.id); });

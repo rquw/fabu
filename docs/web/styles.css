@@ -1244,8 +1244,36 @@ kbd {
 .fbtn.accent:hover { background: #eb8b52; color: #fff; }
 .fbtn[disabled] { opacity: 0.4; cursor: default; }
 
+/* ---- export dialog ---- */
+.export-card { width: min(430px, calc(100vw - 32px)); }
+.export-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.export-meta { font-size: 11.5px; color: var(--faint); margin-top: 3px; }
+.export-section {
+  font-size: 10px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase;
+  color: var(--dim); margin: 15px 0 7px; padding-bottom: 4px; border-bottom: 1px solid var(--line);
+}
 .export-formats { display: flex; gap: 8px; }
-.export-formats .fbtn { flex: 1; padding: 13px 0; font-weight: 700; }
+.exp-fmt {
+  flex: 1; display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+  padding: 11px 10px; text-align: left; cursor: pointer;
+  background: var(--panel2); border: 1px solid var(--line); border-radius: 10px;
+  color: var(--text); transition: border-color .12s, background .12s, transform .12s;
+}
+.exp-fmt:hover:not(:disabled) { border-color: var(--accent); background: var(--panel3); transform: translateY(-1px); }
+.exp-fmt:disabled { opacity: .4; cursor: default; }
+.exp-fmt-name { font-size: 14px; font-weight: 800; letter-spacing: .02em; }
+.exp-fmt-desc { font-size: 10.5px; color: var(--dim); line-height: 1.25; }
+.exp-fmt-size { font-size: 10px; color: var(--faint); font-variant-numeric: tabular-nums; margin-top: 1px; }
+.exp-row {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%;
+  padding: 10px 12px; margin-top: 7px; text-align: left; cursor: pointer;
+  background: var(--panel2); border: 1px solid var(--line); border-radius: 10px;
+  color: var(--text); transition: border-color .12s, background .12s;
+}
+.exp-row:hover:not(:disabled) { border-color: var(--accent); background: var(--panel3); }
+.exp-row:disabled { opacity: .4; cursor: default; }
+.exp-row-name { font-size: 12.5px; font-weight: 700; }
+.exp-row-desc { font-size: 10.5px; color: var(--dim); line-height: 1.3; }
 .export-prog { height: 8px; background: var(--panel3); border-radius: 4px; overflow: hidden; margin-top: 14px; }
 #exportBar { height: 100%; width: 0; background: var(--accent); transition: width 0.15s var(--ease); }
 .export-stat { font-size: 11px; color: var(--dim); margin-top: 8px; min-height: 14px; }
@@ -1922,3 +1950,23 @@ input[type="range"].locked { opacity: 0.45; filter: saturate(0.4); }
 
 /* a floating window opened from the home screen has to clear that overlay */
 .fwin.fwin-over-home { position: fixed; z-index: 500; }
+
+/* A card being dragged rocks gently, so it reads as "in hand" rather than
+   stuck to the list it came from. The pattern on the timeline gets its own
+   tilt from the drag itself, which is why this is only for the cards. */
+@keyframes cardSway {
+  0%   { transform: rotate(-2.2deg) translateY(0); }
+  50%  { transform: rotate(2.2deg) translateY(-1px); }
+  100% { transform: rotate(-2.2deg) translateY(0); }
+}
+.card-sway {
+  animation: cardSway 0.85s ease-in-out infinite;
+  transform-origin: 50% 120%;
+  opacity: 0.75;
+  box-shadow: 0 8px 20px rgba(0,0,0,.35);
+}
+@media (prefers-reduced-motion: reduce) { .card-sway { animation: none; } }
+
+/* clips lean into a drag; the transition keeps small nudges from looking jittery */
+.clip { transition: transform 90ms ease-out; }
+.clip.dragging, .clip.resizing { transition: none; }
