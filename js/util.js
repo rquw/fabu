@@ -305,7 +305,7 @@ const SAMPLE_LIB = [
   // --- melodic (all in C major so anything here layers with anything else) ---
   { id: 'me_chords', cat: 'melodic', name: 'Piano Chords', instrument: 'rpiano', length: 4,
     notes: _chords([[0, [60, 64, 67], 1], [1, [57, 60, 64], 1], [2, [53, 57, 60], 1], [3, [55, 59, 62], 1]]) },
-  { id: 'me_pad', cat: 'melodic', name: 'Warm Pad', instrument: 'strings', length: 4,
+  { id: 'me_pad', cat: 'melodic', name: 'String Pad', instrument: 'strings', length: 4,
     notes: _chords([[0, [55, 60, 64], 2], [2, [53, 57, 60], 2]]) },
   { id: 'me_arp', cat: 'melodic', name: 'Bright Arp', instrument: 'pluck', length: 4,
     notes: _line([[0, 60, 0.25], [0.5, 64, 0.25], [1, 67, 0.25], [1.5, 72, 0.25], [2, 67, 0.25], [2.5, 64, 0.25], [3, 60, 0.25], [3.5, 64, 0.25]]) },
@@ -315,6 +315,24 @@ const SAMPLE_LIB = [
     notes: _line([[0, 72, 0.5], [1, 76, 0.5], [2, 79, 0.5], [2.5, 76, 0.25], [3, 72, 1]]) },
   { id: 'me_organ', cat: 'melodic', name: 'Organ Chords', instrument: 'organ', length: 4,
     notes: _chords([[0, [55, 60, 64], 1.9], [2, [53, 57, 60], 1.9]]) },
+  { id: 'me_warmpad', cat: 'melodic', name: 'Warm Pad', instrument: 'pad', length: 4,
+    notes: _chords([[0, [55, 60, 64, 67], 2], [2, [53, 57, 60, 65], 2]]) },
+  { id: 'me_lead', cat: 'melodic', name: 'Synth Lead', instrument: 'synth', length: 4,
+    notes: _line([[0, 72, 0.4, 0.95], [0.75, 72, 0.25, 0.7], [1.25, 76, 0.5, 0.85],
+                  [2, 79, 0.4, 0.95], [2.75, 76, 0.25, 0.7], [3.25, 72, 0.7, 0.85]]) },
+  // stride: root on the strong beats, chord on the weak ones
+  { id: 'me_stride', cat: 'melodic', name: 'Upright Stride', instrument: 'rupright', length: 4,
+    notes: [].concat(
+      _line([[0, 48, 0.4, 0.95], [2, 55, 0.4, 0.9]]),
+      _chords([[1, [64, 67, 72], 0.4], [3, [62, 65, 71], 0.4]])) },
+  // the glockenspiel is only sampled from G5 up, so this stays where it was recorded
+  { id: 'me_glock', cat: 'melodic', name: 'Music Box', instrument: 'rglock', length: 4,
+    notes: _line([[0, 84, 0.5, 1], [0.5, 88, 0.5, 0.9], [1, 91, 0.5, 1],
+                  [2, 88, 0.5, 0.9], [2.5, 84, 0.5, 0.95], [3, 79, 1, 0.9]]) },
+  { id: 'me_harp', cat: 'melodic', name: 'Harp Roll', instrument: 'rharp', length: 4,
+    notes: _line([[0, 48, 0.3, 0.9], [0.25, 55, 0.3, 0.8], [0.5, 60, 0.3, 0.85], [0.75, 64, 0.3, 0.8],
+                  [1, 67, 0.3, 0.9], [1.25, 72, 0.3, 0.8], [1.5, 76, 1.5, 0.85],
+                  [2.5, 72, 0.3, 0.75], [2.75, 67, 0.3, 0.7], [3, 64, 1, 0.8]]) },
   { id: 'me_flute', cat: 'melodic', name: 'Flute Line', instrument: 'rflute', length: 4,
     notes: _line([[0, 72, 0.9, 0.8], [1, 76, 0.45, 0.85], [1.5, 74, 0.45, 0.7], [2, 72, 0.9, 0.85], [3, 67, 0.9, 0.75]]) },
 
@@ -340,15 +358,12 @@ const SAMPLE_LIB = [
     notes: _line([[1.5, 60, 0.45, 0.8], [2, 62, 0.45, 0.85], [2.5, 65, 0.45, 0.8], [3, 67, 0.9, 0.9],
                   [4.5, 64, 0.45, 0.8], [5, 62, 0.45, 0.75], [5.5, 60, 2, 0.85]]) },
   // both horns on the same short hits, the sound of a horn section
+  { id: 'jz_vibes', cat: 'jazz', name: 'Vibes Comp', instrument: 'rvibes', length: 8,
+    notes: _chords([[0, [65, 69, 72], 1.4], [2, [62, 65, 69], 1.4], [4, [64, 67, 71], 3.4]]) },
   { id: 'jz_stabs', cat: 'jazz', name: 'Horn Stabs', instrument: 'rtrumpet', length: 4,
     notes: _chords([[0, [72, 76], 0.3], [1.5, [74, 77], 0.3], [2.5, [71, 76], 0.3], [3, [72, 79], 0.7]]) },
-  { id: 'jz_saxstabs', cat: 'jazz', name: 'Sax Stabs', instrument: 'rsax', length: 4,
-    notes: _chords([[0, [60, 64], 0.3], [1.5, [62, 65], 0.3], [2.5, [59, 64], 0.3], [3, [60, 67], 0.7]]) },
-
-  // --- one-shot sound effect ---
-  { id: 'fx_downer', cat: 'fx', name: 'Downlifter', instrument: 'sfx_downer', length: 4, notes: [{ pitch: 60, start: 0, length: 4, vel: 0.9 }] }
 ];
-const SAMPLE_CATS = ['drums', 'bass', 'melodic', 'jazz', 'fx'];
+const SAMPLE_CATS = ['drums', 'bass', 'melodic', 'jazz'];
 function sampleCatName(c) {
   const fallback = { drums: 'Drums', bass: 'Bass', melodic: 'Melodic', jazz: 'Jazz', fx: 'Sound FX' };
   return tr('samp_cat_' + c, fallback[c] || c);
