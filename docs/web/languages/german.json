@@ -931,5 +931,17 @@
   "curve_in": "Langsamer Start",
   "curve_out": "Langsames Ende",
   "curve_hold": "Halten, dann springen",
-  "auto_curve_hint": "Rechtsklick auf einen Punkt ändert, wie die Linie ihn verlässt"
+  "auto_curve_hint": "Rechtsklick auf einen Punkt ändert, wie die Linie ihn verlässt",
+  "chord_next": "Weiter",
+  "chord_added": "{roman} hinzugefügt",
+  "tip_chord_sug": "Der Akkord, der meistens folgt. Tab fügt ihn ein.",
+  "set_chord_hints": "Nächsten Akkord in der Piano-Roll vorschlagen",
+  "tip_chord_hints": "Zeigt den Akkord, der meistens auf das Geschriebene folgt. Tab fügt ihn ein.",
+  "toast_chord_hints_on": "Akkordvorschläge an",
+  "toast_chord_hints_off": "Akkordvorschläge aus",
+  "chord_major": "Dur",
+  "chord_minor": "Moll",
+  "chord_dim": "vermindert",
+  "chord_add": "einfügen",
+  "chord_other": "andere"
 }

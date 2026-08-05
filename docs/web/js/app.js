@@ -2067,6 +2067,15 @@ const App = {
 
       if (typing) return;
 
+      // Tab takes the suggested chord while the piano roll is open. Nothing else
+      // uses Tab here, and it only does anything when a suggestion is showing.
+      if (e.code === 'Tab' && PianoRoll.isOpen() && PianoRoll._sug) {
+        e.preventDefault();
+        if (e.shiftKey) PianoRoll.cycleSuggestion();
+        else PianoRoll.acceptSuggestion();
+        return;
+      }
+
       // --- transport & panels ---
       if (e.code === 'Enter') { e.preventDefault(); this.stop(); return; }
       if (e.code === 'F1') { e.preventDefault(); Windows.toggleHelp(); return; }

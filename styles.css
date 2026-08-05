@@ -2128,3 +2128,26 @@ body.shift-held .fx-item:not(.samp-item) { position: relative; overflow: visible
 /* the little shape previews in the automation curve menu */
 .curve-ico { display: inline-flex; margin-right: 7px; vertical-align: -3px; color: var(--accent); }
 #curveMenu .ctx-item { display: flex; align-items: center; }
+
+/* the next-chord hint in the piano roll toolbar */
+.chord-sug {
+  display: flex; align-items: center; gap: 6px;
+  white-space: nowrap; flex: 0 0 auto;
+  margin-left: 4px; padding: 3px 8px; border-radius: 999px;
+  background: var(--panel2); border: 1px solid var(--line);
+  cursor: pointer; user-select: none;
+  transition: border-color .12s, background .12s;
+}
+.chord-sug:hover { border-color: var(--accent); background: var(--panel3); }
+.chord-sug.hidden { display: none; }
+.cs-next { font-size: 9.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); }
+.cs-name { font-size: 13px; font-weight: 800; color: var(--accent); font-variant-numeric: tabular-nums; }
+.cs-key {
+  white-space: nowrap;
+  font-size: 9px; font-weight: 700; padding: 1px 5px; border-radius: 4px;
+  background: var(--panel3); border: 1px solid var(--line); color: var(--dim);
+}
+.cs-alt { font-size: 9.5px; color: var(--faint); }
+.cs-lbl { font-size: 9.5px; color: var(--faint); margin-right: 2px; }
+.cs-alt { display: flex; align-items: center; gap: 4px; }
+.cs-alt.hidden { display: none; }
