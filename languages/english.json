@@ -861,5 +861,13 @@
   "cat_wind": "Wind & Brass",
   "export_midi": "Export MIDI (the notes, for another program)",
   "midi_export_empty": "There are no notes to export yet.",
-  "midi_export_done": "Exported {name}"
+  "midi_export_done": "Exported {name}",
+  "mpf_relay_rate_t": "You were sending too fast",
+  "mpf_relay_rate_b": "The server slowed you down to keep the room usable for everyone.",
+  "mpf_relay_big_t": "That was too large to send",
+  "mpf_relay_big_b": "Try a shorter recording or a smaller sound file.",
+  "mpf_relay_many_t": "Too many connections from here",
+  "mpf_relay_many_b": "Close some other fabu windows and try again.",
+  "mpf_relay_full_t": "That room is full",
+  "mpf_relay_full_b": "The room has reached the number of people the server allows."
 }

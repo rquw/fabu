@@ -861,5 +861,13 @@
   "cat_wind": "Blas & Blech",
   "export_midi": "MIDI exportieren (die Noten, für ein anderes Programm)",
   "midi_export_empty": "Es gibt noch keine Noten zum Exportieren.",
-  "midi_export_done": "{name} exportiert"
+  "midi_export_done": "{name} exportiert",
+  "mpf_relay_rate_t": "Du hast zu schnell gesendet",
+  "mpf_relay_rate_b": "Der Server hat dich gebremst, damit der Raum für alle nutzbar bleibt.",
+  "mpf_relay_big_t": "Das war zu groß zum Senden",
+  "mpf_relay_big_b": "Versuch eine kürzere Aufnahme oder eine kleinere Sounddatei.",
+  "mpf_relay_many_t": "Zu viele Verbindungen von hier",
+  "mpf_relay_many_b": "Schließe andere fabu-Fenster und versuch es erneut.",
+  "mpf_relay_full_t": "Dieser Raum ist voll",
+  "mpf_relay_full_b": "Der Raum hat die vom Server erlaubte Personenzahl erreicht."
 }
