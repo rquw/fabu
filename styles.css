@@ -1908,3 +1908,9 @@ input[type="range"].locked { opacity: 0.45; filter: saturate(0.4); }
 #posDisplay:hover { background: var(--panel2); }
 #posSig { font-size: 10px; font-weight: 700; color: var(--dim); margin-left: 5px; }
 @media (max-width: 1240px) { #topbar #posSig { display: none; } }
+
+/* a dialog whose buttons mean different things: recommended, risky, neutral */
+.choice-btns { flex-wrap: wrap; gap: 7px; }
+.choice-btns .fbtn { flex: 1 1 auto; min-width: 110px; }
+.fbtn.danger-outline { border-color: var(--red); color: var(--red); background: transparent; }
+.fbtn.danger-outline:hover { background: color-mix(in srgb, var(--red) 16%, transparent); }

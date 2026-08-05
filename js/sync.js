@@ -315,10 +315,11 @@ const Sync = {
         this.setStatus('online');
         // never surface the code here (streamers) - it only appears in the reveal control
         toast(tr('mp_room_created', 'Room created'), 'green');
+        this.warnIfHostOutdated();
         this.afterAdmit();
       } else {
         this.setStatus('connecting');
-        this.send({ type: 'knock', id: this.me.id, name: this.me.name, gz: this.gzSupported ? 1 : 0 });
+        this.send({ type: 'knock', id: this.me.id, name: this.me.name, gz: this.gzSupported ? 1 : 0, ver: App.version });
         // nobody answers = the code goes nowhere. Silent disconnect, or the
         // "Left the room" toast instantly buries the "Invalid Code" one.
         this.knockTimer = setTimeout(() => {
@@ -524,7 +525,7 @@ const Sync = {
         this.showBanner('reconnected', 'ok');
       } else {
         this.admitted = false;
-        this.send({ type: 'knock', id: me.id, name: me.name, gz: this.gzSupported ? 1 : 0 });
+        this.send({ type: 'knock', id: me.id, name: me.name, gz: this.gzSupported ? 1 : 0, ver: App.version });
         clearTimeout(this.knockTimer);
         this.knockTimer = setTimeout(() => {
           if (this.admitted) return;
@@ -792,7 +793,8 @@ const Sync = {
           if (m.until) localStorage.setItem(this.banKey(this.room), String(m.until));
           this._manualClose = true;              // a refusal is final, do not retry into it
           this.disconnect(true);
-          if (m.reason === 'closed') toast(tr('mp_deny_closed', 'That session has already started'), 'red');
+          if (m.reason === 'version') this.showVersionMismatch(m.hostVer);
+          else if (m.reason === 'closed') toast(tr('mp_deny_closed', 'That session has already started'), 'red');
           else this.fail(codes[m.reason] || 'denied');
         }
         break;
@@ -923,6 +925,14 @@ const Sync = {
 
   handleKnock(m) {
     if (this.kicked && this.kicked.has(m.id)) { this.send({ type: 'deny', to: m.id, reason: 'banned' }); return; }
+    // Everyone in a room has to be on the same build. The project format and
+    // the sync protocol both move between versions, so a mismatched client
+    // does not fail cleanly, it corrupts things quietly. Send our version back
+    // so they can be told exactly what they need.
+    if (App.cmpVersion(m.ver || '0.0.0', App.version) !== 0) {
+      this.send({ type: 'deny', to: m.id, reason: 'version', hostVer: App.version });
+      return;
+    }
     // someone we already know is just reconnecting: let them straight back in,
     // no approval round-trip, no "X joined" spam
     if (this.peers.has(m.id)) { this.admit(m.id); return; }
@@ -1418,6 +1428,60 @@ const Sync = {
     if (this.isHost) this.pruneAudioBans();
     if (lostHost) this.hostLost();
     if (changed) { this.renderPanel(); this.renderCursors(); }
+  },
+
+  // Turned away for being on a different build. Which advice is right depends
+  // on which way the mismatch goes, and on whether the HOST is current: telling
+  // someone to update when the host is the one behind would not help them.
+  async showVersionMismatch(hostVer) {
+    const mine = App.version;
+    const newer = App.cmpVersion(mine, hostVer) > 0;
+    const latest = await App.latestVersion();
+    const params = { mine, host: hostVer };
+
+    if (newer) {
+      // nothing they did wrong, and there is no "update" that helps
+      const go = await App.askChoice({
+        title: tr('ver_title', 'Version mismatch!'),
+        body: tr('ver_newer', "You're on a newer version of fabu ({mine}) than the host ({host}). This is not your fault! You can download an older version here:", params) + ' ' + App.RELEASES_URL,
+        buttons: [
+          { label: tr('ver_open_releases', 'Open downloads'), value: 'go', style: 'accent' },
+          { label: tr('close', 'Close'), value: null }
+        ]
+      });
+      if (go === 'go') App.openReleases();
+      return;
+    }
+
+    // they are behind. If the host is on the latest, "update" is the right
+    // advice; if the host is also behind, they need that exact version.
+    const hostIsLatest = latest ? App.cmpVersion(hostVer, latest) >= 0 : true;
+    const go = await App.askChoice({
+      title: tr('ver_title', 'Version mismatch!'),
+      body: hostIsLatest
+        ? tr('ver_older_latest', "You're on an older version of fabu ({mine}) than the host ({host}). You can update to the newest version here:", params)
+        : tr('ver_older_pinned', "You're on an older version of fabu ({mine}) than the host ({host}). You can download this version here:", params) + ' ' + App.RELEASES_URL + '/tag/v' + hostVer,
+      buttons: [
+        { label: hostIsLatest ? tr('ver_update', 'Download update') : tr('ver_get_that', 'Download {host}', params), value: 'go', style: 'accent' },
+        { label: tr('close', 'Close'), value: null }
+      ]
+    });
+    if (go === 'go') App.openReleases(hostIsLatest ? null : hostVer);
+  },
+
+  // Creating a room on an old build strands anyone who is up to date, so say so
+  // before they wonder why nobody can get in.
+  async warnIfHostOutdated() {
+    const latest = await App.latestVersion();
+    if (!latest || App.cmpVersion(App.version, latest) >= 0) return;
+    await App.askChoice({
+      title: tr('ver_host_title', "You're not on the latest version!"),
+      body: tr('ver_host_body', "It's recommended you use the latest version of fabu. Other people might not be able to join you."),
+      buttons: [
+        { label: tr('ver_update', 'Download update'), value: 'go', style: 'accent' },
+        { label: tr('ver_continue', 'Continue anyway'), value: null }
+      ]
+    }).then(v => { if (v === 'go') App.openReleases(); });
   },
 
   // ---------- host loss & handover ----------

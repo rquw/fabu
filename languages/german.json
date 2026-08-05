@@ -869,5 +869,19 @@
   "mpf_relay_many_t": "Zu viele Verbindungen von hier",
   "mpf_relay_many_b": "Schließe andere fabu-Fenster und versuch es erneut.",
   "mpf_relay_full_t": "Dieser Raum ist voll",
-  "mpf_relay_full_b": "Der Raum hat die vom Server erlaubte Personenzahl erreicht."
+  "mpf_relay_full_b": "Der Raum hat die vom Server erlaubte Personenzahl erreicht.",
+  "ver_title": "Versionskonflikt!",
+  "ver_newer": "Du hast eine neuere Version von fabu ({mine}) als der Host ({host}). Das ist nicht deine Schuld! Eine ältere Version bekommst du hier:",
+  "ver_older_latest": "Du hast eine ältere Version von fabu ({mine}) als der Host ({host}). Hier kannst du auf die neueste aktualisieren:",
+  "ver_older_pinned": "Du hast eine ältere Version von fabu ({mine}) als der Host ({host}). Diese Version bekommst du hier:",
+  "ver_update": "Update herunterladen",
+  "ver_get_that": "{host} herunterladen",
+  "ver_open_releases": "Downloads öffnen",
+  "ver_continue": "Trotzdem fortfahren",
+  "ver_host_title": "Du bist nicht auf der neuesten Version!",
+  "ver_host_body": "Es wird empfohlen, die neueste Version von fabu zu nutzen. Andere können dir sonst vielleicht nicht beitreten.",
+  "fver_title": "Achtung!",
+  "fver_body": "Dieses Projekt wurde in Version {made} erstellt. Du bist auf {mine}. Das kann Probleme verursachen und die Datei beschädigen!",
+  "fver_update": "Jetzt aktualisieren",
+  "fver_open": "Trotzdem öffnen"
 }
