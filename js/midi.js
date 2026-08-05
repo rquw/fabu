@@ -48,6 +48,8 @@ const MIDI = {
   onMessage(e) {
     const [status, d1, d2] = e.data;
     const cmd = status & 0xf0;
+    // a real sustain pedal sends CC64: 64 and up is down, below is up
+    if (cmd === 0xb0 && d1 === 64) { Engine.setPedal(d2 >= 64); return; }
     if (cmd !== 0x90 && cmd !== 0x80) return;   // note on / note off only
     const t = this.target();
     if (!t) return;

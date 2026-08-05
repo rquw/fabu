@@ -667,6 +667,34 @@ const Windows = {
         r.append(cb, l);
         w.body.appendChild(r);
       };
+      // Time signature. Everything counts in quarter beats internally, so this
+      // just changes how long a bar is: the ruler, the metronome accent, bar
+      // numbers and where new patterns snap all follow it.
+      {
+        const row = document.createElement('div');
+        row.className = 'set-row';
+        const lbl = document.createElement('span');
+        lbl.textContent = tr('set_timesig', 'Time signature');
+        const sel = document.createElement('select');
+        sel.dataset.tip = tr('tip_timesig', 'How many beats are in a bar');
+        for (const sig of ['4/4', '3/4', '2/4', '5/4', '6/8', '7/8', '12/8', '6/4']) {
+          const o = document.createElement('option');
+          o.value = sig; o.textContent = sig;
+          sel.appendChild(o);
+        }
+        sel.value = ((S.timeSig && S.timeSig[0]) || 4) + '/' + ((S.timeSig && S.timeSig[1]) || 4);
+        sel.addEventListener('change', () => {
+          Undo.push('Time signature');
+          const [n, d] = sel.value.split('/').map(Number);
+          S.timeSig = [n, d];
+          Timeline.drawRuler();
+          Timeline.render();
+          UI.dirty = UI.fileDirty = true;
+          toast(tr('toast_timesig', 'Time signature: {v}', { v: sel.value }));
+        });
+        row.appendChild(lbl); row.appendChild(sel);
+        body.appendChild(row);
+      }
       mkCheck(tr('set_countin', 'Count-in before recording'), S.countIn,
         tr('tip_countin', 'Four beats count you in before recording.'),
         (v) => { Undo.push('Count-in setting'); S.countIn = v; toast(tr(v ? 'toast_countin_on' : 'toast_countin_off', 'Count-in ' + (v ? 'on' : 'off'))); });

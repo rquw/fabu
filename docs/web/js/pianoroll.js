@@ -19,7 +19,7 @@ const PianoRoll = {
   KEYS_W: 52,
   GRID_H: 336,
   VEL_H: 58,          // velocity lane height
-  RULER_H: 16,        // seek ruler height
+  RULER_H: 23,        // seek ruler height, including the pedal strip below it
   DRUM_ROW_H: 24,     // taller rows in drum-lane mode
   _rowMap: null,      // drum mode: pitches top->bottom (null = chromatic)
   _rowMeta: null,     // drum mode: [{pitch,label}]
@@ -446,10 +446,33 @@ const PianoRoll = {
     for (let b = b0; b <= b1; b++) {
       const px = b * this.pxb;
       if (px < x0) continue;
-      const isBar = b % 4 === 0;
+      const bpb = beatsPerBar();
+      const isBar = b % bpb === 0;
       x.fillStyle = isBar ? 'rgba(255,255,255,0.35)' : 'rgba(255,255,255,0.14)';
       x.fillRect(px, isBar ? 3 : 7, 1, isBar ? H - 3 : H - 7);
-      if (isBar) { x.fillStyle = 'rgba(255,255,255,0.5)'; x.fillText(String(b / 4 + 1), px + 3, H / 2); }
+      if (isBar) { x.fillStyle = 'rgba(255,255,255,0.5)'; x.fillText(String(b / bpb + 1), px + 3, H / 2); }
+    }
+    this.drawPedal(x, H);
+  },
+
+  PEDAL_H: 7,   // the strip along the bottom of the ruler you paint the pedal on
+
+  // Sustain pedal spans. Drawn where you can always see them against the bars,
+  // and paintable: drag along the strip to hold the pedal, right-click to lift.
+  drawPedal(x, H) {
+    const f = this.clip();
+    if (!f) return;
+    const y = H - this.PEDAL_H;
+    x.fillStyle = 'rgba(255,255,255,0.05)';
+    x.fillRect(0, y, f.clip.length * this.pxb, this.PEDAL_H);
+    const spans = pedalSpans(f.clip);
+    for (const sp of spans) {
+      const px = sp.from * this.pxb;
+      const pw = Math.max(2, (sp.to - sp.from) * this.pxb);
+      x.fillStyle = 'rgba(226,146,74,0.85)';
+      x.fillRect(px, y, pw, this.PEDAL_H);
+      x.fillStyle = 'rgba(0,0,0,0.35)';
+      x.fillRect(px, y, 1, this.PEDAL_H);
     }
   },
 
@@ -474,9 +497,54 @@ const PianoRoll = {
       Engine.seek(f.clip.start + local);
       this.syncPlayhead();
     };
+    const onPedalStrip = (e) => {
+      const r = this.rulerCv.getBoundingClientRect();
+      return (e.clientY - r.top) >= this.RULER_H - this.PEDAL_H;
+    };
+    const beatAt = (clientX) => {
+      const f = this.clip();
+      const r = this.rulerCv.getBoundingClientRect();
+      return clamp((clientX - r.left) / this.pxb, 0, f ? f.clip.length : 0);
+    };
+    // right-click the strip lifts the pedal over whatever you drag across
+    this.rulerCv.addEventListener('contextmenu', (e) => {
+      if (!onPedalStrip(e)) return;
+      e.preventDefault();
+      const f = this.clip();
+      if (!f) return;
+      Undo.push('Sustain pedal');
+      const a = beatAt(e.clientX);
+      const mv = (ev) => { clearPedalRange(f.clip, Math.min(a, beatAt(ev.clientX)), Math.max(a, beatAt(ev.clientX))); this.redraw(); };
+      mv(e);
+      const up = () => {
+        window.removeEventListener('mousemove', mv); window.removeEventListener('mouseup', up);
+        UI.dirty = UI.fileDirty = true;
+        if (UI.playing) Engine.liveEdit();
+      };
+      window.addEventListener('mousemove', mv); window.addEventListener('mouseup', up);
+    });
     this.rulerCv.style.cursor = 'pointer';
     this.rulerCv.addEventListener('mousedown', (e) => {
       e.preventDefault();
+      if (e.button === 0 && onPedalStrip(e)) {
+        const f = this.clip();
+        if (!f) return;
+        Undo.push('Sustain pedal');
+        const a = beatAt(e.clientX);
+        const paint = (ev) => {
+          const b = beatAt(ev.clientX);
+          setPedalSpan(f.clip, Math.min(a, b), Math.max(a, b));
+          this.redraw();
+        };
+        paint(e);
+        const up = () => {
+          window.removeEventListener('mousemove', paint); window.removeEventListener('mouseup', up);
+          UI.dirty = UI.fileDirty = true;
+          if (UI.playing) Engine.liveEdit();
+        };
+        window.addEventListener('mousemove', paint); window.addEventListener('mouseup', up);
+        return;
+      }
       seek(e.clientX);
       const mv = (ev) => seek(ev.clientX);
       const up = () => { window.removeEventListener('mousemove', mv); window.removeEventListener('mouseup', up); };

@@ -824,5 +824,13 @@
   "midi_smpte": "That MIDI file uses film timing, which has no beat grid.",
   "drop_midi": "MIDI",
   "upd_backup_note": "A copy of the installer is in your Downloads folder, in case anything goes wrong.",
-  "lt_off": "Developer mode is off."
+  "lt_off": "Developer mode is off.",
+  "sustain": "Sustain",
+  "set_timesig": "Time signature",
+  "tip_timesig": "How many beats are in a bar",
+  "toast_timesig": "Time signature: {v}",
+  "tip_pedal": "Sustain pedal (hold Shift)",
+  "midi_adopted": "{n} notes imported. Project set to {bpm} BPM, {sig}.",
+  "help_pedal": "Sustain pedal",
+  "proll_pedal": "drag the strip under the bar numbers to hold the sustain pedal"
 }
