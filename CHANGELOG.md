@@ -1,5 +1,33 @@
 # Changelog
 
+## 1.2.3
+
+**Everyone in a room needs the same version now.**
+The project format and the way rooms sync both change between releases, and a mismatched player did not fail cleanly, it quietly broke things. So joining now checks the version, and if it does not match you are told exactly what you need and where to get it. If you are ahead of the host it says so and points you at the older build, because that one is not your fault. Update together with whoever you jam with.
+
+**Trumpet, flute, saxophone and a real organ.**
+Actual recordings, not synths pretending. The organ replaces the old synthesised one, so projects using it just sound better with nothing to change. The trumpet records slightly flat and the saxophone slightly sharp, the way real instruments do, and fabu now corrects for that so they play in tune with everything else.
+
+The old "Keys" is gone. It was a synthesised piano standing next to a real recorded grand, and there was no reason to keep both. Projects that used it move to the Grand Piano on their own.
+
+**Export MIDI.**
+The notes, not the sound, so you can take a song into another program. Tempo, time signature, every track and the sustain pedal all come across.
+
+**Time signature moved to the bar counter.**
+It sits with the bar and beat display in the top bar, where it belongs, and clicking it changes it. It was in Settings before, which made a property of the song look like a setting for the whole app. Settings is now split into what belongs to the song and what belongs to fabu, and it opens from the home screen too.
+
+**Rooms are safer.**
+The server now refuses messages aimed at a room the sender never joined. Before this, anyone who knew a room code could push things into it without being in it, which meant none of the host's controls applied to them. It also limits how fast and how much anyone can send. This one is already live and protects you whether or not you update.
+
+**Big songs and long files stopped breaking.**
+Opening the note editor on a long piece could come up blank or full of broken boxes, and zooming into a busy project could leave patterns empty. Both were the same cause and both are fixed.
+
+**Exports could come out silent.**
+If you opened a project and exported straight away, before the instrument sounds had finished loading, you got a file with nothing in it. Every export now waits for them. A related problem could leave one instrument silent for a whole session after a single hiccup while loading, with nothing on screen to say so.
+
+**Opening a project from a newer version warns you first.**
+Saving over it would quietly throw away anything the newer version added, so now you get the choice.
+
 ## 1.2.2
 
 **Windows: please download this one from the website.**
