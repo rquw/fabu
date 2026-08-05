@@ -368,3 +368,70 @@ function sampleCatName(c) {
   const fallback = { drums: 'Drums', bass: 'Bass', melodic: 'Melodic', jazz: 'Jazz', fx: 'Sound FX' };
   return tr('samp_cat_' + c, fallback[c] || c);
 }
+
+// ---------- the card you are dragging ----------
+// The browser's own drag image is a frozen snapshot: it cannot move, so the
+// thing under your cursor was dead while the card left behind in the list did
+// the animating, which is backwards. This replaces it with a real element that
+// follows the pointer and swings like something held at the top: the further it
+// lags behind your hand, the more it trails, and it settles when you stop.
+const DragGhost = {
+  el: null, x: 0, y: 0, angle: 0, vel: 0, lastX: 0, raf: null,
+
+  start(sourceEl, e) {
+    this.stop();
+    const g = sourceEl.cloneNode(true);
+    g.classList.remove('card-lifted');
+    g.id = 'dragGhostCard';
+    g.style.width = sourceEl.offsetWidth + 'px';
+    document.body.appendChild(g);
+    this.el = g;
+    this.x = e.clientX; this.y = e.clientY; this.lastX = e.clientX;
+    this.angle = 0; this.vel = 0;
+    // hide the native drag image; a 1x1 transparent pixel is the portable way
+    try {
+      const px = document.createElement('canvas');
+      px.width = px.height = 1;
+      e.dataTransfer.setDragImage(px, 0, 0);
+    } catch (err) { /* older engines just keep their own ghost */ }
+    this.draw();
+    this.raf = requestAnimationFrame(() => this.tick());
+  },
+
+  move(clientX, clientY) {
+    if (!this.el || (!clientX && !clientY)) return;   // some browsers send 0,0 on the last event
+    this.x = clientX; this.y = clientY;
+  },
+
+  tick() {
+    if (!this.el) return;
+    const dx = this.x - this.lastX;
+    this.lastX = this.x;
+    // a pendulum: the pointer's motion pushes it, gravity pulls it back to
+    // hanging, and friction stops it ringing forever
+    const target = clamp(dx * 1.6, -34, 34);
+    this.vel += (target - this.angle) * 0.18;
+    this.vel *= 0.82;
+    this.angle = clamp(this.angle + this.vel, -38, 38);
+    this.draw();
+    this.raf = requestAnimationFrame(() => this.tick());
+  },
+
+  draw() {
+    if (!this.el) return;
+    this.el.style.transform =
+      `translate(${this.x}px, ${this.y}px) translate(-50%, -8px) rotate(${this.angle.toFixed(2)}deg)`;
+  },
+
+  stop() {
+    if (this.raf) cancelAnimationFrame(this.raf);
+    this.raf = null;
+    if (this.el) this.el.remove();
+    this.el = null;
+  }
+};
+// dragover is the event that reliably carries coordinates while a drag is live
+document.addEventListener('dragover', (e) => DragGhost.move(e.clientX, e.clientY));
+document.addEventListener('drop', () => DragGhost.stop());
+document.addEventListener('dragend', () => DragGhost.stop());
+window.DragGhost = DragGhost;

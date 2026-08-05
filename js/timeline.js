@@ -664,11 +664,17 @@ const Timeline = {
       badge.textContent = (clip.pitch > 0 ? '+' : '') + clip.pitch + 'st';
       el.appendChild(badge);
     }
+    // A pattern with effects on it should look different at a glance, not just
+    // carry a small label. The clip gets a lit edge, and the badge names what is
+    // actually on it rather than counting to two.
     if (clip.fx && clip.fx.length) {
+      el.classList.add('has-fx');
       const fxb = document.createElement('div');
       fxb.className = 'clip-fx-badge';
-      fxb.textContent = 'fx' + (clip.fx.length > 1 ? clip.fx.length : '');
-      fxb.dataset.tip = clip.fx.map(f => fxName(f.type)).join(', ');
+      const names = clip.fx.map(f => fxName(f.type));
+      fxb.innerHTML = '<span class="fx-spark"></span>' +
+        `<span class="fx-names">${names.slice(0, 2).join(' · ')}${names.length > 2 ? ' +' + (names.length - 2) : ''}</span>`;
+      fxb.dataset.tip = names.join(', ');
       el.appendChild(fxb);
     }
     if (clip.kind === 'group') {
@@ -969,34 +975,24 @@ const Timeline = {
       }
     };
 
-    // Lean the clip in the direction it is moving, proportional to how fast, so
-    // a slow nudge barely tilts and a quick throw leans right over. It decays
-    // back to flat on its own so holding still looks settled rather than stuck.
-    let tilt = 0, lastTiltX = startX, lastTiltT = performance.now(), tiltRaf = null;
+    // Lean the clip the way it is being dragged. Not a physics toy: it snaps to
+    // one of two angles and stays there until the direction changes, so it reads
+    // as a deliberate lean rather than something wobbling around.
+    let tilt = 0, lastTiltX = startX;
     const applyTilt = () => {
       const els = [el, ...group.map(g => this.lanes.querySelector(`[data-clip-id="${g.clip.id}"]`))];
-      for (const e of els) if (e) e.style.transform = tilt ? `rotate(${tilt.toFixed(2)}deg)` : '';
-    };
-    const tiltTick = () => {
-      tilt *= 0.86;                       // ease back toward flat
-      if (Math.abs(tilt) < 0.05) { tilt = 0; applyTilt(); tiltRaf = null; return; }
-      applyTilt();
-      tiltRaf = requestAnimationFrame(tiltTick);
+      for (const e of els) if (e) e.style.transform = tilt ? `rotate(${tilt}deg)` : '';
     };
     const nudgeTilt = (clientX) => {
-      const now = performance.now();
-      const dt = Math.max(16, now - lastTiltT);
-      const vx = (clientX - lastTiltX) / dt;          // px per ms
-      lastTiltX = clientX; lastTiltT = now;
-      tilt = clamp(tilt + vx * 6, -15, 15);
-      applyTilt();                        // now, not on the next frame
-      if (!tiltRaf) tiltRaf = requestAnimationFrame(tiltTick);
-    };
-    const clearTilt = () => {
-      if (tiltRaf) cancelAnimationFrame(tiltRaf);
-      tiltRaf = null; tilt = 0;
+      const dx = clientX - lastTiltX;
+      if (Math.abs(dx) < 2) return;          // ignore jitter, keep the current lean
+      lastTiltX = clientX;
+      const want = dx > 0 ? 15 : -15;
+      if (want === tilt) return;
+      tilt = want;
       applyTilt();
     };
+    const clearTilt = () => { tilt = 0; applyTilt(); };
 
     const move = (ev) => {
       const dxBeats = (ev.clientX - startX) / UI.zoom;
