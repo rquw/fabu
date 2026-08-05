@@ -54,7 +54,6 @@
   "snap_bar": "Takt",
   "snap_beat": "Schlag",
   "snap_off": "Aus",
-  "instr_keys": "Klavier",
   "instr_synth": "Synth-Lead",
   "instr_bass": "Bass",
   "instr_pluck": "Pluck",
@@ -855,5 +854,9 @@
   "set_sec_project_note": "in der Datei gespeichert",
   "set_sec_app": "fabu",
   "set_sec_app_note": "jedes Projekt",
-  "set_timesig_moved": "Die Taktart sitzt am Taktzähler in der oberen Leiste. Klick ihn an."
+  "set_timesig_moved": "Die Taktart sitzt am Taktzähler in der oberen Leiste. Klick ihn an.",
+  "instr_rtrumpet": "Trompete",
+  "instr_rflute": "Flöte",
+  "instr_rsax": "Saxophon",
+  "cat_wind": "Blas & Blech"
 }

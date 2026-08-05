@@ -354,7 +354,7 @@ const App = {
   deleteInstrument(id) {
     if (!resolveInstrument(id)) return;
     Undo.push('Delete instrument');
-    for (const t of S.tracks) if (t.instrument === id) t.instrument = 'keys';
+    for (const t of S.tracks) if (t.instrument === id) t.instrument = 'rpiano';
     delete S.instruments[id];
     this.removeFromLibrary(id);
     if (Sampler.isOpen() && Sampler.editId === id) Windows.close('sampler');
@@ -413,7 +413,7 @@ const App = {
     };
     const BARS = 8;
     const drums = layTrack('Drums', 'drums', 'dr_house', BARS);
-    const chords = layTrack('Chords', 'keys', 'me_chords', BARS);
+    const chords = layTrack('Chords', 'rpiano', 'me_chords', BARS);
     drums.swing = 0.14; chords.swing = 0.14;   // a little shared groove
     S.tracks.push(
       drums,

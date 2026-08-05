@@ -299,7 +299,7 @@ const SAMPLE_LIB = [
     notes: _line([[0, 40, 0.4], [1, 40, 0.4], [2, 40, 0.4], [3, 40, 0.4]]) },
 
   // --- melodic ---
-  { id: 'me_chords', cat: 'melodic', name: 'Piano Chords', instrument: 'keys', length: 4,
+  { id: 'me_chords', cat: 'melodic', name: 'Piano Chords', instrument: 'rpiano', length: 4,
     notes: _chords([[0, [60, 64, 67], 1], [1, [57, 60, 64], 1], [2, [53, 57, 60], 1], [3, [55, 59, 62], 1]]) },
   { id: 'me_pad', cat: 'melodic', name: 'Warm Pad', instrument: 'strings', length: 4,
     notes: _chords([[0, [55, 60, 64], 2], [2, [53, 57, 60], 2]]) },

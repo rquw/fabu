@@ -342,7 +342,19 @@ function updateUndoButtons() {
 }
 
 // Re-sync everything visible after S got replaced (undo/redo/load)
+// Instruments that no longer exist, mapped to what replaced them. Applied when
+// a project loads so old files keep sounding like something.
+const INSTR_REPLACED = { keys: 'rpiano' };
+
+function migrateInstruments() {
+  if (!S || !S.tracks) return;
+  for (const t of S.tracks) {
+    if (t.instrument && INSTR_REPLACED[t.instrument]) t.instrument = INSTR_REPLACED[t.instrument];
+  }
+}
+
 function afterStateRestore() {
+  migrateInstruments();
   if (UI.playing) Engine.stop();
   // selection may point at things that no longer exist
   if (UI.selClipId && !getClip(UI.selClipId)) UI.selClipId = null;

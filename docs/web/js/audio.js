@@ -2,7 +2,6 @@
 'use strict';
 
 const INSTRUMENTS = {
-  keys:  'Keys',
   epiano: 'E-Piano',
   organ: 'Organ',
   strings: 'Strings',
@@ -17,6 +16,9 @@ const INSTRUMENTS = {
   rharp: 'Harp',
   sub: '808 Bass',
   pad: 'Warm Pad',
+  rtrumpet: 'Trumpet',
+  rflute: 'Flute',
+  rsax: 'Saxophone',
   drums: 'Drum Kit',
   drumkit: 'Acoustic Kit'
 };
@@ -30,6 +32,16 @@ const MELODIC = {
   // (VCSL labels these an octave off, which would have detuned everything)
   rupright: { name: 'Upright Piano', gain: 2.6, attack: 0.004, release: 0.2, zones: [{ file: 'upright_c3', root: 48 }, { file: 'upright_c4', root: 60 }, { file: 'upright_c5', root: 72 }, { file: 'upright_c6', root: 84 }, { file: 'upright_c7', root: 96 }] },
   rglock: { name: 'Glockenspiel', gain: 5.5, attack: 0.002, release: 0.5, zones: [{ file: 'glock_g5', root: 79 }, { file: 'glock_c6', root: 84 }, { file: 'glock_c7', root: 96 }, { file: 'glock_c8', root: 108 }] },
+  // Wind and brass from the University of Iowa Musical Instrument Samples
+  // (Lawrence Fritts), which the university publishes for use in any project
+  // without restriction. Sliced out of their chromatic scale recordings; the
+  // roots below are the pitch each note actually sounded, so a trumpet that
+  // records 8 cents flat plays in tune here.
+  rtrumpet: { name: 'Trumpet', gain: 0.64, attack: 0.02, release: 0.16, zones: [{ file: 'trumpet_g3', root: 54.936 }, { file: 'trumpet_b3', root: 58.93 }, { file: 'trumpet_e4', root: 63.898 }, { file: 'trumpet_g4', root: 66.892 }, { file: 'trumpet_c5', root: 71.932 }, { file: 'trumpet_g5', root: 79.121 }] },
+  rflute: { name: 'Flute', gain: 2.34, attack: 0.03, release: 0.18, zones: [{ file: 'flute_d4', root: 61.923 }, { file: 'flute_g4', root: 67.055 }, { file: 'flute_c5', root: 72.101 }, { file: 'flute_g5', root: 79.053 }, { file: 'flute_c6', root: 84.214 }] },
+  rsax: { name: 'Saxophone', gain: 0.93, attack: 0.022, release: 0.17, zones: [{ file: 'sax_cs3', root: 49.136 }, { file: 'sax_g3', root: 55.093 }, { file: 'sax_c4', root: 60.106 }, { file: 'sax_g4', root: 67.228 }, { file: 'sax_c5', root: 72.252 }, { file: 'sax_f5', root: 77.295 }] },
+  // Pipe organ from VCSL. These filenames were honest, unlike the ones above it.
+  organ: { name: 'Organ', gain: 4.28, attack: 0.03, release: 0.12, zones: [{ file: 'organ_c2', root: 36.027 }, { file: 'organ_c3', root: 47.995 }, { file: 'organ_c4', root: 59.985 }, { file: 'organ_c5', root: 71.993 }] },
   rharp: { name: 'Harp', gain: 4.2, attack: 0.003, release: 0.35, zones: [{ file: 'harp_d2', root: 38 }, { file: 'harp_g3', root: 55 }, { file: 'harp_c5', root: 72 }, { file: 'harp_d6', root: 86 }] }
 };
 
@@ -392,7 +404,9 @@ const Engine = {
     if (instr === 'drums') return this.makeDrum(ac, dest, pitch, t, vel);
     if (instr === 'drumkit') return this.makeDrumkitVoice(ac, dest, pitch, t, vel);
     if (MELODIC[instr]) return this.makeMelodicVoice(ac, dest, instr, pitch, t, vel, noAttack);
-    if (instr === 'keys') return this.makePiano(ac, dest, pitch, t, vel, noAttack);
+    // 'keys' was a synthesised piano, replaced by the sampled grand. Projects
+    // saved with it are remapped on load; this catches anything that slips past.
+    if (instr === 'keys') return this.makeMelodicVoice(ac, dest, 'rpiano', pitch, t, vel, noAttack);
 
     const f = midiToFreq(pitch);
     const g = ac.createGain();
@@ -436,18 +450,6 @@ const Engine = {
       const body = mk('sine', f * 2, 4, 0.12); body.connect(g);
       oscs.push(carrier, mod);
       A = 0.004; D = 1.1; SUS = 0.24; R = 0.35; peak = 0.42;
-    } else if (instr === 'organ') {
-      // drawbar stack with slow vibrato, holds while pressed
-      const vib = ac.createOscillator(); vib.frequency.value = 5.6;
-      const vibG = ac.createGain(); vibG.gain.value = 2.4;
-      vib.connect(vibG);
-      for (const [mult, lvl] of [[0.5, 0.5], [1, 1], [2, 0.55], [3, 0.3], [4, 0.2]]) {
-        const og = mk('sine', f * mult, 0, lvl * 0.28);
-        vibG.connect(oscs[oscs.length - 1].detune);
-        og.connect(g);
-      }
-      oscs.push(vib);
-      A = 0.02; D = 0.05; SUS = 1.0; R = 0.08; peak = 0.32;
     } else if (instr === 'strings') {
       // detuned saw ensemble, slow bow-in, mellow top end
       filter = ac.createBiquadFilter();
