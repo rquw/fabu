@@ -920,5 +920,16 @@
   "loop_shared": "Saved {name}{ext}, send it to anyone",
   "loop_del_title": "Delete this loop?",
   "loop_del_body": "It is only stored on this computer, so this cannot be undone.",
-  "tip_clip_drag_out": "Drag the name into the Loops panel to keep this pattern"
+  "tip_clip_drag_out": "Drag the name into the Loops panel to keep this pattern",
+  "proll_humanize": "Humanize",
+  "tip_humanize": "Nudge timing and loudness slightly, so it sounds played rather than programmed",
+  "toast_humanize_none_sel": "Select some notes first",
+  "toast_humanize_none": "No notes to humanize",
+  "toast_humanized": "Loosened {n} notes",
+  "curve_lin": "Straight",
+  "curve_ease": "Smooth",
+  "curve_in": "Slow start",
+  "curve_out": "Slow finish",
+  "curve_hold": "Hold, then jump",
+  "auto_curve_hint": "Right-click a point to change how the line leaves it"
 }

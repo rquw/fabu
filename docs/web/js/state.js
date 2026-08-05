@@ -170,6 +170,23 @@ function automPoints(track, param) {
   return track.autom[param];
 }
 
+// ---------- automation curves ----------
+// A keyframe's shape describes how the line LEAVES it, on the way to the next
+// one. Straight is the default and what every existing project has, so a
+// missing shape has to keep behaving exactly as it always did.
+const CURVE_SHAPES = ['lin', 'ease', 'in', 'out', 'hold'];
+
+// f runs 0..1 across the segment and comes back reshaped
+function curveEase(f, shape) {
+  switch (shape) {
+    case 'ease': return f * f * (3 - 2 * f);      // slow at both ends
+    case 'in':   return f * f;                     // starts slowly, accelerates
+    case 'out':  return 1 - (1 - f) * (1 - f);     // starts fast, settles
+    case 'hold': return 0;                         // stays put, then jumps
+    default:     return f;                         // straight
+  }
+}
+
 // Interpolated value of a raw keyframe array at a beat (0 if empty)
 function interpPoints(pts, beat) {
   if (!pts || !pts.length) return 0;
@@ -179,7 +196,7 @@ function interpPoints(pts, beat) {
     const a = pts[i], b = pts[i + 1];
     if (beat >= a.beat && beat <= b.beat) {
       const f = (beat - a.beat) / ((b.beat - a.beat) || 1);
-      return a.v + (b.v - a.v) * f;
+      return a.v + (b.v - a.v) * curveEase(f, a.c);
     }
   }
   return pts[pts.length - 1].v;
@@ -189,16 +206,7 @@ function interpPoints(pts, beat) {
 function automValueAt(track, param, beat) {
   const pts = track.autom && track.autom[param];
   if (!pts || !pts.length) return null;
-  if (beat <= pts[0].beat) return pts[0].v;
-  if (beat >= pts[pts.length - 1].beat) return pts[pts.length - 1].v;
-  for (let i = 0; i < pts.length - 1; i++) {
-    const a = pts[i], b = pts[i + 1];
-    if (beat >= a.beat && beat <= b.beat) {
-      const f = (beat - a.beat) / (b.beat - a.beat || 1);
-      return a.v + (b.v - a.v) * f;
-    }
-  }
-  return pts[pts.length - 1].v;
+  return interpPoints(pts, beat);   // one implementation, so curves apply everywhere
 }
 
 function getTrack(id) { return S.tracks.find(t => t.id === id); }

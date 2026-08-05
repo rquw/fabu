@@ -355,7 +355,20 @@ const Automation = {
       g.strokeStyle = color; g.lineWidth = 2;
       g.beginPath();
       g.moveTo(this.GUTTER, this.valueToY(pts[0].v));
-      for (const p of pts) g.lineTo(this.beatToX(p.beat), this.valueToY(p.v));
+      g.lineTo(this.beatToX(pts[0].beat), this.valueToY(pts[0].v));
+      // each segment is sampled along its own shape, so what you see is exactly
+      // what interpPoints will hand the audio engine
+      for (let i = 0; i < pts.length - 1; i++) {
+        const p = pts[i], q = pts[i + 1];
+        const x0 = this.beatToX(p.beat), x1 = this.beatToX(q.beat);
+        if (!p.c || p.c === 'lin') { g.lineTo(x1, this.valueToY(q.v)); continue; }
+        const steps = Math.max(2, Math.min(64, Math.round(Math.abs(x1 - x0) / 3)));
+        for (let s = 1; s <= steps; s++) {
+          const f = s / steps;
+          const v = p.v + (q.v - p.v) * curveEase(f, p.c);
+          g.lineTo(x0 + (x1 - x0) * f, this.valueToY(v));
+        }
+      }
       g.lineTo(W, this.valueToY(pts[pts.length - 1].v));
       g.stroke();
       for (const p of pts) {
@@ -422,6 +435,16 @@ const Automation = {
       }
     });
 
+    // right-click ON a point picks how the line leaves it
+    this.cv.addEventListener('contextmenu', (e) => {
+      const r = this.cv.getBoundingClientRect();
+      const p = this.pointAt(e.clientX - r.left, e.clientY - r.top);
+      if (!p) return;
+      e.preventDefault();
+      e.stopPropagation();
+      this.openCurveMenu(p, e.clientX, e.clientY);
+    });
+
     this.cv.addEventListener('mousedown', (e) => {
       if (e.button !== 0) return;
       const r = this.cv.getBoundingClientRect();
@@ -450,6 +473,56 @@ const Automation = {
       window.addEventListener('mousemove', move);
       window.addEventListener('mouseup', up);
     });
+  },
+
+  // The shape of the line leaving this keyframe. Named for what they sound like
+  // rather than what they are called in maths.
+  CURVE_LABELS: {
+    lin:  ['curve_lin',  'Straight'],
+    ease: ['curve_ease', 'Smooth'],
+    in:   ['curve_in',   'Slow start'],
+    out:  ['curve_out',  'Slow finish'],
+    hold: ['curve_hold', 'Hold, then jump']
+  },
+
+  openCurveMenu(p, x, y) {
+    const old = document.getElementById('curveMenu');
+    if (old) old.remove();
+    const m = document.createElement('div');
+    m.id = 'curveMenu';
+    m.className = 'ctx-menu';
+    const cur = p.c || 'lin';
+    for (const shape of CURVE_SHAPES) {
+      const [key, fb] = this.CURVE_LABELS[shape];
+      const b = document.createElement('button');
+      b.className = 'ctx-item' + (shape === cur ? ' on' : '');
+      b.innerHTML = `<span class="curve-ico">${this.curveIcon(shape)}</span>${tr(key, fb)}`;
+      b.addEventListener('click', () => {
+        m.remove();
+        if ((p.c || 'lin') === shape) return;
+        Undo.push('Automation shape');
+        if (shape === 'lin') delete p.c; else p.c = shape;
+        this.commit();
+      });
+      m.appendChild(b);
+    }
+    document.body.appendChild(m);
+    m.style.left = Math.min(x, window.innerWidth - m.offsetWidth - 8) + 'px';
+    m.style.top = Math.min(y, window.innerHeight - m.offsetHeight - 8) + 'px';
+    const close = (ev) => { if (!m.contains(ev.target)) { m.remove(); window.removeEventListener('mousedown', close, true); } };
+    setTimeout(() => window.addEventListener('mousedown', close, true), 0);
+  },
+
+  // a tiny drawing of the shape, so the menu is readable without the words
+  curveIcon(shape) {
+    const pts = [];
+    for (let i = 0; i <= 12; i++) {
+      const f = i / 12;
+      pts.push((2 + f * 14).toFixed(1) + ',' + (14 - curveEase(f, shape) * 12).toFixed(1));
+    }
+    return `<svg width="18" height="16" viewBox="0 0 18 16" fill="none" aria-hidden="true">` +
+      `<polyline points="${pts.join(' ')}" stroke="currentColor" stroke-width="1.6" ` +
+      `stroke-linecap="round" stroke-linejoin="round"/></svg>`;
   },
 
   clear() {

@@ -2124,3 +2124,7 @@ body.shift-held .fx-item:not(.samp-item) { position: relative; overflow: visible
 /* the pattern's name strip is the handle for taking it out to the loop panel */
 .clip-label { cursor: grab; }
 .clip-label:active { cursor: grabbing; }
+
+/* the little shape previews in the automation curve menu */
+.curve-ico { display: inline-flex; margin-right: 7px; vertical-align: -3px; color: var(--accent); }
+#curveMenu .ctx-item { display: flex; align-items: center; }

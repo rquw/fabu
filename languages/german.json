@@ -920,5 +920,16 @@
   "loop_shared": "{name}{ext} gespeichert, schick es weiter",
   "loop_del_title": "Diesen Loop löschen?",
   "loop_del_body": "Er liegt nur auf diesem Computer, das lässt sich nicht rückgängig machen.",
-  "tip_clip_drag_out": "Zieh den Namen in das Loops-Fenster, um dieses Pattern zu behalten"
+  "tip_clip_drag_out": "Zieh den Namen in das Loops-Fenster, um dieses Pattern zu behalten",
+  "proll_humanize": "Vermenschlichen",
+  "tip_humanize": "Timing und Lautstärke leicht verschieben, damit es gespielt statt programmiert klingt",
+  "toast_humanize_none_sel": "Wähle zuerst ein paar Noten",
+  "toast_humanize_none": "Keine Noten zum Vermenschlichen",
+  "toast_humanized": "{n} Noten aufgelockert",
+  "curve_lin": "Gerade",
+  "curve_ease": "Weich",
+  "curve_in": "Langsamer Start",
+  "curve_out": "Langsames Ende",
+  "curve_hold": "Halten, dann springen",
+  "auto_curve_hint": "Rechtsklick auf einen Punkt ändert, wie die Linie ihn verlässt"
 }

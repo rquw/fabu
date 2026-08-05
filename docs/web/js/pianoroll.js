@@ -125,6 +125,11 @@ const PianoRoll = {
           <button id="pkQuantSel" class="pt-seg">${tr('proll_q_sel', 'Selected')}</button>
           <button id="pkQuantAll" class="pt-seg">${tr('proll_q_all', 'All')}</button>
         </div>
+        <div class="pt-quant" data-tip="${tr('tip_humanize', 'Nudge timing and loudness slightly, so it sounds played rather than programmed')}">
+          <span class="pt-qlabel">${tr('proll_humanize', 'Humanize')}</span>
+          <button id="pkHumanSel" class="pt-seg">${tr('proll_q_sel', 'Selected')}</button>
+          <button id="pkHumanAll" class="pt-seg">${tr('proll_q_all', 'All')}</button>
+        </div>
       </div>`;
     w.body.appendChild(tools);
 
@@ -148,6 +153,8 @@ const PianoRoll = {
     }
     q('#pkQuantSel').addEventListener('click', () => this.quantize('sel'));
     q('#pkQuantAll').addEventListener('click', () => this.quantize('all'));
+    q('#pkHumanSel').addEventListener('click', () => this.humanize('sel'));
+    q('#pkHumanAll').addEventListener('click', () => this.humanize('all'));
 
     const row = document.createElement('div');
     row.style.cssText = 'display:flex;align-items:flex-start';
@@ -871,6 +878,47 @@ const PianoRoll = {
     this.redraw();
     Timeline.drawClip(this.clipId);
     toast(tr('toast_quantized', 'Lined {n} notes up to the grid', { n: targets.length }));
+  },
+
+  // Nudge timing and loudness a little. Perfectly gridded notes at one velocity
+  // are the main thing that makes a pattern sound programmed, and a real player
+  // is never exactly on the beat or exactly as loud twice.
+  //
+  // Two rules keep it musical rather than sloppy: the nudge is a fraction of the
+  // grid rather than a fixed number of beats, so it stays proportional at any
+  // resolution, and the first note of a bar is nudged less, because that is the
+  // one the ear uses to find the beat.
+  humanize(scope) {
+    const f = this.clip();
+    if (!f) return;
+    const targets = scope === 'sel' ? this.selectedNotes() : f.clip.notes;
+    if (!targets.length) {
+      toast(tr(scope === 'sel' ? 'toast_humanize_none_sel' : 'toast_humanize_none',
+        scope === 'sel' ? 'Select some notes first' : 'No notes to humanize'));
+      return;
+    }
+    const grid = this.snap || 0.25;
+    const timeAmt = grid * 0.11;        // about a hundredth of a bar at 1/16
+    const velAmt = 0.13;
+    const bpb = beatsPerBar();
+    // triangular rather than flat: small nudges common, large ones rare, which
+    // is how human timing actually scatters
+    const jitter = () => (Math.random() + Math.random() - 1);
+
+    Undo.push('Humanize');
+    for (const n of targets) {
+      const onDownbeat = Math.abs(n.start % bpb) < 1e-6;
+      const t = jitter() * timeAmt * (onDownbeat ? 0.35 : 1);
+      n.start = Math.max(0, +(n.start + t).toFixed(4));
+      const v = (n.vel ?? 0.85) + jitter() * velAmt;
+      n.vel = +clamp(v, 0.15, 1).toFixed(3);
+    }
+    // notes must not end up sitting past the end of their own pattern
+    for (const n of targets) if (n.start > f.clip.length - 0.01) n.start = Math.max(0, f.clip.length - 0.01);
+    this.redraw();
+    Timeline.drawClip(this.clipId);
+    if (UI.playing) Engine.liveEdit();
+    toast(tr('toast_humanized', 'Loosened {n} notes', { n: targets.length }));
   },
 
   // note operations used by global shortcuts (only while the roll is open,
