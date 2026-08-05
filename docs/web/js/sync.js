@@ -79,7 +79,11 @@ const Sync = {
     send_fail:    ['Your changes are not going through', 'The connection is up but the server is not accepting messages.'],
     gave_up:      ['Could not reconnect', 'Your work is safe and saved locally. You can try again any time.'],
     reconnected:  ['Back in the room', ''],
-    unknown:      ['Something went wrong with the connection', 'The connection closed for an unknown reason.']
+    unknown:      ['Something went wrong with the connection', 'The connection closed for an unknown reason.'],
+    relay_rate:   ['You were sending too fast', 'The server slowed you down to keep the room usable for everyone.'],
+    relay_big:    ['That was too large to send', 'Try a shorter recording or a smaller sound file.'],
+    relay_many:   ['Too many connections from here', 'Close some other fabu windows and try again.'],
+    relay_full:   ['That room is full', 'The room has reached the number of people the server allows.']
   },
   failText(code, params) {
     const f = this.FAIL[code] || this.FAIL.unknown;
@@ -131,6 +135,24 @@ const Sync = {
   hideBanner() {
     clearTimeout(this._bannerHide);
     if (this.banner) { this.banner.remove(); this.banner = null; }
+  },
+
+  // The relay enforces its own limits now, and says so when it drops something.
+  // Those are real conditions the user should see rather than silent weirdness.
+  onRefused(reason) {
+    const map = { rate: 'relay_rate', too_big: 'relay_big', too_many: 'relay_many',
+                  full: 'relay_full', bad_code: 'bad_code' };
+    const code = map[reason];
+    if (!code) return;
+    // a rate nudge is not worth a banner every time it happens
+    if (reason === 'rate' || reason === 'too_big') {
+      const now = Date.now();
+      if (this._lastRefuse && now - this._lastRefuse < 10000) return;
+      this._lastRefuse = now;
+      toast(this.failText(code).title, 'red');
+      return;
+    }
+    this.fail(code);
   },
 
   // Single funnel for everything that can go wrong, so nothing fails silently.
@@ -374,6 +396,11 @@ const Sync = {
       }
       if (msg.type === 'ping' && msg.id && this.me && msg.id !== this.me.id) {
         this.send({ type: 'pong', to: msg.id, t: msg.t });
+        return;
+      }
+      // the relay itself refusing something, rather than another player
+      if (msg.type === 'relay_refused') {
+        this.onRefused(msg.reason);
         return;
       }
       this.onMessage(msg);

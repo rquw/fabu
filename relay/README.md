@@ -35,3 +35,29 @@ cd relay
 npm install
 PORT=8472 node server.js
 ```
+
+## What the relay enforces (added 2026-08)
+
+The relay is deliberately ignorant of music: it does not know what a note is,
+who the host is, or what the room rules are. That is the app's job. But it is
+the only place that can enforce anything against a MODIFIED client, because a
+modified client simply skips whatever the app would have checked.
+
+- **A socket only reaches the room it joined.** Previously any message carrying
+  a `room` field was broadcast to that room, so anyone who knew a room code
+  could inject into it without ever joining. Nothing the host does could stop
+  that, because host moderation only applies to people who actually joined.
+- **Room codes must match `[A-Z0-9]{4,12}`.**
+- **Caps:** 120 sockets per room, 12 sockets per IP, 512 KB per ordinary
+  message, 12 MB for a project state (which carries samples).
+- **Rate budget** per socket per second (150 messages / 6 MB). Bursts are
+  dropped, repeated bursts close the socket, because one burst is usually a
+  laggy connection catching up.
+- Refusals are sent back as `{type:'relay_refused', reason}` and the app turns
+  them into real messages.
+- `GET /health` returns room and client counts.
+
+**Still not solved:** there is no identity. Anyone with a room code can join,
+and the relay cannot tell one person from another, so a banned user can rejoin
+under a new name. Fixing that properly needs accounts and signed room tokens,
+which is a bigger piece of work than this file.
