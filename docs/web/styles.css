@@ -1660,13 +1660,52 @@ input[type="range"].locked { opacity: 0.45; filter: saturate(0.4); }
 .fx-item:active { cursor: grabbing; }
 .fx-item .ic { width: 14px; height: 14px; color: var(--accent); }
 .clip.fx-over { outline: 2px dashed var(--accent); outline-offset: 1px; }
-.clip-fx-badge {
-  position: absolute; left: 3px; bottom: 3px;
-  padding: 0 5px; border-radius: 5px;
-  background: rgba(0, 0, 0, 0.45); color: #ffd35e;
-  font-size: 9px; font-weight: 800; letter-spacing: 0.3px;
-  pointer-events: auto;
+/* ---- a pattern carrying effects ---- */
+/* Lit edge so you can tell across the whole timeline which patterns are
+   processed, without reading anything. */
+.clip.has-fx {
+  box-shadow: inset 0 0 0 1.5px rgba(255, 211, 94, .75),
+              0 0 12px rgba(255, 211, 94, .28);
 }
+.clip.has-fx::after {
+  content: '';
+  position: absolute; inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(115deg,
+    transparent 30%, rgba(255, 211, 94, .16) 47%, rgba(255,255,255,.10) 50%,
+    rgba(255, 211, 94, .16) 53%, transparent 70%);
+  background-size: 260% 100%;
+  animation: fxSheen 4.5s linear infinite;
+}
+@keyframes fxSheen { from { background-position: 130% 0; } to { background-position: -130% 0; } }
+@media (prefers-reduced-motion: reduce) { .clip.has-fx::after { animation: none; } }
+
+.clip-fx-badge {
+  position: absolute; left: 4px; bottom: 4px;
+  display: flex; align-items: center; gap: 4px;
+  max-width: calc(100% - 12px);
+  padding: 2px 7px 2px 5px; border-radius: 999px;
+  background: rgba(12, 10, 8, 0.72);
+  border: 1px solid rgba(255, 211, 94, .45);
+  color: #ffd35e;
+  font-size: 9px; font-weight: 800; letter-spacing: 0.2px;
+  pointer-events: auto;
+  backdrop-filter: blur(3px);
+}
+.clip-fx-badge .fx-names { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* a small four-point sparkle, drawn rather than an icon font */
+.fx-spark {
+  flex: 0 0 auto; width: 9px; height: 9px;
+  background: currentColor;
+  clip-path: polygon(50% 0%, 61% 39%, 100% 50%, 61% 61%, 50% 100%, 39% 61%, 0% 50%, 39% 39%);
+  animation: fxTwinkle 2.4s ease-in-out infinite;
+}
+@keyframes fxTwinkle {
+  0%, 100% { opacity: .75; transform: scale(.88) rotate(0deg); }
+  50%      { opacity: 1;   transform: scale(1.1) rotate(90deg); }
+}
+@media (prefers-reduced-motion: reduce) { .fx-spark { animation: none; } }
 .clip.group { border-style: dashed; }
 .clip-group-badge {
   position: absolute; right: 3px; bottom: 3px;
@@ -1951,22 +1990,20 @@ input[type="range"].locked { opacity: 0.45; filter: saturate(0.4); }
 /* a floating window opened from the home screen has to clear that overlay */
 .fwin.fwin-over-home { position: fixed; z-index: 500; }
 
-/* A card being dragged rocks gently, so it reads as "in hand" rather than
-   stuck to the list it came from. The pattern on the timeline gets its own
-   tilt from the drag itself, which is why this is only for the cards. */
-@keyframes cardSway {
-  0%   { transform: rotate(-2.2deg) translateY(0); }
-  50%  { transform: rotate(2.2deg) translateY(-1px); }
-  100% { transform: rotate(-2.2deg) translateY(0); }
+/* The card that follows the cursor is the one that moves. The one still in the
+   list just dims, so you can see where it came from. */
+.card-lifted { opacity: 0.35; }
+#dragGhostCard {
+  position: fixed; left: 0; top: 0; z-index: 9999;
+  pointer-events: none;
+  transform-origin: 50% -6px;          /* hangs from a point above it, like a tag on a string */
+  box-shadow: 0 14px 30px rgba(0,0,0,.5);
+  opacity: .95;
+  will-change: transform;
 }
-.card-sway {
-  animation: cardSway 0.85s ease-in-out infinite;
-  transform-origin: 50% 120%;
-  opacity: 0.75;
-  box-shadow: 0 8px 20px rgba(0,0,0,.35);
-}
-@media (prefers-reduced-motion: reduce) { .card-sway { animation: none; } }
+@media (prefers-reduced-motion: reduce) { #dragGhostCard { transform-origin: 50% 50%; } }
 
-/* clips lean into a drag; the transition keeps small nudges from looking jittery */
-.clip { transition: transform 90ms ease-out; }
-.clip.dragging, .clip.resizing { transition: none; }
+/* A dragged clip snaps between two lean angles; the transition is what makes
+   that a glide rather than a jump. */
+.clip { transition: transform 160ms cubic-bezier(.22,.9,.3,1); }
+.clip.resizing { transition: none; }
