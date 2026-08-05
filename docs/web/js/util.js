@@ -378,6 +378,21 @@ function sampleCatName(c) {
 const DragGhost = {
   el: null, x: 0, y: 0, angle: 0, vel: 0, lastX: 0, raf: null,
 
+  // One transparent pixel, made at startup rather than on the first drag. An
+  // image that has not finished decoding has naturalWidth 0, which the OS
+  // rejects, and rejecting it is what brought back its own icon.
+  pixel() {
+    let px = document.getElementById('dragPixel');
+    if (!px) {
+      px = document.createElement('img');
+      px.id = 'dragPixel';
+      px.alt = '';
+      px.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+      document.body.appendChild(px);
+    }
+    return px;
+  },
+
   start(sourceEl, e) {
     this.stop();
     const g = sourceEl.cloneNode(true);
@@ -388,12 +403,11 @@ const DragGhost = {
     this.el = g;
     this.x = e.clientX; this.y = e.clientY; this.lastX = e.clientX;
     this.angle = 0; this.vel = 0;
-    // hide the native drag image; a 1x1 transparent pixel is the portable way
-    try {
-      const px = document.createElement('canvas');
-      px.width = px.height = 1;
-      e.dataTransfer.setDragImage(px, 0, 0);
-    } catch (err) { /* older engines just keep their own ghost */ }
+    // Hide the native drag image. It has to be a real, rendered, in-document
+    // image: a detached canvas is never painted, so macOS discards it and falls
+    // back to its own generic icon (the globe that flies in from the corner).
+    try { e.dataTransfer.setDragImage(this.pixel(), 0, 0); }
+    catch (err) { /* older engines keep their own ghost, which is fine */ }
     this.draw();
     this.raf = requestAnimationFrame(() => this.tick());
   },
@@ -409,10 +423,10 @@ const DragGhost = {
     this.lastX = this.x;
     // a pendulum: the pointer's motion pushes it, gravity pulls it back to
     // hanging, and friction stops it ringing forever
-    const target = clamp(dx * 1.6, -34, 34);
+    const target = clamp(dx * 0.53, -11, 11);
     this.vel += (target - this.angle) * 0.18;
     this.vel *= 0.82;
-    this.angle = clamp(this.angle + this.vel, -38, 38);
+    this.angle = clamp(this.angle + this.vel, -12.5, 12.5);
     this.draw();
     this.raf = requestAnimationFrame(() => this.tick());
   },
@@ -430,6 +444,10 @@ const DragGhost = {
     this.el = null;
   }
 };
+// decode the stand-in pixel now, so it is ready before anyone drags anything
+if (document.body) DragGhost.pixel();
+else document.addEventListener('DOMContentLoaded', () => DragGhost.pixel());
+
 // dragover is the event that reliably carries coordinates while a drag is live
 document.addEventListener('dragover', (e) => DragGhost.move(e.clientX, e.clientY));
 document.addEventListener('drop', () => DragGhost.stop());

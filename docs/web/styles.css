@@ -2007,3 +2007,6 @@ input[type="range"].locked { opacity: 0.45; filter: saturate(0.4); }
    that a glide rather than a jump. */
 .clip { transition: transform 160ms cubic-bezier(.22,.9,.3,1); }
 .clip.resizing { transition: none; }
+
+/* the transparent stand-in handed to the OS in place of its own drag icon */
+#dragPixel { position: fixed; top: 0; left: 0; width: 1px; height: 1px; opacity: 0.01; pointer-events: none; }
