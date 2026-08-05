@@ -832,5 +832,7 @@
   "tip_pedal": "Haltepedal (Shift halten)",
   "midi_adopted": "{n} Noten importiert. Projekt auf {bpm} BPM, {sig} gesetzt.",
   "help_pedal": "Haltepedal",
-  "proll_pedal": "Ziehe den Streifen unter den Taktzahlen, um das Haltepedal zu halten"
+  "proll_pedal": "Ziehe den Streifen unter den Taktzahlen, um das Haltepedal zu halten",
+  "hint_drop_midi": "Ablegen, um dieses MIDI bei Takt {bar} in Patterns zu verwandeln.",
+  "hint_loop_key": "Drücke L, um die Wiederholung ein- und auszuschalten"
 }

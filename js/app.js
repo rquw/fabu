@@ -1708,25 +1708,42 @@ const App = {
 
   // vertical drag on a number field, cross-platform. Overlay captures the drag
   // so the cursor can leave the field and nothing else reacts mid-drag.
+  // A plain CLICK is not a drag: it falls through to the input, which focuses
+  // and selects itself so you can just type a number. The old version called
+  // preventDefault + blur on mousedown, which made typing impossible.
   bindVDrag(el, opts) {
     el.addEventListener('mousedown', (e) => {
+      // already typing in it: leave the mouse alone (text selection etc.)
+      if (document.activeElement === el) return;
+      // stop the browser focusing on mousedown; a clean click focuses in `up`
       e.preventDefault();
-      if (el.blur) el.blur();
-      let lastY = e.clientY, acc = 0;
-      const overlay = document.createElement('div');
-      overlay.className = 'vdrag-overlay';
-      document.body.appendChild(overlay);
+      let lastY = e.clientY, acc = 0, dragging = false, overlay = null;
       if (opts.onStart) opts.onStart();
-      const move = (ev) => { acc += ev.clientY - lastY; lastY = ev.clientY; opts.onMove(acc); };
+      const move = (ev) => {
+        acc += ev.clientY - lastY; lastY = ev.clientY;
+        if (!dragging && Math.abs(acc) < 4) return;   // give a click room to be a click
+        if (!dragging) {
+          dragging = true;
+          if (el.blur) el.blur();
+          overlay = document.createElement('div');
+          overlay.className = 'vdrag-overlay';
+          document.body.appendChild(overlay);
+        }
+        ev.preventDefault();
+        opts.onMove(acc);
+      };
       const up = () => {
         window.removeEventListener('mousemove', move);
         window.removeEventListener('mouseup', up);
-        overlay.remove();
-        if (opts.onEnd) opts.onEnd();
+        if (overlay) overlay.remove();
+        if (dragging && opts.onEnd) opts.onEnd();
+        if (!dragging && el.select) { el.focus(); el.select(); }   // it was a click: type away
       };
       window.addEventListener('mousemove', move);
       window.addEventListener('mouseup', up);
     });
+    // Enter or clicking away commits, like every other field
+    el.addEventListener('keydown', (e) => { if (e.key === 'Enter') el.blur(); });
   },
 
 

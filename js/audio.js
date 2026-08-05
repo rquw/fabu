@@ -1151,6 +1151,13 @@ const Engine = {
       this.jumpTo(S.loopStart);
       return;
     }
+    // The music has run out but the transport keeps rolling into silence: the
+    // player probably wants it to come round again and does not know about L.
+    // Said once per session, and only when there was a real song to run out of.
+    if (!S.loopOn && !this._loopHinted && songEndBeat() > 16 && this.currentBeat() > songEndBeat() + 1) {
+      this._loopHinted = true;
+      toast(tr('hint_loop_key', 'Press L to turn looping on and off'));
+    }
     // drop finished notes from the sounding map so it stays small
     if (this.sounding && this.sounding.size) {
       const t = this.ctx.currentTime;

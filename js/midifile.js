@@ -32,6 +32,31 @@ const MidiFile = {
     return this.GM[prog] || 'Part';
   },
 
+  // Pick the closest instrument fabu actually has for a part, going by what
+  // the file calls it. Only confident matches count; anything unclear falls
+  // back to Grand Piano rather than guessing a sound the user then hunts down.
+  matchInstrument(chan, prog, trackName) {
+    if (chan === 9) return 'drums';
+    const hay = ((trackName || '') + ' ' + (this.GM[prog] || '')).toLowerCase();
+    const rules = [
+      [/drum|percussion|kit\b/, 'drums'],
+      [/vibraphone|marimba|xylophone/, 'rvibes'],
+      [/glocken|celesta|music box|tubular|bell/, 'rglock'],
+      [/harp\b|harpsi/, 'rharp'],           // harpsichord is closer to plucked strings than to a grand
+      [/organ|accordion|harmonica/, 'organ'],
+      [/guitar|banjo|sitar|koto|shamisen|ukulele|mandolin|pizzicato|pluck/, 'pluck'],
+      [/synth bass|808|sub bass/, 'sub'],
+      [/bass\b|contrabass|tuba/, 'bass'],
+      [/violin|viola|cello|string|fiddle|orchestra/, 'strings'],
+      [/choir|voice|vocal|aah|ooh|pad\b|halo|sweep|atmosphere|new age|warm/, 'pad'],
+      [/trumpet|trombone|horn|brass|sax|clarinet|oboe|bassoon|flute|piccolo|recorder|whistle|ocarina|lead\b|square|saw\b/, 'synth'],
+      [/e[- ]?piano|rhodes|wurli|electric piano|clav/, 'epiano'],
+      [/piano|grand|keys/, 'rpiano']
+    ];
+    for (const [re, id] of rules) if (re.test(hay)) return id;
+    return 'rpiano';
+  },
+
   // ---------- parsing ----------
 
   // Reads a Standard MIDI File into { ppq, tempoBpm, tracks: [{ name, notes }] }
@@ -251,13 +276,20 @@ const MidiFile = {
 
       const track = makeTrack('midi');
       track.name = multi ? tr('midi_track_n', 'Imported Midi {n}', { n: i + 1 }) : tr('midi_track', 'Imported Midi');
-      // Always piano. A MIDI file is notes; picking sounds is your job.
-      track.instrument = 'rpiano';
+      // If what the file calls this part matches an instrument fabu has, use
+      // it (a part named Strings should sound like strings); anything unclear
+      // falls back to Grand Piano rather than guessing.
+      track.instrument = this.matchInstrument(mt.chan, mt.prog, mt.name);
       S.tracks.push(track);
 
       // The clip is labelled with what the file called this part, so you can
       // tell the trumpet line from the bass line when dragging lanes around.
-      const label = [mt.name, this.partName(mt.chan, mt.prog)].filter(Boolean).join(' ');
+      // Skip the GM name when the track name already says the same thing
+      // ("Grand Piano Piano" told nobody anything twice).
+      const gm = this.partName(mt.chan, mt.prog);
+      const label = (mt.name && mt.name.toLowerCase().includes(gm.toLowerCase().split(' ')[0].toLowerCase()))
+        ? mt.name
+        : [mt.name, gm].filter(Boolean).join(' ');
       const clip = {
         id: uid('clip'), kind: 'midi',
         by: typeof authorName === 'function' ? authorName() : null,
