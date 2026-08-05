@@ -943,5 +943,12 @@
   "chord_minor": "minor",
   "chord_dim": "diminished",
   "chord_add": "add",
-  "chord_other": "other"
+  "chord_other": "other",
+  "hist_evaded": "{name} was blocked: same connection as {what}",
+  "mp_evade_blocked": "Blocked a rejoin from {name}, on the same connection as {was}",
+  "mp_evade_allowed": "They can join now",
+  "mp_evade_why": "same connection as {was}",
+  "mp_evade_allow": "Let them in",
+  "mp_evade_keep": "Keep blocked",
+  "word_someone": "someone removed"
 }

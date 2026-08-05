@@ -943,5 +943,12 @@
   "chord_minor": "Moll",
   "chord_dim": "vermindert",
   "chord_add": "einfügen",
-  "chord_other": "andere"
+  "chord_other": "andere",
+  "hist_evaded": "{name} wurde blockiert: gleiche Verbindung wie {what}",
+  "mp_evade_blocked": "Wiedereintritt von {name} blockiert, gleiche Verbindung wie {was}",
+  "mp_evade_allowed": "Sie können jetzt beitreten",
+  "mp_evade_why": "gleiche Verbindung wie {was}",
+  "mp_evade_allow": "Reinlassen",
+  "mp_evade_keep": "Blockiert lassen",
+  "word_someone": "jemand Entferntes"
 }

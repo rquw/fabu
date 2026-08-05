@@ -12,7 +12,17 @@
 //   - rooms have a size cap, and one address cannot open endless sockets
 //   - messages have size caps, and every socket has a rate budget
 //   - dead sockets are reaped
+//   - every joiner carries an identity it did not write itself
+//
+// That last one matters more than it sounds. The host's moderation used to key
+// on the display name, which the person being moderated types in. So a kick
+// lasted exactly as long as it took to pick a new name. The relay is the only
+// party here that knows something about a connection that the connection cannot
+// lie about, so it stamps a connection key onto the frames that establish who
+// somebody is. The key is a keyed hash, never an address: the host learns that
+// two joiners share a connection, and nothing else about either of them.
 const http = require('http');
+const crypto = require('crypto');
 const { WebSocketServer } = require('ws');
 
 // ---- limits ----
@@ -25,6 +35,18 @@ const RATE_MSGS = 150;               // messages per window per socket
 const RATE_BYTES = 6 * 1024 * 1024;  // bytes per window per socket
 const STRIKES = 10;                  // rate violations tolerated before closing
 const ROOM_RE = /^[A-Z0-9]{4,12}$/;
+
+// Only the frames that say "this is who I am" are stamped. Cursors and note
+// edits go out untouched, so the common path stays a straight forward with no
+// re-serialisation, and compressed state frames stay opaque bytes.
+const STAMPED = new Set(['knock', 'presence', 'bye']);
+
+// A secret that outlives restarts keeps connection keys stable across deploys.
+// Without one the keys still work, they just all change when the relay does.
+const SECRET = process.env.RELAY_SECRET || crypto.randomBytes(32).toString('hex');
+function connKey(ip) {
+  return crypto.createHmac('sha256', SECRET).update('conn:' + ip).digest('hex').slice(0, 12);
+}
 
 const rooms = new Map();  // code -> Set(sockets)
 const perIp = new Map();  // ip -> socket count
@@ -86,6 +108,9 @@ wss.on('connection', (ws, req) => {
 
   ws.isAlive = true;
   ws.room = null;
+  ws.pk = connKey(ip);
+  ws.sid = crypto.randomBytes(6).toString('hex');
+  try { ws.send(JSON.stringify({ type: 'relay_hello', sid: ws.sid, pk: ws.pk })); } catch (e) {}
   ws.winStart = Date.now();
   ws.winMsgs = 0;
   ws.winBytes = 0;
@@ -136,9 +161,19 @@ wss.on('connection', (ws, req) => {
       if (!room) return;
       const set = rooms.get(room);
       if (!set) return;
+
+      // Identity frames are re-written with what WE know about the socket, so
+      // whatever the sender put in these two fields is overwritten rather than
+      // trusted. Everything else is forwarded byte for byte.
+      let out = data;
+      if (head && STAMPED.has(head.type)) {
+        head._pk = ws.pk;
+        head._sid = ws.sid;
+        out = JSON.stringify(head);
+      }
       for (const peer of set) {
         if (peer === ws || peer.readyState !== 1) continue;
-        try { peer.send(data); } catch (e) { /* never let one dead socket kill the loop */ }
+        try { peer.send(out); } catch (e) { /* never let one dead socket kill the loop */ }
       }
     } catch (e) { /* never crash the handler */ }
   });

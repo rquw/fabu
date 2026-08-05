@@ -27,7 +27,10 @@ const Sync = {
   selPlayers: new Set(), // host only: shift-selected player ids (for kick-all-except)
   kicked: new Set(),  // host only: ids we removed; their messages are ignored from then on
   history: [],        // host only: [{ ts, name, action, what }] notable room activity
-  bans: {},           // host only: name -> untilTs
+  bans: {},           // host only: name -> untilTs (display only; names are not identity)
+  banInstalls: {},    // host only: install id -> untilTs
+  banConns: {},       // host only: relay connection key -> { until, iids: [] }
+  allowInstalls: {},  // host only: install ids the host let back in by hand
   locks: new Map(),   // key -> { id, name, ts }
   myLocks: new Set(),
   cursors: new Map(), // id -> { beat, y, ts, name, color }
@@ -73,6 +76,8 @@ const Sync = {
     host_lost:    ['Host left the session', '{name} is the host now.'],
     room_gone:    ['The room is gone', 'Everyone else disconnected and the room closed.'],
     kicked_out:   ['You were removed from this room', ''],
+    evade_blocked: ['You cannot join this room',
+                    'Somebody on this internet connection was removed from it. If that was not you, ask the host to let you in.'],
     room_full:    ['That room is full', 'The host set a player limit and it has been reached.'],
     bad_code:     ['Invalid code', 'No room is using that code right now.'],
     denied:       ['The host declined your request', ''],
@@ -185,6 +190,29 @@ const Sync = {
 
   banKey(room) { return 'fabu.ban.' + room + '.' + ((Auth && Auth.user) || ''); },
 
+  // ---------- identity ----------
+  // A name is what somebody types, not who they are, so moderation cannot key
+  // on it. Two things stand in for identity instead:
+  //
+  //   installId  a random id kept in this browser's storage. Survives renaming,
+  //              which is the whole of the old hole. Clearing storage clears it.
+  //   _relayPk   a key the relay derives from the connection and stamps onto
+  //              knocks itself. The client never writes it, so it survives
+  //              clearing storage too. It is shared by everyone behind one
+  //              router, which is why it is only ever used as a second line.
+  installId() {
+    try {
+      let v = localStorage.getItem('fabu.installId');
+      if (!v) {
+        const b = new Uint8Array(16);
+        (crypto.getRandomValues ? crypto : window.crypto).getRandomValues(b);
+        v = [...b].map(x => x.toString(16).padStart(2, '0')).join('');
+        localStorage.setItem('fabu.installId', v);
+      }
+      return v;
+    } catch (e) { return 'anon'; }
+  },
+
   // ---------- per-user permissions (host is the source of truth) ----------
   // A user's effective right = their per-name override if set, else the room
   // default. The host broadcasts settings (incl. perms) via presence/admit, so
@@ -269,6 +297,7 @@ const Sync = {
     this.me.color = hashColor(this.me.name);
     this.peers.clear(); this.locks.clear(); this.cursors.clear();
     this.pendingReqs = []; this.pendingAudio = []; this.kicked = new Set(); this.sharedSamples.clear(); this.lastSent = '';
+    this.banInstalls = {}; this.banConns = {}; this.allowInstalls = {};
     this.rev = 0; this.pending = null;
     this.setStatus('connecting');
 
@@ -319,7 +348,7 @@ const Sync = {
         this.afterAdmit();
       } else {
         this.setStatus('connecting');
-        this.send({ type: 'knock', id: this.me.id, name: this.me.name, gz: this.gzSupported ? 1 : 0, ver: App.version });
+        this.send({ type: 'knock', id: this.me.id, name: this.me.name, iid: this.installId(), gz: this.gzSupported ? 1 : 0, ver: App.version });
         // nobody answers = the code goes nowhere. Silent disconnect, or the
         // "Left the room" toast instantly buries the "Invalid Code" one.
         this.knockTimer = setTimeout(() => {
@@ -525,7 +554,7 @@ const Sync = {
         this.showBanner('reconnected', 'ok');
       } else {
         this.admitted = false;
-        this.send({ type: 'knock', id: me.id, name: me.name, gz: this.gzSupported ? 1 : 0, ver: App.version });
+        this.send({ type: 'knock', id: me.id, name: me.name, iid: this.installId(), gz: this.gzSupported ? 1 : 0, ver: App.version });
         clearTimeout(this.knockTimer);
         this.knockTimer = setTimeout(() => {
           if (this.admitted) return;
@@ -742,8 +771,17 @@ const Sync = {
       }
 
       case 'presence': {
+        // Presence is the other way into the peer list, so it gets the same
+        // check the knock does. Otherwise being removed only lasts until the
+        // next presence tick.
+        if (this.isHost && m.id !== this.me.id && this.banCheck(m)) {
+          this.kicked.add(m.id);
+          this.send({ type: 'kick', to: m.id, until: (m.iid && this.banInstalls[m.iid]) || 0 });
+          return;
+        }
         const isNew = !this.peers.has(m.id);
-        this.peers.set(m.id, { name: m.name, color: m.color, host: m.host, joinTs: m.joinTs, lastSeen: Date.now(), gz: !!m.gz });
+        this.peers.set(m.id, { name: m.name, color: m.color, host: m.host, joinTs: m.joinTs,
+                               iid: m.iid || null, pk: m._pk || null, lastSeen: Date.now(), gz: !!m.gz });
         this.knockGz.delete(m.id);
         if (m.host && m.settings) {
           this.settings = m.settings;
@@ -771,6 +809,11 @@ const Sync = {
         break;
       }
 
+      case 'relay_hello':
+        // the relay introducing the connection to itself, not a peer message
+        this._relaySid = m.sid; this._relayPk = m.pk;
+        return;
+
       case 'knock':
         if (m.id) this.knockGz.set(m.id, !!m.gz);
         if (this.isHost) this.handleKnock(m);
@@ -789,7 +832,7 @@ const Sync = {
 
       case 'deny':
         if (m.to === this.me.id && !this.admitted) {
-          const codes = { full: 'room_full', closed: 'closed', denied: 'denied', banned: 'kicked_out' };
+          const codes = { full: 'room_full', closed: 'closed', denied: 'denied', banned: 'kicked_out', evade: 'evade_blocked' };
           if (m.until) localStorage.setItem(this.banKey(this.room), String(m.until));
           this._manualClose = true;              // a refusal is final, do not retry into it
           this.disconnect(true);
@@ -923,8 +966,67 @@ const Sync = {
     }
   },
 
+  // Is this knock from somebody the host already removed? Returns the deny
+  // reason, or null to let them through.
+  banCheck(m) {
+    const now = Date.now();
+    const iid = m.iid || null, pk = m._pk || null;
+    if (iid && this.allowInstalls[iid]) return null;   // the host let this one back in
+    if (iid && this.banInstalls[iid] > now) return 'banned';
+
+    // Same connection as somebody who was removed, but a different install:
+    // storage was cleared, or a fresh browser was opened. Refusing costs a
+    // housemate on the same router one round trip, and the host is told about
+    // it by name so they can wave them through.
+    const c = pk ? this.banConns[pk] : null;
+    if (c && c.until > now && iid && !c.iids.includes(iid)) {
+      c.iids.push(iid);
+      this.noteEvasion(m.name, iid, c.name);
+      return 'evade';
+    }
+    return null;
+  },
+
+  // Record who was removed, in a way a rename cannot undo.
+  rememberBan(peer, until) {
+    if (peer.iid) {
+      this.banInstalls[peer.iid] = until;
+      (this._banNames = this._banNames || {})[peer.iid] = peer.name;
+    }
+    if (peer.pk) {
+      const c = this.banConns[peer.pk] || { until: 0, iids: [], name: peer.name };
+      c.until = Math.max(c.until, until);
+      c.name = peer.name;
+      if (peer.iid && !c.iids.includes(peer.iid)) c.iids.push(peer.iid);
+      this.banConns[peer.pk] = c;
+    }
+  },
+
+  // Tell the host, once, that a removal was worked around, and offer the undo.
+  noteEvasion(name, iid, wasName) {
+    this.pushHistory({ ts: Date.now(), name: name || 'someone', action: 'evaded', what: wasName || '' });
+    if (this._evadeSeen && this._evadeSeen.has(iid)) return;
+    (this._evadeSeen = this._evadeSeen || new Set()).add(iid);
+    this.pendingEvades = this.pendingEvades || [];
+    this.pendingEvades.push({ iid, name: name || 'someone', wasName: wasName || '', ts: Date.now() });
+    toast(tr('mp_evade_blocked', 'Blocked a rejoin from {name}, on the same connection as {was}',
+      { name: name || 'someone', was: wasName || tr('word_someone', 'someone removed') }), 'red');
+    this.renderPanel();
+  },
+
+  // the host decided the block was collateral: let that install back in
+  allowEvader(iid) {
+    if (!this.isHost || !iid) return;
+    this.allowInstalls[iid] = true;
+    this.pendingEvades = (this.pendingEvades || []).filter(e => e.iid !== iid);
+    toast(tr('mp_evade_allowed', 'They can join now'), 'green');
+    this.renderPanel();
+  },
+
   handleKnock(m) {
     if (this.kicked && this.kicked.has(m.id)) { this.send({ type: 'deny', to: m.id, reason: 'banned' }); return; }
+    const why = this.banCheck(m);
+    if (why) { this.send({ type: 'deny', to: m.id, reason: why, until: (m.iid && this.banInstalls[m.iid]) || 0 }); return; }
     // Everyone in a room has to be on the same build. The project format and
     // the sync protocol both move between versions, so a mismatched client
     // does not fail cleanly, it corrupts things quietly. Send our version back
@@ -940,7 +1042,12 @@ const Sync = {
     }
     // someone we already know is just reconnecting: let them straight back in,
     // no approval round-trip, no "X joined" spam
-    if (this.peers.has(m.id)) { this.admit(m.id); return; }
+    if (this.peers.has(m.id)) {
+      const ex = this.peers.get(m.id);
+      if (m.iid) ex.iid = m.iid;
+      if (m._pk) ex.pk = m._pk;
+      this.admit(m.id); return;
+    }
     const ban = this.bans[m.name];
     if (ban && ban > Date.now()) { this.send({ type: 'deny', to: m.id, reason: 'banned', until: ban }); return; }
     if (this.peers.size + 1 >= this.settings.maxPlayers) { this.send({ type: 'deny', to: m.id, reason: 'full' }); return; }
@@ -1256,7 +1363,8 @@ const Sync = {
       kicked: tr('hist_kicked', '{name} was removed'),
       sound_approved: tr('hist_sound_ok', '{name} got sound "{what}" approved'),
       sound_denied: tr('hist_sound_no', '{name} had sound "{what}" denied'),
-      blocked: tr('hist_blocked', '{name} tried a change that was blocked ({what})')
+      blocked: tr('hist_blocked', '{name} tried a change that was blocked ({what})'),
+      evaded: tr('hist_evaded', '{name} was blocked: same connection as {what}')
     };
     return (map[e.action] || '{name}: {what}').replace('{name}', e.name).replace('{what}', e.what || '');
   },
@@ -1321,6 +1429,13 @@ const Sync = {
   },
   liftRoomBan(name) {
     if (this.bans) delete this.bans[name];
+    // The name ban is the visible one, but the identity bans are the ones that
+    // actually hold, so lifting has to reach them as well.
+    for (const [id, p] of this.peers) { if (p.name === name && p.iid) delete this.banInstalls[p.iid]; }
+    for (const iid of Object.keys(this.banInstalls)) {
+      if (this._banNames && this._banNames[iid] === name) delete this.banInstalls[iid];
+    }
+    for (const [pk, c] of Object.entries(this.banConns)) { if (c.name === name) delete this.banConns[pk]; }
     toast(tr('mp_unbanned', '{name} can rejoin', { name }), 'green');
     this.renderManage();
   },
@@ -1405,7 +1520,8 @@ const Sync = {
   sendPresence() {
     const p = {
       type: 'presence', id: this.me.id, name: this.me.name, color: this.me.color,
-      host: this.isHost, joinTs: this.me.joinTs, gz: this.gzSupported ? 1 : 0
+      host: this.isHost, joinTs: this.me.joinTs, iid: this.installId(),
+      gz: this.gzSupported ? 1 : 0
     };
     if (this.isHost) { p.settings = this.settings; p.started = this.started; }
     this.send(p);
@@ -1585,6 +1701,7 @@ const Sync = {
     if (!p) return;
     const until = durationMs > 0 ? Date.now() + durationMs : Date.now() + 100 * 365 * 24 * 3600e3;
     this.bans[p.name] = until;
+    this.rememberBan(p, until);     // a rename must not undo this
     this.kicked.add(peerId);        // do not take their word for it that they left
     this.send({ type: 'kick', to: peerId, until });
     this.peers.delete(peerId);
@@ -1619,6 +1736,7 @@ const Sync = {
       const pr = this.peers.get(id);
       if (!pr) continue;
       this.bans[pr.name] = until;
+      this.rememberBan(pr, until);
       this.kicked.add(id);
       this.send({ type: 'kick', to: id, until });
       this.peers.delete(id);
@@ -2045,7 +2163,7 @@ const Sync = {
         ${this.isHost ? `<button id="jamCycle" class="jam-cycle" data-tip="${tr('mp_cycle_tip', 'New code, old one gets made invalid but everyone stays')}"><svg class="ic"><use href="#i-redo"/></svg></button>` : ''}
       </div>
       <div id="jamPlayers"></div>
-      ${this.isHost && this.settings.approve ? `<button id="jamReqBtn" class="fbtn jam-req">${tr('mp_requests', 'Requests')}${this.pendingReqs.length ? `<span class="req-badge">${this.pendingReqs.length}</span>` : ''}</button>` : ''}
+      ${this.isHost && (this.settings.approve || (this.pendingEvades || []).length) ? `<button id="jamReqBtn" class="fbtn jam-req">${tr('mp_requests', 'Requests')}${this.pendingReqs.length + (this.pendingEvades || []).length ? `<span class="req-badge">${this.pendingReqs.length + (this.pendingEvades || []).length}</span>` : ''}</button>` : ''}
       ${this.isHost ? `
       <div class="jam-set">
         <label class="jam-check"><input type="checkbox" id="jamApprove" ${this.settings.approve ? 'checked' : ''}> ${tr('mp_approve', 'Approve joining')}</label>
@@ -2231,8 +2349,32 @@ const Sync = {
         <div class="modal-btns"><button id="reqClose" class="fbtn">${tr('close', 'Close')}</button></div>
       </div>`;
     const list = wrap.querySelector('#reqList');
+
+    // Blocked rejoins sit above the ordinary requests. These are people the
+    // room refused because somebody on their connection was removed, which is
+    // usually the right call and occasionally a housemate.
+    for (const e of (this.pendingEvades || [])) {
+      const row = document.createElement('div');
+      row.className = 'req-row req-blocked';
+      row.innerHTML = `<span class="req-who">
+          <span class="req-line"><span class="jam-pdot" style="background:${hashColor(e.name)}"></span><span class="jam-pname">${e.name}</span></span>
+          <span class="req-why">${tr('mp_evade_why', 'same connection as {was}', { was: e.wasName || tr('word_someone', 'someone removed') })}</span>
+        </span>`;
+      const ok = document.createElement('button');
+      ok.className = 'fbtn accent'; ok.textContent = tr('mp_evade_allow', 'Let them in');
+      ok.addEventListener('click', () => this.allowEvader(e.iid));
+      const no = document.createElement('button');
+      no.className = 'fbtn danger'; no.textContent = tr('mp_evade_keep', 'Keep blocked');
+      no.addEventListener('click', () => {
+        this.pendingEvades = this.pendingEvades.filter(x => x.iid !== e.iid);
+        this.renderRequests(); this.renderPanel();
+      });
+      row.append(ok, no);
+      list.appendChild(row);
+    }
+
     const shown = this.pendingReqs.filter(r => r.name.includes(filter.toLowerCase()));
-    if (!shown.length) {
+    if (!shown.length && !(this.pendingEvades || []).length) {
       list.innerHTML = `<div class="req-empty">${tr('mp_no_requests', 'No requests right now.')}</div>`;
     }
     for (const r of shown) {

@@ -2151,3 +2151,14 @@ body.shift-held .fx-item:not(.samp-item) { position: relative; overflow: visible
 .cs-lbl { font-size: 9.5px; color: var(--faint); margin-right: 2px; }
 .cs-alt { display: flex; align-items: center; gap: 4px; }
 .cs-alt.hidden { display: none; }
+
+/* a rejoin the room refused because of who else is on that connection */
+/* Two buttons and a reason do not fit one line at this width, so the row is
+   allowed to wrap rather than squeezing the name down to nothing. */
+.req-row.req-blocked { border-left: 2px solid var(--red); padding-left: 8px; flex-wrap: wrap; }
+.req-row .req-who { flex: 1 1 100%; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.req-row.req-blocked .fbtn { margin-left: auto; }
+.req-row.req-blocked .fbtn + .fbtn { margin-left: 0; }
+.req-row .req-line { display: flex; align-items: center; gap: 8px; }
+.req-row .req-why { font-size: 10px; color: var(--faint); margin-left: 16px; }
+.req-row.req-blocked .fbtn { flex: 0 0 auto; white-space: nowrap; }
