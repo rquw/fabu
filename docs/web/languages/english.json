@@ -858,5 +858,8 @@
   "instr_rtrumpet": "Trumpet",
   "instr_rflute": "Flute",
   "instr_rsax": "Saxophone",
-  "cat_wind": "Wind & Brass"
+  "cat_wind": "Wind & Brass",
+  "export_midi": "Export MIDI (the notes, for another program)",
+  "midi_export_empty": "There are no notes to export yet.",
+  "midi_export_done": "Exported {name}"
 }

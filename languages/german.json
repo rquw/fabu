@@ -858,5 +858,8 @@
   "instr_rtrumpet": "Trompete",
   "instr_rflute": "Flöte",
   "instr_rsax": "Saxophon",
-  "cat_wind": "Blas & Blech"
+  "cat_wind": "Blas & Blech",
+  "export_midi": "MIDI exportieren (die Noten, für ein anderes Programm)",
+  "midi_export_empty": "Es gibt noch keine Noten zum Exportieren.",
+  "midi_export_done": "{name} exportiert"
 }

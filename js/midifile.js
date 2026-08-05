@@ -214,6 +214,103 @@ const MidiFile = {
 
   isMidiFile(f) { return /\.(mid|midi|smf)$/i.test(f.name) || f.type === 'audio/midi' || f.type === 'audio/x-midi'; },
 
+  // ---------- export ----------
+  // Write the project back out as a Standard MIDI File, format 1: one chunk of
+  // tempo and time signature, then one chunk per instrument track. Audio and
+  // group tracks are skipped, because there are no notes in them to write.
+
+  PPQ: 480,
+
+  varint(n) {
+    const out = [n & 0x7f];
+    n >>= 7;
+    while (n > 0) { out.unshift((n & 0x7f) | 0x80); n >>= 7; }
+    return out;
+  },
+
+  chunk(tag, bytes) {
+    const len = bytes.length;
+    return [...tag].map(c => c.charCodeAt(0))
+      .concat([(len >> 24) & 255, (len >> 16) & 255, (len >> 8) & 255, len & 255], bytes);
+  },
+
+  // Collect a track's notes as absolute-tick events, with the pedal applied the
+  // same way playback applies it: as CC64, not by lengthening the notes. What
+  // you export is what you wrote.
+  trackEvents(track) {
+    const ppq = this.PPQ;
+    const ev = [];
+    for (const c of track.clips) {
+      if (c.kind !== 'midi' || !c.notes) continue;
+      const sp = c.speed || 1;
+      for (const n of c.notes) {
+        if (n.start >= c.length) continue;
+        const startBeat = c.start + n.start / sp;
+        const lenBeat = Math.min(n.length, c.length - n.start) / sp;
+        const on = Math.round(startBeat * ppq);
+        const off = Math.max(on + 1, Math.round((startBeat + lenBeat) * ppq));
+        const pitch = clamp(Math.round(n.pitch + (c.pitch || 0)), 0, 127);
+        const vel = clamp(Math.round((n.vel ?? 0.9) * 127), 1, 127);
+        ev.push({ t: on, order: 1, data: [0x90, pitch, vel] });
+        ev.push({ t: off, order: 0, data: [0x80, pitch, 0] });
+      }
+      for (const sp2 of pedalSpans(c)) {
+        ev.push({ t: Math.round((c.start + sp2.from) * ppq), order: 2, data: [0xb0, 64, 127] });
+        ev.push({ t: Math.round((c.start + sp2.to) * ppq), order: 0, data: [0xb0, 64, 0] });
+      }
+    }
+    // note-offs before note-ons at the same tick, so a repeated note retriggers
+    ev.sort((a, b) => a.t - b.t || a.order - b.order);
+    return ev;
+  },
+
+  build() {
+    const ppq = this.PPQ;
+    const tracks = (S.tracks || []).filter(t => t.kind === 'midi' && (t.clips || []).some(c => c.kind === 'midi' && c.notes && c.notes.length));
+    if (!tracks.length) return null;
+
+    // conductor track: tempo, time signature, name
+    let head = [];
+    const us = Math.round(60000000 / (S.bpm || 120));
+    head = head.concat(this.varint(0), [0xff, 0x51, 0x03, (us >> 16) & 255, (us >> 8) & 255, us & 255]);
+    const num = (S.timeSig && S.timeSig[0]) || 4;
+    const den = (S.timeSig && S.timeSig[1]) || 4;
+    head = head.concat(this.varint(0), [0xff, 0x58, 0x04, num, Math.round(Math.log2(den)), 24, 8]);
+    const title = (S.name || 'fabu').slice(0, 40);
+    head = head.concat(this.varint(0), [0xff, 0x03, title.length], [...title].map(c => c.charCodeAt(0) & 127));
+    head = head.concat(this.varint(0), [0xff, 0x2f, 0x00]);
+
+    // MThd is exactly six bytes: format, track count, division. Getting the
+    // length wrong here makes the file unreadable by everything, including us.
+    const ntrks = tracks.length + 1;
+    let out = this.chunk('MThd', [0, 1, (ntrks >> 8) & 255, ntrks & 255, (ppq >> 8) & 255, ppq & 255]);
+    out = out.concat(this.chunk('MTrk', head));
+
+    tracks.forEach((t, i) => {
+      let body = [];
+      const nm = (t.name || ('Track ' + (i + 1))).slice(0, 40);
+      body = body.concat(this.varint(0), [0xff, 0x03, nm.length], [...nm].map(c => c.charCodeAt(0) & 127));
+      const ch = Math.min(15, i < 9 ? i : i + 1);   // leave channel 10 to percussion
+      let last = 0;
+      for (const e of this.trackEvents(t)) {
+        body = body.concat(this.varint(Math.max(0, e.t - last)));
+        body = body.concat([e.data[0] | ch, e.data[1], e.data[2]]);
+        last = e.t;
+      }
+      body = body.concat(this.varint(0), [0xff, 0x2f, 0x00]);
+      out = out.concat(this.chunk('MTrk', body));
+    });
+    return new Uint8Array(out);
+  },
+
+  exportFile() {
+    const bytes = this.build();
+    if (!bytes) { toast(tr('midi_export_empty', 'There are no notes to export yet.'), 'red'); return; }
+    const name = ((S.name || 'fabu').replace(/[\\/:*?"<>|]/g, '') || 'fabu') + '.mid';
+    App.browserDownload(new Blob([bytes], { type: 'audio/midi' }), name);
+    toast(tr('midi_export_done', 'Exported {name}', { name }), 'green');
+  },
+
   // ---------- import ----------
 
   async importFiles(files, atBeat) {
