@@ -647,7 +647,7 @@
   "tut_ms_t": "Mute and solo",
   "tut_ms_b": "M silences a track. S plays only that track so you can focus on one sound.",
   "tut_instr_t": "Change the sound",
-  "tut_instr_b": "Pick another instrument from this menu, like keys, bass or drums.",
+  "tut_instr_b": "Pick another instrument from this menu, like drums, bass or strings.",
   "tut_add_t": "Stack more layers",
   "tut_add_b": "Add another track here to layer more instruments on top of each other.",
   "tut_samp_t": "Ready made loops",
@@ -831,7 +831,7 @@
   "toast_timesig": "Time signature: {v}",
   "tip_pedal": "Sustain pedal (hold Shift)",
   "midi_adopted": "{n} notes imported. Project set to {bpm} BPM, {sig}.",
-  "help_pedal": "Sustain pedal",
+  "help_pedal": "Sustain pedal, while the keyboard is open",
   "proll_pedal": "drag the strip under the bar numbers to hold the sustain pedal",
   "hint_drop_midi": "Drop to turn this MIDI into patterns at bar {bar}.",
   "hint_loop_key": "Press L to turn looping on and off",
@@ -841,5 +841,14 @@
   "tut_make_b": "Double click the empty lane next to the track to create a pattern, then double click the pattern to draw notes.",
   "hint_loop_made": "Press L to repeat this section",
   "hint_loop_repeat": "Playing that part a lot? Press L to repeat it automatically",
-  "hint_loop_escape": "Repeat is on, so the playhead stays in the loop. Press L to turn it off."
+  "hint_loop_escape": "Repeat is on, so the playhead stays in the loop. Press L to turn it off.",
+  "yes": "Yes",
+  "no": "No",
+  "midi_bpm_title": "Change BPM from {a} to {b}?",
+  "midi_bpm_body": "The MIDI file you imported is written at {b} BPM. Clicking \"No\" leaves the tempo at your old one, not synchronized to the MIDI file.",
+  "midi_bpm_changed": "Tempo set to {b} BPM",
+  "help_col_pedal_strip": "Drag under the bar numbers",
+  "help_pedal_edit": "Paint the sustain pedal in the piano roll",
+  "help_col_drop_midi": "Drop a MIDI file in",
+  "help_drop_midi": "Turns it into patterns you can edit"
 }
