@@ -1,4 +1,4 @@
--- fabu — the loop gallery, profiles and friends.
+-- fabu: the loop gallery, profiles and friends.
 -- Run this once in the Supabase SQL editor (project utyhyjeqzrqbnszljmdh).
 -- Safe to re-run: every statement is idempotent.
 --
