@@ -296,7 +296,7 @@ const Sync = {
         this.afterAdmit();
       } else {
         this.setStatus('connecting');
-        this.send({ type: 'knock', id: this.me.id, name: this.me.name });
+        this.send({ type: 'knock', id: this.me.id, name: this.me.name, gz: this.gzSupported ? 1 : 0 });
         // nobody answers = the code goes nowhere. Silent disconnect, or the
         // "Left the room" toast instantly buries the "Invalid Code" one.
         this.knockTimer = setTimeout(() => {
@@ -311,12 +311,57 @@ const Sync = {
   },
 
   // shared wiring for first connect and reconnects
+  // ---------- compressed state frames ----------
+  // A state message re-serializes the whole project on every change, which made
+  // it ~95% of the relay bill (measured: 31 KB per edit, 1.9 KB gzipped, 16x).
+  // Compressed frames are BINARY with a magic prefix, so an old client can
+  // never half-parse one as JSON; and they are only sent at all when everyone
+  // in the room has advertised support (via presence and knock), so an old
+  // client never receives one in the first place. The rev counter already
+  // rejects stale states, which also covers async compressions finishing out
+  // of order.
+  GZ_MAGIC: [0x46, 0x5a, 0x30, 0x31],   // "FZ01"
+  gzSupported: typeof CompressionStream !== 'undefined' && typeof DecompressionStream !== 'undefined',
+  knockGz: new Map(),                    // id -> gz flag from a knock we have seen
+
+  canGz() {
+    if (!this.gzSupported || !this.peers.size) return false;
+    for (const [, p] of this.peers) if (!p.gz) return false;
+    // someone announced themselves but has not shown up in presence yet: until
+    // they do, only send what we know they can read
+    for (const [, g] of this.knockGz) if (!g) return false;
+    return true;
+  },
+
+  async gzip(str) {
+    const cs = new CompressionStream('gzip');
+    const stream = new Blob([str]).stream().pipeThrough(cs);
+    return new Uint8Array(await new Response(stream).arrayBuffer());
+  },
+
+  async gunzip(u8) {
+    const ds = new DecompressionStream('gzip');
+    const stream = new Blob([u8]).stream().pipeThrough(ds);
+    return await new Response(stream).text();
+  },
+
+  isGzFrame(u8) {
+    return u8.length > 4 && this.GZ_MAGIC.every((b, i) => u8[i] === b);
+  },
+
   wireSocket() {
     this.ws.binaryType = 'arraybuffer';
     this.ws.onmessage = async (ev) => {
       let text;
       if (typeof ev.data === 'string') text = ev.data;
-      else if (ev.data instanceof ArrayBuffer) text = new TextDecoder().decode(ev.data);
+      else if (ev.data instanceof ArrayBuffer) {
+        const u8 = new Uint8Array(ev.data);
+        if (this.isGzFrame(u8)) {
+          try { text = await this.gunzip(u8.subarray(4)); } catch (e) { return; } // corrupt frame: drop it
+        } else {
+          text = new TextDecoder().decode(u8);
+        }
+      }
       else if (ev.data && ev.data.text) text = await ev.data.text();
       else return;
       let msg;
@@ -452,7 +497,7 @@ const Sync = {
         this.showBanner('reconnected', 'ok');
       } else {
         this.admitted = false;
-        this.send({ type: 'knock', id: me.id, name: me.name });
+        this.send({ type: 'knock', id: me.id, name: me.name, gz: this.gzSupported ? 1 : 0 });
         clearTimeout(this.knockTimer);
         this.knockTimer = setTimeout(() => {
           if (this.admitted) return;
@@ -609,6 +654,7 @@ const Sync = {
     this._hostWait = 0; this._electing = false; this.quality = 'good'; this.rtt = null;
     this._cursorsOffNoted = false;   // a new room deserves the explanation again
     this.peers.clear(); this.locks.clear(); this.cursors.clear(); this.remotePH.clear(); this.pendingReqs = [];
+    this.knockGz.clear();
     this.pendingAudio = []; this.history = [];
     for (const id of ['audioReview','histModal','manageModal']) { const el = document.getElementById(id); if (el) el.remove(); }
     this.myLocks.clear();
@@ -669,7 +715,8 @@ const Sync = {
 
       case 'presence': {
         const isNew = !this.peers.has(m.id);
-        this.peers.set(m.id, { name: m.name, color: m.color, host: m.host, joinTs: m.joinTs, lastSeen: Date.now() });
+        this.peers.set(m.id, { name: m.name, color: m.color, host: m.host, joinTs: m.joinTs, lastSeen: Date.now(), gz: !!m.gz });
+        this.knockGz.delete(m.id);
         if (m.host && m.settings) {
           this.settings = m.settings;
           this.started = !!m.started;
@@ -697,6 +744,7 @@ const Sync = {
       }
 
       case 'knock':
+        if (m.id) this.knockGz.set(m.id, !!m.gz);
         if (this.isHost) this.handleKnock(m);
         break;
 
@@ -1315,7 +1363,7 @@ const Sync = {
   sendPresence() {
     const p = {
       type: 'presence', id: this.me.id, name: this.me.name, color: this.me.color,
-      host: this.isHost, joinTs: this.me.joinTs
+      host: this.isHost, joinTs: this.me.joinTs, gz: this.gzSupported ? 1 : 0
     };
     if (this.isHost) { p.settings = this.settings; p.started = this.started; }
     this.send(p);
@@ -1323,6 +1371,11 @@ const Sync = {
 
   sweep() {
     const now = Date.now();
+    // knock entries resolve into presence or the knocker never joined; either
+    // way they must not gate compression forever
+    if (this.knockGz.size && !this._knockSweep) this._knockSweep = now;
+    if (this._knockSweep && now - this._knockSweep > 30000) { this.knockGz.clear(); this._knockSweep = 0; }
+    if (!this.knockGz.size) this._knockSweep = 0;
     let lostHost = false, changed = false;
     for (const [id, p] of this.peers) {
       // presence beats every 2s; only declare someone gone after ~6 missed beats
@@ -1709,6 +1762,18 @@ const Sync = {
     this._sizeWarned = false;
     this.rev += 1;
     this.lastSent = stateJson;
+    // Small messages are not worth the header; big ones shrink ~16x. rev is
+    // already claimed synchronously above, so a slower compression finishing
+    // after a newer one is rejected by the receiver's rev check.
+    if (json.length > 1024 && this.canGz()) {
+      this.gzip(json).then((gz) => {
+        if (!this.ws || this.ws.readyState !== 1) return;
+        const frame = new Uint8Array(4 + gz.length);
+        frame.set(this.GZ_MAGIC); frame.set(gz, 4);
+        try { this.ws.send(frame.buffer); this.lastTx = Date.now(); } catch (e) {}
+      }).catch(() => { try { this.ws.send(json); } catch (e) {} });
+      return;
+    }
     try { this.ws.send(json); } catch (e) {}
   },
 

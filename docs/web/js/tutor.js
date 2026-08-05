@@ -18,15 +18,34 @@ const Tutor = {
     setTimeout(() => this.start(), 380); // let the clip settle in first
   },
 
-  start() {
+  // A new project has no tracks at all now, so there is nothing to double
+  // click and the old entry point could never fire. Start here instead and
+  // point at the button that gets them their first instrument.
+  maybeStartEmpty() {
+    if (this.active || this.seen()) return;
+    if (UI.playing || !S || S.tracks.length) return;
+    setTimeout(() => { if (!S.tracks.length && !this.active) this.start(true); }, 700);
+  },
+
+  start(fromEmpty) {
     if (this.active) return;
     this.active = true;
     this.step = 0;
     this.steps = [
       {
-        target: () => document.querySelector('.clip.sel') || document.querySelector('.clip'),
-        title: tr('tut_clip_t', 'You made a pattern'),
-        body: tr('tut_clip_b', 'Double click it to open the note editor, then draw a melody by clicking on the grid.'),
+        target: () => document.querySelector('.thead-add button'),
+        title: tr('tut_first_t', 'Start with an instrument'),
+        body: tr('tut_first_b', 'Click Instrument to add your first track. Audio adds a lane for recordings and sound files.'),
+      },
+      {
+        target: () => document.querySelector('.lane') || document.querySelector('.clip'),
+        title: tr('tut_make_t', 'Make a pattern'),
+        body: tr('tut_make_b', 'Double click the empty lane next to the track to create a pattern, then double click the pattern to draw notes.'),
+      },
+      {
+        target: () => document.querySelector('.ms-btn.mute'),
+        title: tr('tut_ms_t', 'Mute and solo'),
+        body: tr('tut_ms_b', 'M silences a track. S plays only that track so you can focus on one sound.'),
       },
       {
         target: () => document.querySelector('.ms-btn.mute'),
@@ -54,6 +73,15 @@ const Tutor = {
         body: tr('tut_jam_b', 'Start a room and a friend can build the track live with you. That is it, have fun.'),
       },
     ];
+    // entering from "you just made a pattern" skips the two setup steps and
+    // says so, since they have plainly already done both
+    if (!fromEmpty) {
+      this.steps.splice(0, 2, {
+        target: () => document.querySelector('.clip.sel') || document.querySelector('.clip'),
+        title: tr('tut_clip_t', 'You made a pattern'),
+        body: tr('tut_clip_b', 'Double click it to open the note editor, then draw a melody by clicking on the grid.'),
+      });
+    }
     this._buildDom();
     this.show();
   },

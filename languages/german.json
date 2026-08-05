@@ -834,5 +834,9 @@
   "help_pedal": "Haltepedal",
   "proll_pedal": "Ziehe den Streifen unter den Taktzahlen, um das Haltepedal zu halten",
   "hint_drop_midi": "Ablegen, um dieses MIDI bei Takt {bar} in Patterns zu verwandeln.",
-  "hint_loop_key": "Drücke L, um die Wiederholung ein- und auszuschalten"
+  "hint_loop_key": "Drücke L, um die Wiederholung ein- und auszuschalten",
+  "tut_first_t": "Fang mit einem Instrument an",
+  "tut_first_b": "Klicke auf Instrument, um deine erste Spur anzulegen. Audio erstellt eine Spur für Aufnahmen und Sounddateien.",
+  "tut_make_t": "Erstelle ein Pattern",
+  "tut_make_b": "Doppelklicke die leere Spur neben dem Track, um ein Pattern zu erstellen, dann doppelklicke das Pattern, um Noten zu zeichnen."
 }

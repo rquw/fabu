@@ -834,5 +834,9 @@
   "help_pedal": "Sustain pedal",
   "proll_pedal": "drag the strip under the bar numbers to hold the sustain pedal",
   "hint_drop_midi": "Drop to turn this MIDI into patterns at bar {bar}.",
-  "hint_loop_key": "Press L to turn looping on and off"
+  "hint_loop_key": "Press L to turn looping on and off",
+  "tut_first_t": "Start with an instrument",
+  "tut_first_b": "Click Instrument to add your first track. Audio adds a lane for recordings and sound files.",
+  "tut_make_t": "Make a pattern",
+  "tut_make_b": "Double click the empty lane next to the track to create a pattern, then double click the pattern to draw notes."
 }

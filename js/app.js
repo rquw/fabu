@@ -368,12 +368,10 @@ const App = {
 
   newProject(announce = true) {
     if (UI.playing || UI.recording) { Engine.stopRecord && Engine.stopRecord(); Engine.stop && Engine.stop(); }
+    // A new project starts genuinely empty. Prefilled lanes look like a mess
+    // you have to clear out before you can start; the tutorial points at the
+    // Instrument button instead.
     S = freshProject();
-    const piano = makeTrack('midi'); piano.name = 'Grand Piano'; piano.instrument = 'rpiano';
-    const drums = makeTrack('midi'); drums.name = 'Drums'; drums.instrument = 'drums';
-    const bass = makeTrack('midi'); bass.name = '808 Bass'; bass.instrument = 'sub';
-    const audio = makeTrack('audio');
-    S.tracks.push(piano, drums, bass, audio);
     Undo.undoStack.length = 0;
     Undo.redoStack.length = 0;
     UI.playhead = 0;
@@ -389,6 +387,7 @@ const App = {
     KeysPanel.refreshTracks();
     updateUndoButtons();
     if (announce) toast(tr('toast_new_project', 'New project'));
+    if (typeof Tutor !== 'undefined') Tutor.maybeStartEmpty();
   },
 
   // A finished little track built from the built-in loops, so a first-timer has
