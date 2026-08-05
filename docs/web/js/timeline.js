@@ -730,38 +730,54 @@ const Timeline = {
   },
 
   drawClipCanvas(clip, el, cv) {
+    // `w` stays the FULL clip width, because every waveform and note position
+    // is mapped against it. Only the visible slice is allocated and painted:
+    // zoomed in on a long song a clip is hundreds of thousands of pixels wide,
+    // and a canvas past 65,535 device px fails to allocate SILENTLY, which is
+    // what made clips go blank when you zoomed in on a big project.
     const w = Math.max(2, el.clientWidth);
     const h = Math.max(2, el.clientHeight - 17);
     const dpr = window.devicePixelRatio || 1;
-    cv.width = w * dpr; cv.height = h * dpr;
-    cv.style.width = w + 'px'; cv.style.height = h + 'px';
+    const sc = this.scroller;
+    const vw = sc ? sc.clientWidth : w;
+    const clipLeft = clip.start * UI.zoom;
+    const scL = sc ? sc.scrollLeft : 0;
+    // one viewport of margin each side, quantized so small scrolls reuse it
+    let x0 = Math.max(0, Math.floor(((scL - clipLeft) - vw) / 256) * 256);
+    let x1 = Math.min(w, Math.ceil(((scL - clipLeft) + vw * 2) / 256) * 256);
+    if (x1 <= x0) { x0 = 0; x1 = Math.min(w, 256); }
+    const cw = Math.max(2, x1 - x0);
+    cv.width = Math.round(cw * dpr); cv.height = Math.round(h * dpr);
+    cv.style.width = cw + 'px'; cv.style.height = h + 'px';
+    cv.style.marginLeft = x0 + 'px';
     const ctx = cv.getContext('2d');
-    ctx.scale(dpr, dpr);
-    ctx.clearRect(0, 0, w, h);
+    // absolute clip coordinates keep working; the window is just a translation
+    ctx.setTransform(dpr, 0, 0, dpr, -x0 * dpr, 0);
+    ctx.clearRect(x0, 0, cw, h);
 
     if (clip.kind === 'group') {
       // a faux waveform built from the density of the grouped material, so it
       // reads like a bounced audio block
       const len = clip.length || 1;
-      const buckets = new Array(w).fill(0);
+      const buckets = new Array(Math.ceil(cw)).fill(0);   // window-sized, not clip-sized
       for (const child of clip.children || []) {
         const cs = child.clip.start || 0;
         if (child.clip.kind === 'midi' && child.clip.notes) {
           for (const n of child.clip.notes) {
-            const x0 = Math.max(0, Math.floor(((cs + n.start) / len) * w));
-            const x1 = Math.min(w, Math.ceil(((cs + n.start + Math.max(0.05, n.length)) / len) * w));
-            for (let x = x0; x < x1; x++) buckets[x] = Math.max(buckets[x], n.vel ?? 0.9);
+            const a = Math.max(x0, Math.floor(((cs + n.start) / len) * w));
+            const b = Math.min(x1, Math.ceil(((cs + n.start + Math.max(0.05, n.length)) / len) * w));
+            for (let x = a; x < b; x++) buckets[x - x0] = Math.max(buckets[x - x0], n.vel ?? 0.9);
           }
         } else {
-          const x0 = Math.max(0, Math.floor((cs / len) * w));
-          const x1 = Math.min(w, Math.ceil(((cs + clipBeats(child.clip)) / len) * w));
-          for (let x = x0; x < x1; x++) buckets[x] = Math.max(buckets[x], 0.7);
+          const a = Math.max(x0, Math.floor((cs / len) * w));
+          const b = Math.min(x1, Math.ceil(((cs + clipBeats(child.clip)) / len) * w));
+          for (let x = a; x < b; x++) buckets[x - x0] = Math.max(buckets[x - x0], 0.7);
         }
       }
       const mid = h / 2;
       ctx.fillStyle = 'rgba(0,0,0,0.5)';
-      for (let x = 0; x < w; x++) {
-        const bh = buckets[x] * mid * 0.88;
+      for (let x = x0; x < x1; x++) {
+        const bh = buckets[x - x0] * mid * 0.88;
         ctx.fillRect(x, mid - bh - 0.5, 1, bh * 2 + 1);
       }
       return;
@@ -790,7 +806,7 @@ const Timeline = {
       const mid = h / 2;
       ctx.fillStyle = 'rgba(0,0,0,0.5)';
       ctx.beginPath();
-      for (let x = 0; x < w; x++) {
+      for (let x = x0; x < x1; x++) {
         let mn = 1, mx = -1;
         const i0 = srcIdx(x);
         const i1 = Math.min(last, srcIdx(x + 1) + 1);
@@ -833,6 +849,7 @@ const Timeline = {
       for (const n of notes) {
         const x = (n.start / clip.length) * w;
         const nw = Math.max(2, (n.length / clip.length) * w - 1);
+        if (x + nw < x0 || x > x1) continue;    // outside the painted window
         const y = h - ((n.pitch - lo) / range) * h - 2;
         ctx.fillRect(x, y, nw, 3);
       }

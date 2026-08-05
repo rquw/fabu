@@ -3,7 +3,7 @@
   "productName": "fabu",
   "version": "1.2.1",
   "description": "The simplest music creation program out there.",
-  "author": "Fabio Schwaiger",
+  "author": "Fabio",
   "homepage": "https://rquw.github.io/fabu/",
   "license": "MIT",
   "main": "main.js",
@@ -24,6 +24,7 @@
   },
   "build": {
     "appId": "at.fabio.fabu",
+    "copyright": "Copyright © fabu",
     "productName": "fabu",
     "artifactName": "fabu.${ext}",
     "directories": {
@@ -108,6 +109,7 @@
       ]
     },
     "win": {
+      "publisherName": "Fabio",
       "target": [
         {
           "target": "nsis",

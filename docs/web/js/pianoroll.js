@@ -217,10 +217,10 @@ const PianoRoll = {
     const f = this.clip();
     const len = f ? f.clip.length : 4;
     // always keep a couple of empty bars past the end so you can scroll further
-    // and write there; _viewBeats grows as you scroll toward the edge
-    // cap the total width so a runaway scroll can't build a canvas so wide it
-    // exceeds the browser's limit (which silently breaks rendering / freezes)
-    const beats = Math.min(2048, Math.max(len + 8, this._viewBeats || 0));
+    // and write there; _viewBeats grows as you scroll toward the edge. This is
+    // only a div width now (the canvases window themselves), so the cap is
+    // just a sanity bound, not a browser canvas limit.
+    const beats = Math.min(16384, Math.max(len + 8, this._viewBeats || 0));
     return Math.max(384, beats * this.pxb);
   },
   // drum tracks use a fixed set of labeled lanes; melodic tracks are chromatic
@@ -294,6 +294,37 @@ const PianoRoll = {
     return ctx;
   },
 
+  // Allocate only the slice of a wide canvas that can actually be seen.
+  // A canvas as wide as the clip dies past the browser limit (65,535 device
+  // px, which a long song crosses easily: this is what broke Bohemian
+  // Rhapsody) and lags long before that from sheer backing-store size. The
+  // window is quantized to 256px so scrolling reuses the allocation instead
+  // of reallocating every frame, and the context is translated so all
+  // drawing keeps using absolute content coordinates.
+  windowCanvas(cv, W, H, dpr) {
+    const sc = this.wrap;
+    const vw = sc ? sc.clientWidth : W;
+    const scL = sc ? sc.scrollLeft : 0;
+    const x0 = Math.max(0, scL - vw), x1 = Math.min(W, scL + vw * 2);
+    const qx0 = Math.floor(x0 / 256) * 256;
+    const qx1 = Math.min(W, Math.ceil(x1 / 256) * 256);
+    const cw = Math.max(384, qx1 - qx0);
+    const dw = Math.round(cw * dpr), dh = Math.round(H * dpr);
+    if (cv.width !== dw || cv.height !== dh) {
+      cv.width = dw; cv.height = dh;
+      cv.style.width = cw + 'px'; cv.style.height = H + 'px';
+    }
+    if (cv._mL !== qx0) { cv._mL = qx0; cv.style.marginLeft = qx0 + 'px'; }
+    const ctx = cv.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, -qx0 * dpr, 0);
+    this._winX0 = qx0;
+    return ctx;
+  },
+
+  // content-space x for an event on a windowed canvas (its rect starts at the
+  // window's margin, not at content 0)
+  evX(e, rect) { return e.clientX - rect.left + (this._winX0 || 0); },
+
   redraw() {
     const f = this.clip();
     if (!f || !this.gridCv) return;
@@ -343,7 +374,7 @@ const PianoRoll = {
     const x0 = Math.max(0, scL - vw);
     const x1 = Math.min(W, scL + vw * 2);
     const ww = Math.max(0, x1 - x0);
-    const g = this.sizeCanvas(gc, W, H, dpr);
+    const g = this.windowCanvas(gc, W, H, dpr);
     g.fillStyle = '#161927';
     g.fillRect(x0, 0, ww, H);
     if (isDrums) {
@@ -434,7 +465,7 @@ const PianoRoll = {
     if (!rc) return;
     const dpr = window.devicePixelRatio || 1;
     const H = this.RULER_H;
-    const x = this.sizeCanvas(rc, W, H, dpr);
+    const x = this.windowCanvas(rc, W, H, dpr);
     rc.style.background = '#1b1e2b';
     const sc = this.wrap; const vw = sc ? sc.clientWidth : W; const scL = sc ? sc.scrollLeft : 0;
     const x0 = Math.max(0, scL - vw), x1 = Math.min(W, scL + vw * 2);
@@ -493,7 +524,7 @@ const PianoRoll = {
       const f = this.clip();
       if (!f) return;
       const r = this.rulerCv.getBoundingClientRect();
-      const local = clamp((clientX - r.left) / this.pxb, 0, f.clip.length);
+      const local = clamp((clientX - r.left + (this._winX0 || 0)) / this.pxb, 0, f.clip.length);
       Engine.seek(f.clip.start + local);
       this.syncPlayhead();
     };
@@ -504,7 +535,7 @@ const PianoRoll = {
     const beatAt = (clientX) => {
       const f = this.clip();
       const r = this.rulerCv.getBoundingClientRect();
-      return clamp((clientX - r.left) / this.pxb, 0, f ? f.clip.length : 0);
+      return clamp((clientX - r.left + (this._winX0 || 0)) / this.pxb, 0, f ? f.clip.length : 0);
     };
     // right-click the strip lifts the pedal over whatever you drag across
     this.rulerCv.addEventListener('contextmenu', (e) => {
@@ -559,7 +590,7 @@ const PianoRoll = {
     if (!vc || !f) return;
     const dpr = window.devicePixelRatio || 1;
     const H = this.VEL_H;
-    const v = this.sizeCanvas(vc, W, H, dpr);
+    const v = this.windowCanvas(vc, W, H, dpr);
     vc.style.background = '#12151f';
     const sc = this.wrap; const vw = sc ? sc.clientWidth : W; const scL = sc ? sc.scrollLeft : 0;
     const vX0 = Math.max(0, scL - vw), vX1 = Math.min(W, scL + vw * 2);
@@ -617,7 +648,7 @@ const PianoRoll = {
     gc.addEventListener('contextmenu', (e) => {
       e.preventDefault();
       const r = gc.getBoundingClientRect();
-      const n = this.noteAt(e.clientX - r.left, e.clientY - r.top);
+      const n = this.noteAt(this.evX(e, r), e.clientY - r.top);
       if (n) {
         const f = this.clip();
         // delete the whole selection if the note is part of a multi-selection
@@ -637,7 +668,7 @@ const PianoRoll = {
       const f = this.clip();
       if (!f) return;
       const r = gc.getBoundingClientRect();
-      const x = e.clientX - r.left;
+      const x = this.evX(e, r);
       const y = e.clientY - r.top;
       let n = this.noteAt(x, y);
 
@@ -651,7 +682,7 @@ const PianoRoll = {
         }
         const preSel = new Set(this.selNoteIds);
         const mmove = (ev) => {
-          const x1 = ev.clientX - r.left, y1 = ev.clientY - r.top;
+          const x1 = this.evX(ev, r), y1 = ev.clientY - r.top;
           const L = Math.min(x, x1), T = Math.min(y, y1), R = Math.max(x, x1), B = Math.max(y, y1);
           this._marquee = { L, T, R, B };
           const hits = new Set(preSel);
@@ -807,7 +838,7 @@ const PianoRoll = {
       let pushed = false;
       const apply = (ev) => {
         const vel = velFromY(ev.clientY - r.top);
-        const targets = useSel ? this.selectedNotes() : notesAtBeat((ev.clientX - r.left) / this.pxb);
+        const targets = useSel ? this.selectedNotes() : notesAtBeat((ev.clientX - r.left + (this._winX0 || 0)) / this.pxb);
         if (!targets.length) return;
         if (!pushed) { Undo.push('Velocity'); pushed = true; }
         for (const n of targets) n.vel = vel;

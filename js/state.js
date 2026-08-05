@@ -142,7 +142,7 @@ function makeTrack(kind) {
     id: uid('trk'),
     kind,
     name: isMidi ? 'Instrument ' + n : 'Audio ' + n,
-    instrument: isMidi ? 'keys' : null,
+    instrument: isMidi ? 'rpiano' : null,   // the sampled grand, not the synth 'keys'
     color: nextColor(),
     volume: 0.8,
     pan: 0,
