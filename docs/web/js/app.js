@@ -120,7 +120,7 @@ const App = {
     b.innerHTML = `
       <span class="upd-dot"></span>
       <div class="upd-text">
-        <div class="upd-title">${tr('update_available', 'A new version of fabu is out')}${version ? ' · v' + version : ''}</div>
+        <div class="upd-title">${tr('update_available', 'A new version of fabu is out')}${version ? ' v' + version : ''}</div>
         <div class="upd-note">${tr('update_note', 'Click update and fabu will install it for you.')}</div>
       </div>
       <button class="fbtn accent" id="updNow">${tr('update_now', 'Update')}</button>
@@ -135,7 +135,7 @@ const App = {
     b.querySelector('#updLater').addEventListener('click', () => b.remove());
   },
 
-  // the update finished downloading — ask when to restart so work can be saved
+  // the update finished downloading, so ask when to restart so work can be saved
   showRestartPrompt(backupPath) {
     const banner = document.getElementById('updateBanner');
     if (banner) banner.remove();
@@ -166,7 +166,7 @@ const App = {
     };
     wrap.querySelector('#rsNow').addEventListener('click', doRestart);
     // "in 1 minute" means "let me save first", so the modal has to get out of
-    // the way — it used to sit there blocking the whole app until it restarted
+    // the way. It used to sit there blocking the whole app until it restarted
     wrap.querySelector('#rsSoon').addEventListener('click', () => {
       wrap.remove();
       this.showRestartCountdown(60, doRestart);
@@ -589,7 +589,7 @@ const App = {
     }
     bar.innerHTML = `
       <button id="hpStop" class="hp-btn" aria-label="stop"><svg class="ic"><use href="#i-stop"/></svg></button>
-      <span class="hp-name">${tr('home_now_playing', 'Playing')} · ${name}</span>
+      <span class="hp-name">${tr('home_now_playing', 'Playing')}: ${name}</span>
       <button id="hpEdit" class="hp-edit">${tr('home_open_editor', 'Open editor')}</button>`;
     bar.querySelector('#hpStop').addEventListener('click', () => this.stopHomePreview());
     bar.querySelector('#hpEdit').addEventListener('click', () => { this.homePreviewing = false; const b = document.getElementById('homePlayer'); if (b) b.remove(); this.hideHome(); });
@@ -1218,7 +1218,7 @@ const App = {
     toast(tr('toast_ungrouped', 'Ungrouped'), 'green');
   },
 
-  // Flatten the selected clip(s) into a plain audio clip — exactly like an
+  // Flatten the selected clip(s) into a plain audio clip, exactly like an
   // audio file you dragged in. One-way (no "revert to pattern"); undo with Cmd Z.
   async convertToAudio() {
     const items = [...UI.selClipIds].map(getClip).filter(Boolean);
@@ -1450,7 +1450,7 @@ const App = {
           });
           inp.addEventListener('change', () => { inp._g = false; if (UI.playing) Engine.reschedule(); });
           row.append(lbl, inp, val);
-          // automation dot — keyframe this effect param over time
+          // automation dot: keyframe this effect param over time
           if (Engine.fxAutomatable(fx.type, k)) {
             const dot = document.createElement('button');
             const has = fx.autom && fx.autom[k] && fx.autom[k].length;
@@ -1687,7 +1687,7 @@ const App = {
         <div class="export-head">
           <div>
             <div class="modal-title">${tr('export_title', 'Export song')}</div>
-            <div class="export-meta">${tr('export_meta', '{name} · {time} · {n} tracks',
+            <div class="export-meta">${tr('export_meta', '{name}, {time}, {n} tracks',
               { name: ($('#projName').value || 'Untitled'), time: mmss, n: trackCount })}</div>
           </div>
         </div>
@@ -1908,7 +1908,7 @@ const App = {
 
     const bpm = $('#bpmInput');
     bpm.addEventListener('change', () => this.setBpm(parseFloat(bpm.value) || 120));
-    // drag the BPM number up/down to change it (no pointer lock — that never
+    // drag the BPM number up/down to change it (no pointer lock, which never
     // worked on macOS). A full-window overlay keeps the drag going anywhere.
     let bpmStart = 120, bpmPushed = false;
     this.bindVDrag(bpm, {
@@ -2047,8 +2047,8 @@ const App = {
         return;
       }
 
-      // Space always plays/pauses — even with a floating window, slider, checkbox
-      // or menu focused — unless the user is actually typing into a text field.
+      // Space always plays/pauses, even with a floating window, slider, checkbox
+      // or menu focused, unless the user is actually typing into a text field.
       const ae = document.activeElement;
       const textField = ae && (ae.tagName === 'TEXTAREA' || ae.isContentEditable ||
         (ae.tagName === 'INPUT' && /^(text|password|email|search|url|tel|number|)$/i.test(ae.type || 'text')));

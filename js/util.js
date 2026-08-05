@@ -376,7 +376,7 @@ function sampleCatName(c) {
 // follows the pointer and swings like something held at the top: the further it
 // lags behind your hand, the more it trails, and it settles when you stop.
 const DragGhost = {
-  el: null, x: 0, y: 0, angle: 0, vel: 0, lastX: 0, raf: null,
+  el: null, x: 0, y: 0, angle: 0, vel: 0, lastX: 0, raf: null, painting: false,
 
   // One transparent pixel, made at startup rather than on the first drag. An
   // image that has not finished decoding has naturalWidth 0, which the OS
@@ -393,6 +393,15 @@ const DragGhost = {
     return px;
   },
 
+  // Shift turns a drag into a brush: the card goes green with a plus, and the
+  // cursor becomes a brush, so the mode is obvious before you touch anything.
+  setPaint(on) {
+    if (on === this.painting) return;
+    this.painting = on;
+    document.body.classList.toggle('fx-painting', on);
+    if (this.el) this.el.classList.toggle('ghost-paint', on);
+  },
+
   start(sourceEl, e) {
     this.stop();
     const g = sourceEl.cloneNode(true);
@@ -403,6 +412,7 @@ const DragGhost = {
     this.el = g;
     this.x = e.clientX; this.y = e.clientY; this.lastX = e.clientX;
     this.angle = 0; this.vel = 0;
+    if (this.painting) g.classList.add('ghost-paint');
     // Hide the native drag image. It has to be a real, rendered, in-document
     // image: a detached canvas is never painted, so macOS discards it and falls
     // back to its own generic icon (the globe that flies in from the corner).
@@ -438,6 +448,7 @@ const DragGhost = {
   },
 
   stop() {
+    this.setPaint(false);
     if (this.raf) cancelAnimationFrame(this.raf);
     this.raf = null;
     if (this.el) this.el.remove();
@@ -448,8 +459,12 @@ const DragGhost = {
 if (document.body) DragGhost.pixel();
 else document.addEventListener('DOMContentLoaded', () => DragGhost.pixel());
 
-// dragover is the event that reliably carries coordinates while a drag is live
-document.addEventListener('dragover', (e) => DragGhost.move(e.clientX, e.clientY));
+// dragover is the event that reliably carries coordinates while a drag is live,
+// and the only one that reports the shift key during a drag
+document.addEventListener('dragover', (e) => {
+  DragGhost.move(e.clientX, e.clientY);
+  if (DragGhost.el) DragGhost.setPaint(e.shiftKey);
+});
 document.addEventListener('drop', () => DragGhost.stop());
 document.addEventListener('dragend', () => DragGhost.stop());
 window.DragGhost = DragGhost;

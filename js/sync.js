@@ -196,7 +196,7 @@ const Sync = {
   },
   // is a customAudio override still in force, or has its timer run out?
   overrideLive(ov) { return ov && !(ov.customAudioUntil && ov.customAudioUntil < Date.now()); },
-  // pure per-user resolution (ignores who the local user is) — used by the
+  // pure per-user resolution (ignores who the local user is), used by the
   // management panel to show any user's real permission state
   micRight(name) {
     const ov = this.permOverride(name);
@@ -716,7 +716,7 @@ const Sync = {
   onMessage(m) {
     // Never process our own message. The relay excludes the sending SOCKET, not
     // the sending user, so during a reconnect the old socket (not yet reaped by
-    // the server) receives what the new socket sends — and we would file
+    // the server) receives what the new socket sends, and we would file
     // ourselves as a second player, complete with our own host crown.
     if (m.id && this.me && m.id === this.me.id) return;
     // a kicked client that simply ignores the kick still gets ignored here
@@ -725,8 +725,8 @@ const Sync = {
     switch (m.type) {
       case 'state': {
         if (!this.admitted) return;
-        // The host is the authority on the project. Without this any client —
-        // including a modified one that skips its own permission checks — could
+        // The host is the authority on the project. Without this any client,
+        // including a modified one that skips its own permission checks, could
         // broadcast whatever it liked and everyone would apply it.
         if (this.isHost) {
           const why = this.judgeState(m);
@@ -1917,7 +1917,7 @@ const Sync = {
     wrap.innerHTML = `
       <div class="modal-card">
         <div class="modal-title">${tr('size_title', "I don't really know how you managed this.")}</div>
-        <div class="modal-sub">${tr('size_sub', "You've hit the file size limit for a shared project. You can export it as it is, or keep editing on your own until it is smaller — the others will wait.")}</div>
+        <div class="modal-sub">${tr('size_sub', "You've hit the file size limit for a shared project. You can export it as it is, or keep editing on your own until it is smaller, and the others will wait.")}</div>
         <div class="modal-btns" style="flex-direction:column;align-items:stretch">
           <button id="szExport" class="fbtn accent">${tr('size_export', 'Export as .wav')}</button>
           <button id="szWait" class="fbtn">${tr('size_wait', 'Let them wait')}</button>

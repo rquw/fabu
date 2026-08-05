@@ -62,7 +62,7 @@ html, body {
 /* Three columns with equal side tracks, so the transport sits in the true
    middle of the window. space-between could never centre it: the sides hold
    very different amounts, so the middle drifted hundreds of pixels right.
-   It also must never wrap — a second row was what made it look broken. */
+   It also must never wrap, because a second row was what made it look broken. */
 /* Flex, never wrapping. Equal grid columns looked right on paper but the tool
    side is far wider than the project side, so its track overflowed and sat on
    top of the transport. Instead the two sides are balanced by content (file and
@@ -86,7 +86,7 @@ html, body {
 body.is-mac #topbar { padding-left: 82px; }
 body.is-mac.is-fullscreen #topbar { padding-left: 14px; }
 
-/* a group never splits across rows — that's what made the bar look scrambled
+/* a group never splits across rows, which is what made the bar look scrambled
    when the window wasn't fullscreen. Narrow windows drop the labels, then let
    the tool row scroll sideways, instead of jumbling everything. */
 .tb-group { display: flex; align-items: center; gap: 6px; flex-wrap: nowrap; min-width: 0; }
@@ -837,7 +837,7 @@ kbd {
 
 /* ---------- Count-in overlay ---------- */
 
-/* subtle count-in badge, top-center — visible but not blocking the view */
+/* subtle count-in badge, top-center, visible but not blocking the view */
 #countOverlay {
   position: fixed;
   top: 74px;
@@ -961,7 +961,7 @@ kbd {
 #home::after {
   width: 44vw; height: 44vw; max-width: 560px; max-height: 560px;
   bottom: -16vh; left: -6vw;
-  /* warm amber, not teal — fabu's palette has no green */
+  /* warm amber, not teal, because fabu's palette has no green */
   background: radial-gradient(circle, rgba(216, 138, 74, 0.26), transparent 68%);
   animation: blobDriftB 32s ease-in-out infinite alternate;
 }
@@ -1015,7 +1015,7 @@ kbd {
 }
 .home-tag { font-size: 14px; color: var(--dim); font-weight: 500; margin-left: 3px; }
 
-/* labeled action cards — every option is clear at a glance, ordered by how
+/* labeled action cards, so every option is clear at a glance, ordered by how
    often you reach for it (New / Open / Multiplayer), example de-emphasized */
 .home-actions { display: flex; gap: 12px; flex-wrap: wrap; }
 .home-go {
@@ -1698,7 +1698,14 @@ input[type="range"].locked { opacity: 0.45; filter: saturate(0.4); }
   pointer-events: auto;
   backdrop-filter: blur(3px);
 }
-.clip-fx-badge .fx-names { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* the names are only shown while the effect is fresh; after that the badge is
+   just the sparkle, so a timeline of processed clips stays calm */
+.clip-fx-badge .fx-names {
+  overflow: hidden; white-space: nowrap;
+  max-width: 0; opacity: 0; margin-left: -4px;
+  transition: max-width .32s ease, opacity .25s ease, margin-left .32s ease;
+}
+.clip-fx-badge.fresh .fx-names { max-width: 130px; opacity: 1; margin-left: 0; }
 /* a small four-point sparkle, drawn rather than an icon font */
 .fx-spark {
   flex: 0 0 auto; width: 9px; height: 9px;
@@ -2009,3 +2016,33 @@ input[type="range"].locked { opacity: 0.45; filter: saturate(0.4); }
 
 /* the transparent stand-in handed to the OS in place of its own drag icon */
 #dragPixel { position: fixed; top: 0; left: 0; width: 1px; height: 1px; opacity: 0.01; pointer-events: none; }
+
+/* ---- painting effects (hold shift while dragging one) ---- */
+/* the brush cursor, drawn inline so there is no asset to load or go missing */
+body.fx-painting, body.fx-painting * {
+  cursor: url("data:image/svg+xml;utf8,\
+<svg xmlns='http://www.w3.org/2000/svg' width='30' height='30' viewBox='0 0 30 30'>\
+<g transform='rotate(-38 15 15)'>\
+<rect x='12' y='2' width='6' height='13' rx='1.6' fill='%23c8cbd6' stroke='%23202430' stroke-width='1.2'/>\
+<rect x='11' y='14' width='8' height='4' rx='1' fill='%238b90a0' stroke='%23202430' stroke-width='1.2'/>\
+<path d='M11.5 18 L15 27 L18.5 18 Z' fill='%234ad991' stroke='%23202430' stroke-width='1.2' stroke-linejoin='round'/>\
+</g></svg>") 15 27, copy !important;
+}
+/* the card in hand turns green with a plus, so the mode is unmistakable */
+#dragGhostCard.ghost-paint {
+  outline: 2px solid var(--green, #4ad991);
+  outline-offset: -2px;
+  box-shadow: 0 14px 30px rgba(0,0,0,.5), 0 0 20px rgba(74, 217, 145, .45);
+}
+#dragGhostCard.ghost-paint::after {
+  content: '+';
+  position: absolute; top: -9px; right: -9px;
+  width: 20px; height: 20px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--green, #4ad991); color: #0d1a13;
+  font-size: 15px; font-weight: 900; line-height: 1;
+  box-shadow: 0 2px 8px rgba(0,0,0,.45);
+}
+/* a clip the brush has just covered */
+.clip.fx-over { outline: 2px solid var(--accent); outline-offset: -2px; }
+body.fx-painting .clip.fx-over { outline-color: var(--green, #4ad991); }

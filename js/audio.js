@@ -146,7 +146,7 @@ const Engine = {
   voiceCap() { return this.ecoMode() ? 40 : 96; },
 
   // Every sounding voice registers here. Past the cap we steal the voices that
-  // are CLOSEST TO ENDING (least audible to cut) instead of the oldest — the
+  // are CLOSEST TO ENDING (least audible to cut) instead of the oldest. The
   // old "steal oldest" logic chopped sustained notes off mid-hold.
   registerVoice(h, endTime) {
     if (endTime) h._end = endTime;
@@ -159,7 +159,7 @@ const Engine = {
     }
   },
 
-  // ----- track chains: clips → input → EQ(3 band) → pan → gain → master -----
+  // ----- track chains: clips into input, then EQ (3 band), pan, gain, master -----
 
   buildChain(ac, dest, track) {
     const input = ac.createGain();
@@ -541,7 +541,7 @@ const Engine = {
       // straight to sustain, near-instant so it's just "already there" (no swell)
       g.gain.setValueAtTime(0, t);
       g.gain.linearRampToValueAtTime(p * SUS, t + 0.004);
-      // no filter sweep — it's mid-note, the filter has already settled
+      // no filter sweep, since it's mid-note, the filter has already settled
     } else {
       g.gain.setValueAtTime(0, t);
       g.gain.linearRampToValueAtTime(p, t + A);
@@ -585,7 +585,7 @@ const Engine = {
       oscs.push(o);
     }
     if (!noAttack) {
-      // hammer thock — the attack transient we skip for a mid-note start
+      // hammer thock: the attack transient we skip for a mid-note start
       const noise = ac.createBufferSource();
       noise.buffer = this.noise(ac); noise.loop = true;
       const hp = ac.createBiquadFilter(); hp.type = 'bandpass';
@@ -652,7 +652,7 @@ const Engine = {
   },
 
   // Drum kit: which sound depends on the note's pitch class
-  // C = kick · D = snare · E = clap · F/F# = closed hat · A/A# = open hat
+  // C = kick, D = snare, E = clap, F/F# = closed hat, A/A# = open hat
   // ----- synthesized one-shot sound effects (risers, hits, zaps…) -----
   // Each plays its FULL effect regardless of note length (stop is a no-op), so
   // dropping one anywhere just fires it.
@@ -869,7 +869,7 @@ const Engine = {
     return { curBeat: this.currentBeat(), time0: this.ctx.currentTime, beatToTime: (b) => this.beatToTime(b) };
   },
 
-  // A per-clip effect chain: the built-in drive → crush → filter sliders plus
+  // A per-clip effect chain: the built-in drive, crush and filter sliders plus
   // any dropped effects from clip.fx (reverb send, dampen, echo, …). Every note
   // or audio source of the clip routes through it. Returns `dest` unchanged
   // when the clip has nothing to apply. `automCtx` (optional) schedules any
@@ -1301,7 +1301,7 @@ const Engine = {
   // scheduled future events with a freshly collected (edited) set. So changing a
   // track's instrument, adding/moving/deleting future notes, etc. take hold for
   // everything ahead of the playhead, while notes in progress just play out
-  // naturally — no stutter, no re-triggering, no "simulated" re-attack.
+  // naturally: no stutter, no re-triggering, no "simulated" re-attack.
   reschedule() {
     if (!UI.playing || !this.ctx) return;
     // start just past the current scheduling horizon so we neither double a note
@@ -1311,7 +1311,7 @@ const Engine = {
     this.evIdx = 0;
   },
 
-  // signature of a note's *sound* — pitch, level, instrument and the clip's
+  // signature of a note's *sound*: pitch, level, instrument and the clip's
   // effects. If this changes, a note still ringing needs re-voicing to hear it.
   noteSig(t, c, n) {
     const fx = c.fx ? c.fx.map(f => f.type + JSON.stringify(f.p || {}) + JSON.stringify(f.autom || {})).join('|') : '';
@@ -1320,7 +1320,7 @@ const Engine = {
   },
 
   // A long note is already sounding and you change its clip's gain / transpose /
-  // drive / crush / filter / effects — re-voice just that note (seamless 4ms
+  // drive / crush / filter and effects, re-voice just that note (seamless 4ms
   // crossfade) so the change is actually heard, not only on the next note.
   applyLiveClipEdits() {
     if (!UI.playing || !this.ctx || !this.sounding || !this.sounding.size) return;
@@ -1352,7 +1352,7 @@ const Engine = {
   },
 
   // Any edit while the song plays (add/delete a clip or note, drop an effect,
-  // move something) reschedules from the current beat — debounced so a flurry
+  // move something) reschedules from the current beat, debounced so a flurry
   // of edits coalesces. This is what makes deletes stop sounding and effects
   // take hold live, for you AND remote collaborators.
   liveEdit() {
@@ -1760,7 +1760,7 @@ const Engine = {
           num.style.animation = 'none'; void num.offsetWidth; num.style.animation = '';
         }, Math.max(0, (t0 + i * spb - this.ctx.currentTime) * 1000));
       }
-      const downbeat = t0 + 4 * spb;   // the beat right after "4" — recording begins here
+      const downbeat = t0 + 4 * spb;   // the beat right after "4", where recording begins
       setTimeout(() => {
         overlay.classList.add('hidden');
         overlay.onmousedown = null;
@@ -1952,7 +1952,7 @@ const Engine = {
     const sr = 44100;
     const oc = new OfflineAudioContext(2, Math.ceil(lenSec * sr), sr);
 
-    // match the live master chain exactly — these used to differ (-8/6 offline
+    // match the live master chain exactly. These used to differ (-8/6 offline
     // vs -3/3 live), so every export came out more squashed than what you mixed
     const comp = oc.createDynamicsCompressor();
     comp.threshold.value = -3; comp.knee.value = 8; comp.ratio.value = 3;

@@ -458,7 +458,7 @@ const Windows = {
     nameRow.appendChild(nameInp);
 
     // A directly editable value field (no slider) with a generous range so you
-    // are not boxed in — type any number. `read` returns the display value from
+    // are not boxed in: type any number. `read` returns the display value from
     // the clip, `apply` writes the display value back.
     const numField = (labelText, read, { min, max, step = 1, unit = '', tip, clipAuto }, apply, undoLabel, automParam) => {
       const r = row(labelText);
@@ -594,8 +594,13 @@ const Windows = {
           e.dataTransfer.effectAllowed = 'copy';
           item.classList.add('card-lifted');
           DragGhost.start(item, e);
+          DragGhost.setPaint(e.shiftKey);
+          Timeline.beginBrush(type);
         });
-        item.addEventListener('dragend', () => item.classList.remove('card-lifted'));
+        item.addEventListener('dragend', () => {
+          item.classList.remove('card-lifted');
+          Timeline.endBrush();
+        });
         list.appendChild(item);
       }
       if (!list.children.length) list.innerHTML = `<div style="color:var(--faint);font-size:11.5px;padding:6px 2px">${tr('fx_none', 'No effect matches that.')}</div>`;
@@ -740,7 +745,7 @@ const Windows = {
       r.appendChild(inp);
       w.body.appendChild(r);
 
-      // microphone input picker (recording is raw — no noise suppression)
+      // microphone input picker (recording is raw, with no noise suppression)
       const micRow = document.createElement('div');
       micRow.className = 'frow';
       micRow.style.marginTop = '4px';

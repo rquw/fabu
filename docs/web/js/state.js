@@ -10,7 +10,7 @@ function freshProject() {
     app: 'fabu',
     version: 1,
     bpm: 120,
-    timeSig: [4, 4],  // [beats per bar, note value] — 3/4, 6/8 and friends
+    timeSig: [4, 4],  // [beats per bar, note value]. 3/4, 6/8 and friends
     snap: 1,          // grid in beats (0 = off)
     metronome: false,
     countIn: false,   // 1-2-3-4 before recording (off by default)
