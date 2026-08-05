@@ -5,8 +5,48 @@ const Windows = {
   wins: new Map(), // id -> { el, body, refresh }
   zTop: 30,
 
-  create(id, title, iconId, { x = 120, y = 90, width = null, height = null } = {}) {
+  // ---------- remembered geometry ----------
+  // Sizing a window to taste and losing it the moment you close it is its own
+  // small misery, so every window keeps its own position and size by id.
+
+  GEO_KEY: 'fabu.winGeo',
+
+  allGeo() {
+    try { return JSON.parse(localStorage.getItem(this.GEO_KEY) || '{}'); } catch (e) { return {}; }
+  },
+
+  saveGeo(id, el) {
+    if (!id || !el) return;
+    try {
+      const all = this.allGeo();
+      all[id] = { x: el.offsetLeft, y: el.offsetTop, w: el.offsetWidth, h: el.offsetHeight };
+      localStorage.setItem(this.GEO_KEY, JSON.stringify(all));
+    } catch (e) { /* private mode or quota: not worth breaking a window over */ }
+  },
+
+  // A window saved on a big display must not open off-screen on a small one,
+  // so everything is clamped back into the current viewport on the way out.
+  loadGeo(id, fallback) {
+    const g = this.allGeo()[id];
+    if (!g) return fallback;
+    const vw = window.innerWidth, vh = window.innerHeight;
+    const w = g.w ? clamp(g.w, 260, vw) : fallback.width;
+    const h = g.h ? clamp(g.h, 150, vh) : fallback.height;
+    return {
+      x: clamp(g.x, 0, Math.max(0, vw - 80)),
+      y: clamp(g.y, 0, Math.max(0, vh - 80)),
+      width: w, height: h
+    };
+  },
+
+  forgetGeo() {
+    try { localStorage.removeItem(this.GEO_KEY); } catch (e) {}
+  },
+
+  create(id, title, iconId, opts = {}) {
     this.close(id);
+    const { x = 120, y = 90, width = null, height = null } =
+      this.loadGeo(id, { x: opts.x ?? 120, y: opts.y ?? 90, width: opts.width ?? null, height: opts.height ?? null });
     const el = document.createElement('div');
     el.className = 'fwin';
     el.style.left = x + 'px';
@@ -40,6 +80,7 @@ const Windows = {
         el.classList.remove('dragging');
         window.removeEventListener('mousemove', move);
         window.removeEventListener('mouseup', up);
+        this.saveGeo(id, el);
       };
       window.addEventListener('mousemove', move);
       window.addEventListener('mouseup', up);
@@ -47,13 +88,13 @@ const Windows = {
     });
 
     const rec = { el, body: el.querySelector('.fwin-body'), refresh: null };
-    this._bindResize(el, rec);
+    this._bindResize(el, rec, id);
     this.wins.set(id, rec);
     return rec;
   },
 
   // drag the right edge, bottom edge, or corner to resize a window
-  _bindResize(el, rec) {
+  _bindResize(el, rec, id) {
     const mk = (cls, mode) => {
       const h = document.createElement('div');
       h.className = 'fwin-rz ' + cls;
@@ -73,6 +114,7 @@ const Windows = {
           window.removeEventListener('mousemove', move);
           window.removeEventListener('mouseup', up);
           if (rec.refresh) rec.refresh();
+          this.saveGeo(id, el);
         };
         window.addEventListener('mousemove', move);
         window.addEventListener('mouseup', up);

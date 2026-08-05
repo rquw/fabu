@@ -235,10 +235,57 @@ ipcMain.on('install-update', () => {
   }
 });
 
+// ---- Main window size and position ----
+// Sizing the app the way you like it and having it forget every launch is a
+// small daily annoyance, so the bounds are kept in userData and restored.
+const WIN_STATE = () => path.join(app.getPath('userData'), 'window-state.json');
+
+function readWindowState() {
+  const def = { width: 1440, height: 900 };
+  let s;
+  try { s = JSON.parse(fs.readFileSync(WIN_STATE(), 'utf8')); } catch (e) { return def; }
+  if (!s || !s.width || !s.height) return def;
+  // A window remembered on a second monitor that is no longer plugged in would
+  // open somewhere invisible, so only keep a position still on a real display.
+  try {
+    const { screen } = require('electron');
+    const onScreen = s.x != null && s.y != null && screen.getAllDisplays().some((d) => {
+      const b = d.workArea;
+      return s.x < b.x + b.width && s.x + s.width > b.x && s.y < b.y + b.height && s.y + s.height > b.y;
+    });
+    if (!onScreen) { delete s.x; delete s.y; }
+  } catch (e) { delete s.x; delete s.y; }
+  return s;
+}
+
+function trackWindowState(w) {
+  let t = null;
+  const save = () => {
+    clearTimeout(t);
+    t = setTimeout(() => {
+      if (!w || w.isDestroyed()) return;
+      try {
+        // getBounds while maximized returns the maximized size, which would
+        // become the "restored" size forever after; keep the normal bounds
+        const b = w.isMaximized() || w.isFullScreen() ? w.getNormalBounds() : w.getBounds();
+        fs.writeFileSync(WIN_STATE(), JSON.stringify({
+          x: b.x, y: b.y, width: b.width, height: b.height,
+          maximized: w.isMaximized(), fullscreen: w.isFullScreen()
+        }));
+      } catch (e) { /* disk full or read-only profile: not worth a crash */ }
+    }, 400);
+  };
+  for (const ev of ['resize', 'move', 'maximize', 'unmaximize', 'enter-full-screen', 'leave-full-screen']) w.on(ev, save);
+  w.on('close', save);
+}
+
 function createWindow() {
+  const st = readWindowState();
   win = new BrowserWindow({
-    width: 1440,
-    height: 900,
+    x: st.x,
+    y: st.y,
+    width: st.width,
+    height: st.height,
     minWidth: 980,
     minHeight: 620,
     title: 'fabu',
@@ -250,6 +297,10 @@ function createWindow() {
       nodeIntegration: false
     }
   });
+  if (st.maximized) win.maximize();
+  if (st.fullscreen) win.setFullScreen(true);
+  trackWindowState(win);
+
   win.loadFile('index.html');
 
   // tell the renderer about fullscreen so it can reclaim the macOS traffic-light gutter
