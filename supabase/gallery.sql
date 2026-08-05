@@ -6,7 +6,8 @@
 -- recording. It stores notes, an instrument name and a length, so a typical
 -- one is a few hundred bytes. A hundred thousand of them is about 33 MB, well
 -- inside the free tier. Audio would not be, which is why nothing here accepts
--- audio: LOOP_MAX below is a hard cap in the database, not a client-side hope.
+-- audio: the 64 KB cap in fabu_loop_publish is enforced in the database, not
+-- left to the client to respect.
 --
 -- Every function here is security definer and every table is closed to direct
 -- access, so the anon key can only do the specific things these functions do.
