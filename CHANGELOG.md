@@ -1,5 +1,24 @@
 # Changelog
 
+## Unreleased
+
+**Your loops can go where other people will find them.**
+There is a gallery now. Put a loop in it from the loop editor, browse by newest, most liked, or only people you follow, and add anything you hear straight into your own loops with the author's name still on it. Profiles carry a line about you and a colour. Following each other both ways makes you friends.
+
+A shared loop is a recipe, not a recording: notes, an instrument name and a length, a few hundred bytes. That is why this can exist for free, and why nothing in it accepts audio. Reports are per person, three from different people takes a loop down on its own, and it can be put back.
+
+**The piano roll suggests what comes next.**
+Write a chord or two and it works out where they sit in the key, then offers the one that usually follows. Tab adds it, Shift+Tab picks a different option. It says "G major", not "V", because nobody should need theory to use it, and it can be turned off in Settings.
+
+**fabu works on a phone.**
+Not as a compromise: dragging patterns, the piano roll, the loop library and the mixer all work with a finger. Press and hold a loop to pick it up. The track list no longer eats the whole screen, the toolbar keeps every tool instead of quietly dropping them, and windows open as sheets along the bottom.
+
+**Being removed from a room now sticks.**
+Moderation used to key on the display name, which is typed in by the person being moderated, so a kick lasted as long as it took to pick a new one. It does not any more. If somebody clears their browser and comes back on the same connection, the host is told by name and gets a "let them in" button, in case it turns out to be somebody's brother on the same wifi.
+
+**Humanize, and real automation curves.**
+Nudge timing and loudness slightly so a part sounds played rather than programmed. Automation points can ease in and out instead of only running straight between each other.
+
 ## 1.2.4
 
 **Paint effects across patterns.**
