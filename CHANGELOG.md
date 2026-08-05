@@ -1,5 +1,36 @@
 # Changelog
 
+## 1.2.4
+
+**Paint effects across patterns.**
+Hold shift and the effect cards turn green with a plus. Drag one across the timeline and it lands on every pattern you pass over, once each, so you can put reverb on a whole section in one stroke. Let go and start again to apply the same effect a second time.
+
+**A pattern with effects on it now looks like one.**
+A quiet gold edge you can pick out across the whole timeline, and a badge that names what is on it for a few seconds before shrinking back out of the way. The names stay on hover. When an effect lands there is a single sweep across the pattern, and then it leaves you alone.
+
+**Exports cannot clip any more.**
+Stack enough loops and the mix could push past what a sound file can hold, and the result was crackle on the loudest moments. There is a ceiling on the way out now. Quiet and normal projects are completely untouched by it; it only catches what would have broken.
+
+**A loop for every instrument, and a jazz section.**
+Every instrument in the list now has at least one loop, so you can hear what each one sounds like without writing anything. The jazz set is built to be stacked: swing ride, brush shuffle, walking bass, piano comping, trumpet and sax written as call and answer, vibes and horn stabs. All of it is in the same key as the rest, so anything layers with anything.
+
+**Dragging feels like dragging.**
+The card follows your cursor and swings from your hand instead of sitting frozen, patterns lean the way you are moving them, and letting go scatters the card into dust rather than blinking it out.
+
+**A properly redone export window.**
+It tells you what you are exporting and how big each format will be, with the audio formats separated from MIDI and separate tracks, which are a different kind of thing entirely.
+
+**MIDI files come out with useful track names.**
+A track called Instrument 2 tells another program nothing, so if you have not named a track, the name of its longest pattern is used, or failing that the instrument.
+
+**Smaller things**
+- Settings opens from the home screen properly instead of behind it, and no longer suggests that per song options apply to everything.
+- The time signature moved onto the bar counter in the top bar, where it belongs. Click it.
+- Removed the Downlifter and Sax Stabs presets.
+- Sub Bass actually uses the 808 now, House Bass sits between the kicks instead of on top of them, and hi-hats have accents rather than being flat.
+- The Acoustic Groove loop could come out completely silent. That, and one instrument going quiet for a whole session after a hiccup while loading, are both fixed.
+- The macOS drag icon no longer flies in from the corner when you pick up a loop.
+
 ## 1.2.3
 
 **Everyone in a room needs the same version now.**

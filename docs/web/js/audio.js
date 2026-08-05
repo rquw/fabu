@@ -77,10 +77,39 @@ const Engine = {
   recStartBeat: 0,
   midiRec: null,        // { trackId, clip, startBeat, held: Map } while note-recording
 
+  // A last ceiling after the glue compressor. The compressor is deliberately
+  // gentle (-3 dB, 3:1) so it does not duck quiet notes, which means a project
+  // with a lot stacked on it can still leave peaks above 1.0, and anything
+  // above 1.0 clips the moment it becomes a file. This curve is exactly linear
+  // below 0.8, so ordinary material passes through untouched, and folds what is
+  // above that into the remaining headroom instead of letting it square off.
+  ceilingCurve() {
+    if (this._ceilCurve) return this._ceilCurve;
+    const n = 4096, c = new Float32Array(n);
+    const shape = (x) => {
+      const a = Math.abs(x), sg = x < 0 ? -1 : 1;
+      if (a <= 0.8) return x;
+      return sg * (0.8 + 0.2 * Math.tanh((a - 0.8) / 0.2));
+    };
+    for (let i = 0; i < n; i++) c[i] = shape((i / (n - 1)) * 2 - 1);
+    this._ceilCurve = c;
+    return c;
+  },
+  makeCeiling(ac) {
+    const ws = ac.createWaveShaper();
+    ws.curve = this.ceilingCurve();
+    // No oversampling on purpose. Oversampling filters ring, and that ringing
+    // overshoots the curve's own maximum, which is the one thing this node
+    // exists to prevent: measured, 4x still let 20 samples past 1.0. With none,
+    // the output is exactly a table lookup and cannot exceed the table.
+    ws.oversample = 'none';
+    return ws;
+  },
+
   ensureCtx() {
     if (this.ctx) return this.ctx;
     this.ctx = new AudioContext({ latencyHint: 'interactive' });
-    // A gentle glue/limiter, not a pumping compressor. The old aggressive
+  // A gentle glue/limiter, not a pumping compressor. The old aggressive
     // settings (thr -8, ratio 6) ducked quiet notes hard whenever one loud
     // sound hit, so notes seemed to "cut out"; this only catches the peaks.
     this.comp = this.ctx.createDynamicsCompressor();
@@ -92,10 +121,12 @@ const Engine = {
     this.master = this.ctx.createGain();
     this.master.gain.value = S.masterVol;
     this.master.connect(this.comp);
+    this.ceiling = this.makeCeiling(this.ctx);
     // a little room reverb makes the synths feel real
     this.rev = this.buildReverb(this.ctx, this.master, this.comp, 0.16);
     if (this.ecoMode()) { try { this.rev.pre.disconnect(this.rev.conv); } catch (e) {} }
-    this.comp.connect(this.ctx.destination);
+    this.comp.connect(this.ceiling);
+    this.ceiling.connect(this.ctx.destination);
     this.metroGain = this.ctx.createGain();
     this.metroGain.gain.value = 1;
     this.metroGain.connect(this.comp); // clicks stay dry
@@ -1911,7 +1942,9 @@ const Engine = {
       master.gain.value = S.masterVol;
       master.connect(comp);
       const rev = this.buildReverb(oc, master, comp, this.ecoMode() ? 0 : 0.16);
-      comp.connect(oc.destination);
+      const ceil = this.makeCeiling(oc);
+      comp.connect(ceil);
+      ceil.connect(oc.destination);
       const offFx = { curBeat: 0, time0: lead, beatToTime: (b) => lead + b * spb };
       this._offlineFx = offFx;
       const chain = this.buildChain(oc, master, t);
@@ -1961,7 +1994,9 @@ const Engine = {
     master.gain.value = S.masterVol;
     master.connect(comp);
     const rev = this.buildReverb(oc, master, comp, 0.16);
-    comp.connect(oc.destination);
+    const ceil = this.makeCeiling(oc);
+    comp.connect(ceil);
+    ceil.connect(oc.destination);
 
     // offline automation context so per-effect keyframes render into the export
     const offFx = { curBeat: 0, time0: lead, beatToTime: (b) => lead + b * spb };
