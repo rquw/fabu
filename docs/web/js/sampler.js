@@ -345,7 +345,7 @@ const Sampler = {
   deleteInstrument() {
     if (!this.editId) return;
     Undo.push('Delete instrument');
-    for (const t of S.tracks) if (t.instrument === this.editId) t.instrument = 'keys';
+    for (const t of S.tracks) if (t.instrument === this.editId) t.instrument = 'rpiano';
     delete S.instruments[this.editId];
     App.removeFromLibrary(this.editId);   // remove from the persistent library too
     Timeline.render();

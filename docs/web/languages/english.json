@@ -54,7 +54,6 @@
   "snap_bar": "Bar",
   "snap_beat": "Beat",
   "snap_off": "Off",
-  "instr_keys": "Keys",
   "instr_synth": "Synth Lead",
   "instr_bass": "Bass",
   "instr_pluck": "Pluck",
@@ -855,5 +854,9 @@
   "set_sec_project_note": "saved in the file",
   "set_sec_app": "fabu",
   "set_sec_app_note": "every project",
-  "set_timesig_moved": "Time signature is on the bar counter in the top bar. Click it."
+  "set_timesig_moved": "Time signature is on the bar counter in the top bar. Click it.",
+  "instr_rtrumpet": "Trumpet",
+  "instr_rflute": "Flute",
+  "instr_rsax": "Saxophone",
+  "cat_wind": "Wind & Brass"
 }

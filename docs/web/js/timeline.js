@@ -5,9 +5,10 @@ const TRACK_H = 84;
 
 // grouped, readable instrument picker (replaces the long flat dropdown)
 const INSTR_CATS = [
-  { key: 'cat_keys', label: 'Keys & Piano', ids: ['keys', 'epiano', 'organ', 'rpiano', 'rupright'] },
+  { key: 'cat_keys', label: 'Keys & Piano', ids: ['rpiano', 'rupright', 'epiano', 'organ'] },
   { key: 'cat_mallets', label: 'Mallets & Bells', ids: ['rvibes', 'rglock', 'bell'] },
   { key: 'cat_strings', label: 'Strings', ids: ['rharp', 'strings'] },
+  { key: 'cat_wind', label: 'Wind & Brass', ids: ['rflute', 'rsax', 'rtrumpet'] },
   { key: 'cat_synth', label: 'Synth', ids: ['synth', 'pad', 'pluck'] },
   { key: 'cat_bass', label: 'Bass', ids: ['sub', 'bass'] },
   { key: 'cat_drums', label: 'Drums', ids: ['drums', 'drumkit'] }

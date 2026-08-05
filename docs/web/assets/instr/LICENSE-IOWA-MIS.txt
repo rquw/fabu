@@ -1,0 +1,22 @@
+Trumpet, Flute and Saxophone samples
+====================================
+
+Source: University of Iowa Electronic Music Studios,
+        Musical Instrument Samples (MIS)
+        https://theremin.music.uiowa.edu/MIS.html
+Recorded by Lawrence Fritts, Director of the Electronic Music Studios and
+Professor of Composition, University of Iowa.
+
+Terms, quoted from the MIS website:
+
+  "Since 1997, these recordings have been freely available on this website and
+   may be downloaded and used for any projects, without restrictions."
+
+What was done to them: the originals are chromatic scales recorded note by note
+at several dynamic levels. The mezzo-forte, non-vibrato takes were split on
+silence into single notes, a handful were kept to cover each instrument's range,
+and those were trimmed to about 2.6 seconds, faded and encoded to MP3.
+
+The pitch of every note was measured rather than assumed, and the measured
+values are what fabu uses as sample roots, so each instrument plays at its
+recorded tuning.
