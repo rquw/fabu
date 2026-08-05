@@ -853,7 +853,6 @@
   "set_sec_project": "Dieser Song",
   "set_sec_project_note": "in der Datei gespeichert",
   "set_sec_app": "fabu",
-  "set_sec_app_note": "jedes Projekt",
   "set_timesig_moved": "Die Taktart sitzt am Taktzähler in der oberen Leiste. Klick ihn an.",
   "instr_rtrumpet": "Trompete",
   "instr_rflute": "Flöte",
@@ -890,5 +889,6 @@
   "ver_refused_body": "Die Person hat {theirs}, dieser Raum läuft auf {mine}. Alle müssen dieselbe Version haben. Ältere fabu-Versionen können das nicht anzeigen, du musst es ihr also selbst sagen.",
   "ver_copy": "Nachricht kopieren",
   "ver_copied": "Kopiert. Schick es ihr.",
-  "ver_share": "{who}: du brauchst fabu {need}, um diesem Raum beizutreten. Hier bekommst du es: {url}"
+  "ver_share": "{who}: du brauchst fabu {need}, um diesem Raum beizutreten. Hier bekommst du es: {url}",
+  "samp_cat_jazz": "Jazz"
 }

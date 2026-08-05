@@ -1534,18 +1534,32 @@ const Engine = {
 
   // ----- real drum kit (bundled CC0 samples, decoded on first use) -----
   DRUMKIT: {},
+  // Same rules as ensureMelodic: a failed piece must be retryable rather than
+  // silently missing for the rest of the session, and "ready" has to mean it.
   ensureDrumkit() {
     if (this._drumkitReady) return Promise.resolve();
     if (this._drumkitLoading) return this._drumkitLoading;
     this.ensureCtx();
     const names = ['kick', 'snare', 'clap', 'hat_closed', 'hat_open', 'tom'];
-    this._drumkitLoading = Promise.all(names.map(async (nm) => {
-      try {
-        const res = await fetch('assets/oneshots/' + nm + '.wav');
-        const buf = await res.arrayBuffer();
-        this.DRUMKIT[nm] = await this.ctx.decodeAudioData(buf);
-      } catch (e) { /* a missing piece just stays silent */ }
-    })).then(() => { this._drumkitReady = true; });
+    const todo = names.filter(nm => !this.DRUMKIT[nm]);
+    if (!todo.length) { this._drumkitReady = true; return Promise.resolve(); }
+    const failed = [];
+    this._drumkitLoading = Promise.all(todo.map(async (nm) => {
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          const res = await fetch('assets/oneshots/' + nm + '.wav');
+          if (!res.ok) throw new Error('http ' + res.status);
+          this.DRUMKIT[nm] = await this.ctx.decodeAudioData(await res.arrayBuffer());
+          return;
+        } catch (e) {
+          if (attempt) { failed.push(nm); console.warn('[fabu] drum sample failed to load:', nm, e.message); }
+          else await new Promise(r => setTimeout(r, 150));
+        }
+      }
+    })).then(() => {
+      this._drumkitLoading = null;
+      this._drumkitReady = failed.length === 0;
+    });
     return this._drumkitLoading;
   },
   makeDrumkitVoice(ac, dest, pitch, t, vel = 0.9) {
@@ -1826,6 +1840,7 @@ const Engine = {
     // the sampled instruments must actually be decoded before we render, or
     // the export comes out silent for every one of them
     await this.ensureMelodic();
+    await this.ensureDrumkit();
     const spb = this.spb();
     const lead = 0;   // no lead-in: the bounce must line up exactly with the group's start
     const sr = 44100;
@@ -1878,6 +1893,7 @@ const Engine = {
   async renderStems(onProgress) {
     this.ensureCtx();
     await this.ensureMelodic();   // same as renderSong: no samples, no sound
+    await this.ensureDrumkit();
     const spb = this.spb();
     const lead = 0.05;
     const lenSec = songEndBeat() * spb + 2;
@@ -1929,6 +1945,7 @@ const Engine = {
     // the sampled instruments must actually be decoded before we render, or
     // the export comes out silent for every one of them
     await this.ensureMelodic();
+    await this.ensureDrumkit();
     const spb = this.spb();
     const lead = 0.05;
     const lenSec = songEndBeat() * spb + 2;

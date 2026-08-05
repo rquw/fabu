@@ -853,7 +853,6 @@
   "set_sec_project": "This song",
   "set_sec_project_note": "saved in the file",
   "set_sec_app": "fabu",
-  "set_sec_app_note": "every project",
   "set_timesig_moved": "Time signature is on the bar counter in the top bar. Click it.",
   "instr_rtrumpet": "Trumpet",
   "instr_rflute": "Flute",
@@ -890,5 +889,6 @@
   "ver_refused_body": "They are on {theirs} and this room is on {mine}. Everyone has to be on the same version. Older versions of fabu cannot show them why, so you will need to tell them.",
   "ver_copy": "Copy message for them",
   "ver_copied": "Copied. Paste it to them.",
-  "ver_share": "{who}: you need fabu {need} to join this room. Get it here: {url}"
+  "ver_share": "{who}: you need fabu {need} to join this room. Get it here: {url}",
+  "samp_cat_jazz": "Jazz"
 }
