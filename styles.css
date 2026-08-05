@@ -2046,3 +2046,43 @@ body.fx-painting, body.fx-painting * {
 /* a clip the brush has just covered */
 .clip.fx-over { outline: 2px solid var(--accent); outline-offset: -2px; }
 body.fx-painting .clip.fx-over { outline-color: var(--green, #4ad991); }
+
+/* Shift held: effect cards show what dragging them will do before you start.
+   Loop cards are left alone, since painting is an effects idea. */
+body.shift-held .fx-item:not(.samp-item) {
+  border-color: var(--green);
+  box-shadow: 0 0 0 1px var(--green) inset, 0 0 14px rgba(120, 181, 106, .25);
+}
+body.shift-held .fx-item:not(.samp-item)::after {
+  content: '+';
+  position: absolute; top: -7px; right: -7px;
+  width: 17px; height: 17px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--green); color: #0d1a13;
+  font-size: 13px; font-weight: 900; line-height: 1;
+  box-shadow: 0 2px 6px rgba(0,0,0,.4);
+}
+body.shift-held .fx-item:not(.samp-item) { position: relative; overflow: visible; }
+
+/* ---- the dragged card coming apart on release ---- */
+@keyframes ghostDissolve {
+  0%   { opacity: .95; filter: blur(0px);   transform: var(--gt) scale(1); }
+  35%  { opacity: .55; filter: blur(1.5px); }
+  100% { opacity: 0;   filter: blur(7px);   transform: var(--gt) scale(1.06) translateY(-10px); }
+}
+#dragGhostCard.ghost-dissolve {
+  animation: ghostDissolve 0.52s cubic-bezier(.4,0,.7,1) forwards;
+  pointer-events: none;
+}
+@keyframes ghostDust {
+  0%   { opacity: 0;   transform: translate(0, 0) scale(1); }
+  15%  { opacity: .95; }
+  100% { opacity: 0;   transform: translate(var(--dx), var(--dy)) scale(.3); }
+}
+.ghost-dust {
+  position: fixed; z-index: 9999; pointer-events: none;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: ghostDust 0.62s cubic-bezier(.25,.6,.4,1) forwards;
+}
+.ghost-dust.paint { background: var(--green); }
