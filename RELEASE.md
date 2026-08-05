@@ -55,11 +55,23 @@ and auto-updater only see published releases. You can delete the old
   version and shows an "Update available" banner.
 - Clicking **Update** makes fabu download the full installer itself (with a
   percent counter), verify its sha512 against the release manifest, and only
-  then apply it: Windows runs the one-click installer silently and relaunches;
-  macOS swaps the .app bundle in place and relaunches. The installed app is
+  then apply it. macOS swaps the .app bundle in place and relaunches. Windows
+  quits first and starts the installer a few seconds later, detached, so the
+  app is completely gone before any file is replaced; a verified copy of the
+  installer is also left in Downloads as a way back in. The installed app is
   never touched until a complete verified copy is on disk, so a failed
   download can't break anything (worst case it falls back to opening the
   download page).
+- **Windows before 1.2.2 cannot update itself.** The NSIS one-click installer
+  uninstalls the old version before installing the new one, and the old code
+  let it run while the app was still holding its own files, so the install
+  failed after the uninstall had already happened and left the machine with no
+  app. The fix ships *in* 1.2.2, so it cannot rescue the update *into* 1.2.2:
+  tell Windows users on 1.2.1 or earlier to download that one from the site.
+  From 1.2.2 onward in-app updates take the new path.
+- **Not verified on real Windows.** The rewrite is reasoned from the failure
+  symptoms and compiles, but nobody has watched it update on a Windows machine
+  yet. Do that before trusting it.
 - Background/silent auto-install stays OFF on purpose — the app is unsigned,
   and electron-updater's differential background updates kept failing halfway
   (and once removed the app).
