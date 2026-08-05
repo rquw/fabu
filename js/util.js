@@ -447,14 +447,63 @@ const DragGhost = {
       `translate(${this.x}px, ${this.y}px) translate(-50%, -8px) rotate(${this.angle.toFixed(2)}deg)`;
   },
 
+  // Let go and the card comes apart rather than blinking out: it fades and
+  // drifts while a scatter of specks lifts off it. Short enough to read as a
+  // release, not a cutscene.
   stop() {
+    const wasPainting = this.painting;   // read before clearing it, for the dust colour
     this.setPaint(false);
     if (this.raf) cancelAnimationFrame(this.raf);
     this.raf = null;
-    if (this.el) this.el.remove();
-    this.el = null;
+    const el = this.el;
+    this.el = null;                       // stop the pointer driving it mid-dissolve
+    if (!el) return;
+    if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) { el.remove(); return; }
+
+    const r = el.getBoundingClientRect();
+    if (!r.width) { el.remove(); return; }
+    // the animation has to keep the position and lean it already had, so hand
+    // the current transform to the keyframes rather than overwriting it
+    el.style.setProperty('--gt', el.style.transform || 'none');
+    el.classList.add('ghost-dissolve');
+
+    // specks seeded across the card, weighted toward the trailing edge so it
+    // looks like it is coming apart rather than exploding from the middle
+    const n = Math.min(26, Math.max(12, Math.round(r.width / 9)));
+    const frag = document.createDocumentFragment();
+    for (let i = 0; i < n; i++) {
+      const d = document.createElement('div');
+      d.className = 'ghost-dust' + (wasPainting ? ' paint' : '');
+      const fx = Math.pow(Math.random(), 0.7);
+      d.style.left = (r.left + fx * r.width) + 'px';
+      d.style.top = (r.top + Math.random() * r.height) + 'px';
+      const size = 2 + Math.random() * 3;
+      d.style.width = d.style.height = size.toFixed(1) + 'px';
+      d.style.setProperty('--dx', ((Math.random() - 0.35) * 46).toFixed(1) + 'px');
+      d.style.setProperty('--dy', (-14 - Math.random() * 40).toFixed(1) + 'px');
+      d.style.animationDelay = (fx * 130).toFixed(0) + 'ms';
+      frag.appendChild(d);
+    }
+    document.body.appendChild(frag);
+    const dust = [...document.querySelectorAll('.ghost-dust')];
+    setTimeout(() => { el.remove(); for (const d of dust) d.remove(); }, 780);
   }
 };
+// Shift is the paint modifier, and it should be readable BEFORE you commit to a
+// drag: hold it and the effect cards show what shift-dragging them will do.
+// Tracked on the window so it survives focus moving between panels.
+(function trackShift() {
+  const set = (on) => {
+    if (document.body.classList.contains('shift-held') === on) return;
+    document.body.classList.toggle('shift-held', on);
+    if (DragGhost.el) DragGhost.setPaint(on);
+  };
+  window.addEventListener('keydown', (e) => { if (e.key === 'Shift') set(true); });
+  window.addEventListener('keyup', (e) => { if (e.key === 'Shift') set(false); });
+  // a lost window (alt-tab, a native dialog) must not leave it stuck on
+  window.addEventListener('blur', () => set(false));
+})();
+
 // decode the stand-in pixel now, so it is ready before anyone drags anything
 if (document.body) DragGhost.pixel();
 else document.addEventListener('DOMContentLoaded', () => DragGhost.pixel());

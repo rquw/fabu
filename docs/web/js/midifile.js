@@ -264,6 +264,34 @@ const MidiFile = {
     return ev;
   },
 
+  // What to call a track in the exported file. fabu tracks are very often left
+  // as "Instrument 2", which tells whoever opens this in another program
+  // nothing at all. So: use the track name when the user actually chose one,
+  // otherwise the name of its biggest pattern, otherwise the instrument. The
+  // biggest pattern is the one most likely to be the part, rather than a
+  // four bar fill someone dropped in at the end.
+  DEFAULT_TRACK_NAME: /^(instrument|audio|track)\s*\d*$/i,
+  DEFAULT_CLIP_NAME: /^(pattern|clip|p\d*|take\s*\d*)$/i,
+
+  exportName(track, i) {
+    const given = (track.name || '').trim();
+    if (given && !this.DEFAULT_TRACK_NAME.test(given)) return given;
+
+    // longest pattern that carries a name of its own
+    let best = null, bestLen = -1;
+    for (const c of track.clips || []) {
+      if (c.kind !== 'midi' || !c.notes || !c.notes.length) continue;
+      const cn = (c.name || '').trim();
+      if (!cn || this.DEFAULT_CLIP_NAME.test(cn)) continue;
+      const len = c.length || 0;
+      if (len > bestLen) { bestLen = len; best = cn; }
+    }
+    if (best) return best;
+
+    const instr = track.instrument && typeof INSTRUMENTS !== 'undefined' && INSTRUMENTS[track.instrument];
+    return instr || given || ('Track ' + (i + 1));
+  },
+
   build() {
     const ppq = this.PPQ;
     const tracks = (S.tracks || []).filter(t => t.kind === 'midi' && (t.clips || []).some(c => c.kind === 'midi' && c.notes && c.notes.length));
@@ -288,7 +316,7 @@ const MidiFile = {
 
     tracks.forEach((t, i) => {
       let body = [];
-      const nm = (t.name || ('Track ' + (i + 1))).slice(0, 40);
+      const nm = this.exportName(t, i).slice(0, 40);
       body = body.concat(this.varint(0), [0xff, 0x03, nm.length], [...nm].map(c => c.charCodeAt(0) & 127));
       const ch = Math.min(15, i < 9 ? i : i + 1);   // leave channel 10 to percussion
       let last = 0;
