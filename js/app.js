@@ -1576,6 +1576,7 @@ const App = {
           <button class="fbtn" data-fmt="mp3">MP3</button>
           <button class="fbtn" data-fmt="ogg"${oggOk ? '' : ' disabled'}>OGG</button>
         </div>
+        <button id="expMidi" class="fbtn" style="width:100%;margin-top:8px">${tr('export_midi', 'Export MIDI (the notes, for another program)')}</button>
         <button id="expStems" class="fbtn" style="width:100%;margin-top:8px">${tr('export_stems', 'Export stems (one file per track)')}</button>
         <div id="exportProg" class="export-prog hidden"><div id="exportBar"></div></div>
         <div id="exportStat" class="export-stat"></div>
@@ -1583,6 +1584,9 @@ const App = {
       </div>`;
     document.body.appendChild(wrap);
     const close = () => wrap.remove();
+    // MIDI is notes, not audio, so it needs none of the rendering machinery
+    const midiBtn = wrap.querySelector('#expMidi');
+    if (midiBtn) midiBtn.addEventListener('click', () => { MidiFile.exportFile(); close(); });
     wrap.querySelector('#exportCancel').addEventListener('click', close);
     wrap.addEventListener('mousedown', (e) => { if (e.target === wrap) close(); });
     wrap.querySelectorAll('[data-fmt]').forEach(b => b.addEventListener('click', () => {
