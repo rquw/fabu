@@ -272,33 +272,37 @@ function _chords(blocks) {
 
 const SAMPLE_LIB = [
   // --- drums (4 beats each) ---
+  // Hats carry accents on the downbeats. A row of identical 8ths reads as a
+  // machine; accenting 1 and 3 is what makes it feel like a groove.
   { id: 'dr_four', cat: 'drums', name: 'Four on the Floor', instrument: 'drums', length: 4,
-    notes: _drum({ k: 'X...X...X...X...', h: 'x.x.x.x.x.x.x.x.', s: '....X.......X...' }) },
+    notes: _drum({ k: 'X...X...X...X...', h: 'X.x.x.x.X.x.x.x.', s: '....X.......X...' }) },
   { id: 'dr_boom', cat: 'drums', name: 'Boom Bap', instrument: 'drums', length: 4,
-    notes: _drum({ k: 'X.....X...X.....', s: '....X.......X...', h: 'x.x.x.x.x.x.x.x.' }) },
+    notes: _drum({ k: 'X.....X...X.....', s: '....X.......X...', h: 'X.x.x.x.X.x.x.x.' }) },
   { id: 'dr_rock', cat: 'drums', name: 'Rock Beat', instrument: 'drums', length: 4,
-    notes: _drum({ k: 'X.......X.......', s: '....X.......X...', h: 'x.x.x.x.x.x.x.x.' }) },
+    notes: _drum({ k: 'X.......X.......', s: '....X.......X...', h: 'X.x.x.x.X.x.x.x.' }) },
   { id: 'dr_trap', cat: 'drums', name: 'Trap Hats', instrument: 'drums', length: 4,
-    notes: _drum({ k: 'X.........X.....', s: '........X.......', h: 'xxxxxxxxxxxxxxxx', o: '..............x.' }) },
+    notes: _drum({ k: 'X.........X.....', s: '........X.......', h: 'Xxxxxxx.Xxxxxxxx', o: '..............x.' }) },
   { id: 'dr_house', cat: 'drums', name: 'House Groove', instrument: 'drums', length: 4,
     notes: _drum({ k: 'X...X...X...X...', o: '..x...x...x...x.', c: '....X.......X...' }) },
   // real recorded kit (CC0 samples in assets/oneshots)
   { id: 'dr_acoustic', cat: 'drums', name: 'Acoustic Groove', instrument: 'drumkit', length: 4,
-    notes: _drum({ k: 'X.......X.......', s: '....X.......X...', h: 'x.x.x.x.x.x.x.x.' }) },
+    notes: _drum({ k: 'X.......X.......', s: '....X.......X...', h: 'X.x.x.x.X.x.x.x.' }) },
   { id: 'dr_acbap', cat: 'drums', name: 'Acoustic Boom Bap', instrument: 'drumkit', length: 4,
-    notes: _drum({ k: 'X.....X...X.....', s: '....X.......X...', h: 'x.x.x.x.x.x.x.x.', t: '.............x.x' }) },
+    notes: _drum({ k: 'X.....X...X.....', s: '....X.......X...', h: 'X.x.x.x.X.x.x.x.', t: '.............x.x' }) },
 
   // --- bass (low octave) ---
   { id: 'ba_walk', cat: 'bass', name: 'Walking Bass', instrument: 'bass', length: 4,
-    notes: _line([[0, 40, 0.9], [1, 43, 0.9], [2, 45, 0.9], [3, 47, 0.9]]) },
-  { id: 'ba_sub', cat: 'bass', name: 'Sub Bass', instrument: 'bass', length: 4,
-    notes: _line([[0, 36, 1.9], [2, 36, 1.9]]) },
+    notes: _line([[0, 40, 0.9, 0.95], [1, 43, 0.9, 0.8], [2, 45, 0.9, 0.9], [3, 47, 0.9, 0.8]]) },
+  // the 808 is a real instrument now, and this is what people mean by sub bass
+  { id: 'ba_sub', cat: 'bass', name: 'Sub Bass', instrument: 'sub', length: 4,
+    notes: _line([[0, 36, 1.9, 1], [2, 36, 1.9, 0.85]]) },
   { id: 'ba_off', cat: 'bass', name: 'Offbeat Bass', instrument: 'bass', length: 4,
     notes: _line([[0.5, 40, 0.45], [1.5, 40, 0.45], [2.5, 43, 0.45], [3.5, 45, 0.45]]) },
+  // sits between the kicks instead of doubling them, which is the point of it
   { id: 'ba_house', cat: 'bass', name: 'House Bass', instrument: 'bass', length: 4,
-    notes: _line([[0, 40, 0.4], [1, 40, 0.4], [2, 40, 0.4], [3, 40, 0.4]]) },
+    notes: _line([[0.5, 40, 0.4], [1.5, 40, 0.4], [2.5, 40, 0.4], [3.5, 43, 0.4]]) },
 
-  // --- melodic ---
+  // --- melodic (all in C major so anything here layers with anything else) ---
   { id: 'me_chords', cat: 'melodic', name: 'Piano Chords', instrument: 'rpiano', length: 4,
     notes: _chords([[0, [60, 64, 67], 1], [1, [57, 60, 64], 1], [2, [53, 57, 60], 1], [3, [55, 59, 62], 1]]) },
   { id: 'me_pad', cat: 'melodic', name: 'Warm Pad', instrument: 'strings', length: 4,
@@ -309,11 +313,43 @@ const SAMPLE_LIB = [
     notes: _chords([[0, [64, 67, 71], 1.5], [1.5, [62, 65, 69], 1.5], [3, [60, 64, 67], 1]]) },
   { id: 'me_bell', cat: 'melodic', name: 'Sparkle Melody', instrument: 'bell', length: 4,
     notes: _line([[0, 72, 0.5], [1, 76, 0.5], [2, 79, 0.5], [2.5, 76, 0.25], [3, 72, 1]]) },
+  { id: 'me_organ', cat: 'melodic', name: 'Organ Chords', instrument: 'organ', length: 4,
+    notes: _chords([[0, [55, 60, 64], 1.9], [2, [53, 57, 60], 1.9]]) },
+  { id: 'me_flute', cat: 'melodic', name: 'Flute Line', instrument: 'rflute', length: 4,
+    notes: _line([[0, 72, 0.9, 0.8], [1, 76, 0.45, 0.85], [1.5, 74, 0.45, 0.7], [2, 72, 0.9, 0.85], [3, 67, 0.9, 0.75]]) },
+
+  // --- jazz: a small section that works together, ii V I in C over two bars ---
+  // Swing lives in the ride: beats 1 to 4 plus the "a" of 2 and 4, which is the
+  // nearest a 16th grid gets to a triplet and is what makes it read as jazz.
+  { id: 'jz_swing', cat: 'jazz', name: 'Swing Ride', instrument: 'drumkit', length: 4,
+    notes: _drum({ h: 'X...X..xX...X..x', k: 'x.......x.......', s: '..........x.....' }) },
+  { id: 'jz_brush', cat: 'jazz', name: 'Brush Shuffle', instrument: 'drumkit', length: 4,
+    notes: _drum({ h: 'X..xx..xX..xx..x', s: '....x.......x...', k: 'x...............' }) },
+  // walks D F A B | G A B C, landing on the root of the I chord
+  { id: 'jz_walk', cat: 'jazz', name: 'Jazz Walking Bass', instrument: 'bass', length: 8,
+    notes: _line([[0, 38, 0.9, 0.95], [1, 41, 0.9, 0.8], [2, 45, 0.9, 0.9], [3, 47, 0.9, 0.8],
+                  [4, 43, 0.9, 0.95], [5, 45, 0.9, 0.8], [6, 47, 0.9, 0.9], [7, 48, 0.9, 0.85]]) },
+  // rootless voicings, so the bass keeps the bottom to itself
+  { id: 'jz_keys', cat: 'jazz', name: 'Jazz Comp (ii V I)', instrument: 'rpiano', length: 8,
+    notes: _chords([[0, [65, 69, 72, 76], 1.6], [2, [59, 62, 65, 69], 1.6], [4, [64, 67, 71, 74], 3.4]]) },
+  { id: 'jz_trumpet', cat: 'jazz', name: 'Trumpet Lead', instrument: 'rtrumpet', length: 8,
+    notes: _line([[0, 69, 0.45, 0.9], [0.5, 72, 0.45, 0.8], [1, 74, 0.45, 0.85], [1.5, 77, 0.45, 0.8],
+                  [2, 76, 0.45, 0.9], [2.5, 74, 0.45, 0.75], [3, 71, 0.45, 0.8], [3.5, 67, 0.45, 0.75],
+                  [4, 76, 1.4, 0.95], [5.5, 72, 2.2, 0.85]]) },
+  { id: 'jz_sax', cat: 'jazz', name: 'Sax Answer', instrument: 'rsax', length: 8,
+    notes: _line([[1.5, 60, 0.45, 0.8], [2, 62, 0.45, 0.85], [2.5, 65, 0.45, 0.8], [3, 67, 0.9, 0.9],
+                  [4.5, 64, 0.45, 0.8], [5, 62, 0.45, 0.75], [5.5, 60, 2, 0.85]]) },
+  // both horns on the same short hits, the sound of a horn section
+  { id: 'jz_stabs', cat: 'jazz', name: 'Horn Stabs', instrument: 'rtrumpet', length: 4,
+    notes: _chords([[0, [72, 76], 0.3], [1.5, [74, 77], 0.3], [2.5, [71, 76], 0.3], [3, [72, 79], 0.7]]) },
+  { id: 'jz_saxstabs', cat: 'jazz', name: 'Sax Stabs', instrument: 'rsax', length: 4,
+    notes: _chords([[0, [60, 64], 0.3], [1.5, [62, 65], 0.3], [2.5, [59, 64], 0.3], [3, [60, 67], 0.7]]) },
 
   // --- one-shot sound effect ---
   { id: 'fx_downer', cat: 'fx', name: 'Downlifter', instrument: 'sfx_downer', length: 4, notes: [{ pitch: 60, start: 0, length: 4, vel: 0.9 }] }
 ];
-const SAMPLE_CATS = ['drums', 'bass', 'melodic', 'fx'];
+const SAMPLE_CATS = ['drums', 'bass', 'melodic', 'jazz', 'fx'];
 function sampleCatName(c) {
-  return tr('samp_cat_' + c, c === 'drums' ? 'Drums' : c === 'bass' ? 'Bass' : c === 'melodic' ? 'Melodic' : 'Sound FX');
+  const fallback = { drums: 'Drums', bass: 'Bass', melodic: 'Melodic', jazz: 'Jazz', fx: 'Sound FX' };
+  return tr('samp_cat_' + c, fallback[c] || c);
 }

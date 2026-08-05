@@ -53,6 +53,11 @@ const Windows = {
     el.style.top = y + 'px';
     if (width) el.style.width = width + 'px';
     if (height) { el.style.height = height + 'px'; el.style.maxHeight = 'none'; }
+    // The home screen is a full-screen overlay above the workspace, so a window
+    // parented to the workspace opens behind it. Put it on the body and lift it
+    // over the overlay while home is up.
+    const overHome = typeof App !== 'undefined' && App.homeVisible && App.homeVisible();
+    if (overHome) el.classList.add('fwin-over-home');
     el.innerHTML = `
       <div class="fwin-head">
         <svg class="ic"><use href="#${iconId}"/></svg>
@@ -60,7 +65,7 @@ const Windows = {
         <button class="fwin-close" data-tip="Close window"><svg class="ic"><use href="#i-x"/></svg></button>
       </div>
       <div class="fwin-body"></div>`;
-    $('#workspace').appendChild(el);
+    (overHome ? document.body : $('#workspace')).appendChild(el);
 
     el.addEventListener('mousedown', () => { el.style.zIndex = ++this.zTop; });
     el.querySelector('.fwin-close').addEventListener('click', () => this.close(id));
@@ -692,7 +697,7 @@ const Windows = {
         w.body.appendChild(sigRow);
       }
 
-      head(tr('set_sec_app', 'fabu'), tr('set_sec_app_note', 'every project'));
+      head(tr('set_sec_app', 'fabu'));
       mkCheck(tr('set_eco', 'Reduce CPU load (weaker computers)'), Engine.ecoMode(),
         tr('tip_eco', 'Turns off the room reverb and limits voices so playback stays smooth.'),
         (v) => { Engine.setEco(v); toast(tr(v ? 'toast_eco_on' : 'toast_eco_off', 'CPU saver ' + (v ? 'on' : 'off'))); });

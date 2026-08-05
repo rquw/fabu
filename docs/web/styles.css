@@ -1905,8 +1905,12 @@ input[type="range"].locked { opacity: 0.45; filter: saturate(0.4); }
 .set-note { font-size: 11px; color: var(--faint); margin: 2px 0 4px 26px; line-height: 1.4; }
 
 /* the bar counter doubles as the time signature control */
-#posDisplay:hover { background: var(--panel2); }
-#posSig { font-size: 10px; font-weight: 700; color: var(--dim); margin-left: 5px; }
+#posDisplay { cursor: pointer; }
+#posDisplay:hover { background: var(--panel2); border-color: var(--accent); }
+/* time and signature share one line under the bar counter, so the box keeps
+   its height instead of growing a cramped third row */
+.pos-sub { display: flex; align-items: baseline; gap: 6px; line-height: 1; }
+#posSig { font-size: 9.5px; font-weight: 700; color: var(--faint); letter-spacing: .02em; }
 @media (max-width: 1240px) { #topbar #posSig { display: none; } }
 
 /* a dialog whose buttons mean different things: recommended, risky, neutral */
@@ -1914,3 +1918,7 @@ input[type="range"].locked { opacity: 0.45; filter: saturate(0.4); }
 .choice-btns .fbtn { flex: 1 1 auto; min-width: 110px; }
 .fbtn.danger-outline { border-color: var(--red); color: var(--red); background: transparent; }
 .fbtn.danger-outline:hover { background: color-mix(in srgb, var(--red) 16%, transparent); }
+
+
+/* a floating window opened from the home screen has to clear that overlay */
+.fwin.fwin-over-home { position: fixed; z-index: 500; }
