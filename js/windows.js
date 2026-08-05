@@ -693,7 +693,7 @@ const Windows = {
           toast(tr('toast_timesig', 'Time signature: {v}', { v: sel.value }));
         });
         row.appendChild(lbl); row.appendChild(sel);
-        body.appendChild(row);
+        w.body.appendChild(row);
       }
       mkCheck(tr('set_countin', 'Count-in before recording'), S.countIn,
         tr('tip_countin', 'Four beats count you in before recording.'),
@@ -858,6 +858,9 @@ const Windows = {
       ['<kbd>A S D F</kbd>', tr('help_white_keys', 'White keys')],
       ['<kbd>W E T Z U</kbd>', tr('help_black_keys', 'Black keys')],
       ['<kbd>Z</kbd> <kbd>X</kbd>', tr('help_octave', 'Octave down, up')],
+      ['<kbd>Shift</kbd>', tr('help_pedal', 'Sustain pedal, while the keyboard is open')],
+      [tr('help_col_pedal_strip', 'Drag under the bar numbers'), tr('help_pedal_edit', 'Paint the sustain pedal in the piano roll')],
+      [tr('help_col_drop_midi', 'Drop a MIDI file in'), tr('help_drop_midi', 'Turns it into patterns you can edit')],
       [tr('help_col_double_lane', 'Double-click lane'), tr('help_new_pattern', 'New pattern')],
       [tr('help_col_double_clip', 'Double-click clip'), tr('help_edit_clip', 'Edit it')],
       [tr('help_col_rightclick', 'Right-click clip or note'), tr('help_rightclick', 'Delete it')],

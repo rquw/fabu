@@ -647,7 +647,7 @@
   "tut_ms_t": "Stumm und Solo",
   "tut_ms_b": "M schaltet eine Spur stumm. S spielt nur diese Spur, damit du dich auf einen Klang konzentrieren kannst.",
   "tut_instr_t": "Klang ändern",
-  "tut_instr_b": "Wähl aus diesem Menü ein anderes Instrument, etwa Klavier, Bass oder Drums.",
+  "tut_instr_b": "Wähle hier ein anderes Instrument, zum Beispiel Schlagzeug, Bass oder Streicher.",
   "tut_add_t": "Mehr Ebenen stapeln",
   "tut_add_b": "Füg hier eine weitere Spur hinzu, um mehr Instrumente übereinanderzulegen.",
   "tut_samp_t": "Fertige Loops",
@@ -831,7 +831,7 @@
   "toast_timesig": "Taktart: {v}",
   "tip_pedal": "Haltepedal (Shift halten)",
   "midi_adopted": "{n} Noten importiert. Projekt auf {bpm} BPM, {sig} gesetzt.",
-  "help_pedal": "Haltepedal",
+  "help_pedal": "Haltepedal, wenn die Tastatur offen ist",
   "proll_pedal": "Ziehe den Streifen unter den Taktzahlen, um das Haltepedal zu halten",
   "hint_drop_midi": "Ablegen, um dieses MIDI bei Takt {bar} in Patterns umzuwandeln.",
   "hint_loop_key": "Drücke L, um die Wiederholung ein- und auszuschalten",
@@ -841,5 +841,14 @@
   "tut_make_b": "Doppelklicke die leere Spur neben dem Track, um ein Pattern zu erstellen, dann doppelklicke das Pattern, um Noten zu zeichnen.",
   "hint_loop_made": "Drücke L, um diesen Abschnitt zu wiederholen",
   "hint_loop_repeat": "Spielst du die Stelle oft? Drücke L, um sie automatisch zu wiederholen",
-  "hint_loop_escape": "Wiederholung ist an, der Abspielkopf bleibt in der Schleife. Drücke L zum Ausschalten."
+  "hint_loop_escape": "Wiederholung ist an, der Abspielkopf bleibt in der Schleife. Drücke L zum Ausschalten.",
+  "yes": "Ja",
+  "no": "Nein",
+  "midi_bpm_title": "BPM von {a} auf {b} ändern?",
+  "midi_bpm_body": "Die importierte MIDI-Datei ist mit {b} BPM geschrieben. Mit \"Nein\" bleibt das Tempo auf deinem alten, nicht synchron zur MIDI-Datei.",
+  "midi_bpm_changed": "Tempo auf {b} BPM gesetzt",
+  "help_col_pedal_strip": "Unter den Taktzahlen ziehen",
+  "help_pedal_edit": "Haltepedal in der Piano-Roll einzeichnen",
+  "help_col_drop_midi": "MIDI-Datei hineinziehen",
+  "help_drop_midi": "Wird in bearbeitbare Patterns umgewandelt"
 }

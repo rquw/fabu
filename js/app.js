@@ -826,6 +826,42 @@ const App = {
     setTimeout(() => { inp.focus(); inp.select(); }, 40);
   },
 
+  // A plain yes/no, in the app's own dialog style. Resolves false if the user
+  // dismisses it, because "no" is always the safe answer here.
+  askYesNo({ title, body, yes, no }) {
+    return new Promise((resolve) => {
+      const old = document.getElementById('confirmModal');
+      if (old) old.remove();
+      const wrap = document.createElement('div');
+      wrap.id = 'confirmModal';
+      wrap.className = 'modal-back';
+      wrap.innerHTML = `
+        <div class="modal-card">
+          <div class="modal-title"></div>
+          <div class="modal-sub"></div>
+          <div class="modal-btns">
+            <button id="cfNo" class="fbtn"></button>
+            <button id="cfYes" class="fbtn accent"></button>
+          </div>
+        </div>`;
+      wrap.querySelector('.modal-title').textContent = title;
+      wrap.querySelector('.modal-sub').textContent = body;
+      wrap.querySelector('#cfYes').textContent = yes || tr('yes', 'Yes');
+      wrap.querySelector('#cfNo').textContent = no || tr('no', 'No');
+      document.body.appendChild(wrap);
+      const done = (v) => { wrap.remove(); window.removeEventListener('keydown', key, true); resolve(v); };
+      const key = (e) => {
+        if (e.key === 'Escape') { e.stopPropagation(); done(false); }
+        if (e.key === 'Enter') { e.stopPropagation(); done(true); }
+      };
+      wrap.querySelector('#cfYes').addEventListener('click', () => done(true));
+      wrap.querySelector('#cfNo').addEventListener('click', () => done(false));
+      wrap.addEventListener('mousedown', (e) => { if (e.target === wrap) done(false); });
+      window.addEventListener('keydown', key, true);
+      setTimeout(() => wrap.querySelector('#cfYes').focus(), 40);
+    });
+  },
+
   // get rid of the repeat region entirely
   clearLoop() {
     S.loopOn = false; S.loopStart = 0; S.loopEnd = 0;

@@ -328,10 +328,29 @@ const MidiFile = {
     if (this._adopted) {
       toast(tr('midi_adopted', '{n} notes imported. Project set to {bpm} BPM, {sig}.',
         { n: total, bpm: this._adopted.bpm, sig: this._adopted.sig }), 'green');
-    } else {
-      toast(bpm && Math.abs(bpm - S.bpm) >= 1
-        ? tr('midi_added_bpm', '{n} notes imported. The file was written at {bpm} BPM.', { n: total, bpm })
-        : tr('midi_added', '{n} notes imported', { n: total }), 'green');
+      return;
+    }
+    toast(tr('midi_added', '{n} notes imported', { n: total }), 'green');
+
+    // The project already had work in it, so its tempo was left alone. Offer to
+    // match the file rather than silently letting the two disagree: the notes
+    // are placed in beats, so they play at whatever the project tempo is, which
+    // is right musically but wrong if you wanted the original speed.
+    if (bpm && Math.abs(bpm - S.bpm) >= 1) {
+      const from = Math.round(S.bpm);
+      const change = await App.askYesNo({
+        title: tr('midi_bpm_title', 'Change BPM from {a} to {b}?', { a: from, b: bpm }),
+        body: tr('midi_bpm_body',
+          'The MIDI file you imported is written at {b} BPM. Clicking "No" leaves the tempo at your old one, not synchronized to the MIDI file.',
+          { b: bpm }),
+        yes: tr('yes', 'Yes'),
+        no: tr('no', 'No')
+      });
+      if (change) {
+        Undo.push('Change BPM');
+        App.setBpm(bpm);
+        toast(tr('midi_bpm_changed', 'Tempo set to {b} BPM', { b: bpm }), 'green');
+      }
     }
   }
 };
