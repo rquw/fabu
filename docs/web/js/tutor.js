@@ -60,12 +60,7 @@ const Tutor = {
         body: tr('tut_ms_b', 'M silences a track. S plays only that track so you can focus on one sound.'),
       },
       {
-        target: () => document.querySelector('.ms-btn.mute'),
-        title: tr('tut_ms_t', 'Mute and solo'),
-        body: tr('tut_ms_b', 'M silences a track. S plays only that track so you can focus on one sound.'),
-      },
-      {
-        target: () => document.querySelector('.thead-mid select'),
+        target: () => document.querySelector('.tinst-btn'),
         title: tr('tut_instr_t', 'Change the sound'),
         body: tr('tut_instr_b', 'Pick another instrument from this menu, like keys, bass or drums.'),
       },
@@ -107,6 +102,16 @@ const Tutor = {
   },
 
   show() {
+    // Steps point at things that may not exist yet: click Next without adding
+    // an instrument and there is no track to mute or lane to double click. Skip
+    // straight past anything with nothing to point at rather than showing a
+    // card about a control the user cannot see.
+    let guard = 0;
+    while (this.steps[this.step] && guard++ < this.steps.length) {
+      const t = this.steps[this.step].target;
+      if (!t || t()) break;
+      this.step++;
+    }
     const s = this.steps[this.step];
     if (!s) return this.finish();
     const el = s.target && s.target();
