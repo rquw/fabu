@@ -890,5 +890,16 @@
   "ver_copy": "Nachricht kopieren",
   "ver_copied": "Kopiert. Schick es ihr.",
   "ver_share": "{who}: du brauchst fabu {need}, um diesem Raum beizutreten. Hier bekommst du es: {url}",
-  "samp_cat_jazz": "Jazz"
+  "samp_cat_jazz": "Jazz",
+  "export_meta": "{name} · {time} · {n} Spuren",
+  "export_as_audio": "Als Audio",
+  "export_other": "Andere Wege raus",
+  "export_wav_desc": "Perfekte Qualität",
+  "export_mp3_desc": "Läuft überall",
+  "export_ogg_desc": "Klein und offen",
+  "export_unavailable": "Nicht verfügbar",
+  "export_stems_t": "Einzelne Spuren",
+  "export_stems_d": "Eine Audiodatei pro Spur, zum Mischen woanders",
+  "export_midi_t": "MIDI-Datei",
+  "export_midi_d": "Die Noten statt des Klangs, für ein anderes Programm"
 }

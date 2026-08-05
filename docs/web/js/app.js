@@ -1670,17 +1670,56 @@ const App = {
     const wrap = document.createElement('div');
     wrap.id = 'exportModal';
     wrap.className = 'modal-back';
+    // What the song is, so the choice below has some context: three formats
+    // that differ mostly in size, and two exports that are not audio at all.
+    const beats = songEndBeat();
+    const secs = beats * (60 / (S.bpm || 120));
+    const mmss = Math.floor(secs / 60) + ':' + String(Math.round(secs % 60)).padStart(2, '0');
+    const trackCount = S.tracks.filter(t => (t.clips || []).length).length;
+    // 44.1k stereo 16 bit, and roughly 1 MB a minute for the compressed ones
+    const mb = (n) => n < 0.1 ? '<0.1 MB' : n.toFixed(1) + ' MB';
+    const sizeWav = mb(secs * 44100 * 2 * 2 / 1048576);
+    const sizeSmall = mb(secs * 16000 / 1048576);
+
     wrap.innerHTML = `
-      <div class="modal-card">
-        <div class="modal-title">${tr('export_title', 'Export song')}</div>
-        <div class="modal-sub">${tr('export_sub', 'Choose a format.')}</div>
-        <div class="export-formats">
-          <button class="fbtn" data-fmt="wav">WAV</button>
-          <button class="fbtn" data-fmt="mp3">MP3</button>
-          <button class="fbtn" data-fmt="ogg"${oggOk ? '' : ' disabled'}>OGG</button>
+      <div class="modal-card export-card">
+        <div class="export-head">
+          <div>
+            <div class="modal-title">${tr('export_title', 'Export song')}</div>
+            <div class="export-meta">${tr('export_meta', '{name} · {time} · {n} tracks',
+              { name: ($('#projName').value || 'Untitled'), time: mmss, n: trackCount })}</div>
+          </div>
         </div>
-        <button id="expMidi" class="fbtn" style="width:100%;margin-top:8px">${tr('export_midi', 'Export MIDI (the notes, for another program)')}</button>
-        <button id="expStems" class="fbtn" style="width:100%;margin-top:8px">${tr('export_stems', 'Export stems (one file per track)')}</button>
+
+        <div class="export-section">${tr('export_as_audio', 'As audio')}</div>
+        <div class="export-formats">
+          <button class="exp-fmt" data-fmt="wav">
+            <span class="exp-fmt-name">WAV</span>
+            <span class="exp-fmt-desc">${tr('export_wav_desc', 'Perfect quality')}</span>
+            <span class="exp-fmt-size">${sizeWav}</span>
+          </button>
+          <button class="exp-fmt" data-fmt="mp3">
+            <span class="exp-fmt-name">MP3</span>
+            <span class="exp-fmt-desc">${tr('export_mp3_desc', 'Plays anywhere')}</span>
+            <span class="exp-fmt-size">${sizeSmall}</span>
+          </button>
+          <button class="exp-fmt" data-fmt="ogg"${oggOk ? '' : ' disabled'}>
+            <span class="exp-fmt-name">OGG</span>
+            <span class="exp-fmt-desc">${oggOk ? tr('export_ogg_desc', 'Small and open') : tr('export_unavailable', 'Not available')}</span>
+            <span class="exp-fmt-size">${oggOk ? sizeSmall : ''}</span>
+          </button>
+        </div>
+
+        <div class="export-section">${tr('export_other', 'Other ways out')}</div>
+        <button id="expStems" class="exp-row">
+          <span class="exp-row-name">${tr('export_stems_t', 'Separate tracks')}</span>
+          <span class="exp-row-desc">${tr('export_stems_d', 'One audio file per track, to mix somewhere else')}</span>
+        </button>
+        <button id="expMidi" class="exp-row">
+          <span class="exp-row-name">${tr('export_midi_t', 'MIDI file')}</span>
+          <span class="exp-row-desc">${tr('export_midi_d', 'The notes rather than the sound, for another program')}</span>
+        </button>
+
         <div id="exportProg" class="export-prog hidden"><div id="exportBar"></div></div>
         <div id="exportStat" class="export-stat"></div>
         <div class="modal-btns"><button id="exportCancel" class="fbtn">${tr('cancel', 'Cancel')}</button></div>

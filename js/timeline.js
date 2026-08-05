@@ -969,6 +969,35 @@ const Timeline = {
       }
     };
 
+    // Lean the clip in the direction it is moving, proportional to how fast, so
+    // a slow nudge barely tilts and a quick throw leans right over. It decays
+    // back to flat on its own so holding still looks settled rather than stuck.
+    let tilt = 0, lastTiltX = startX, lastTiltT = performance.now(), tiltRaf = null;
+    const applyTilt = () => {
+      const els = [el, ...group.map(g => this.lanes.querySelector(`[data-clip-id="${g.clip.id}"]`))];
+      for (const e of els) if (e) e.style.transform = tilt ? `rotate(${tilt.toFixed(2)}deg)` : '';
+    };
+    const tiltTick = () => {
+      tilt *= 0.86;                       // ease back toward flat
+      if (Math.abs(tilt) < 0.05) { tilt = 0; applyTilt(); tiltRaf = null; return; }
+      applyTilt();
+      tiltRaf = requestAnimationFrame(tiltTick);
+    };
+    const nudgeTilt = (clientX) => {
+      const now = performance.now();
+      const dt = Math.max(16, now - lastTiltT);
+      const vx = (clientX - lastTiltX) / dt;          // px per ms
+      lastTiltX = clientX; lastTiltT = now;
+      tilt = clamp(tilt + vx * 6, -15, 15);
+      applyTilt();                        // now, not on the next frame
+      if (!tiltRaf) tiltRaf = requestAnimationFrame(tiltTick);
+    };
+    const clearTilt = () => {
+      if (tiltRaf) cancelAnimationFrame(tiltRaf);
+      tiltRaf = null; tilt = 0;
+      applyTilt();
+    };
+
     const move = (ev) => {
       const dxBeats = (ev.clientX - startX) / UI.zoom;
       if (!moved && Math.abs(ev.clientX - startX) < 4 && Math.abs(ev.clientY - startY) < 4) return;
@@ -1041,6 +1070,7 @@ const Timeline = {
         }
       }
       applyGroup();
+      if (mode === 'move') nudgeTilt(ev.clientX);
       if (S.snap && !coached) {
         const key = (mode === 'right' ? clip.start + clipBeats(clip) : clip.start).toFixed(3);
         if (key !== lastSnapKey) {
@@ -1055,6 +1085,7 @@ const Timeline = {
     const up = () => {
       window.removeEventListener('mousemove', move);
       window.removeEventListener('mouseup', up);
+      clearTilt();
       if (typeof Sync !== 'undefined') Sync.setLock(clipLock, false);
       this.hideTrackInsert();
       if (moved) {

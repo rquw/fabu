@@ -890,5 +890,16 @@
   "ver_copy": "Copy message for them",
   "ver_copied": "Copied. Paste it to them.",
   "ver_share": "{who}: you need fabu {need} to join this room. Get it here: {url}",
-  "samp_cat_jazz": "Jazz"
+  "samp_cat_jazz": "Jazz",
+  "export_meta": "{name} · {time} · {n} tracks",
+  "export_as_audio": "As audio",
+  "export_other": "Other ways out",
+  "export_wav_desc": "Perfect quality",
+  "export_mp3_desc": "Plays anywhere",
+  "export_ogg_desc": "Small and open",
+  "export_unavailable": "Not available",
+  "export_stems_t": "Separate tracks",
+  "export_stems_d": "One audio file per track, to mix somewhere else",
+  "export_midi_t": "MIDI file",
+  "export_midi_d": "The notes rather than the sound, for another program"
 }
