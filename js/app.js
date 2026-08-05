@@ -462,7 +462,13 @@ const App = {
     const home = $('#home');
     if (home.style.display === 'none') return;
     home.classList.add('closing');
-    setTimeout(() => { home.style.display = 'none'; home.classList.remove('closing'); }, 220);
+    setTimeout(() => {
+      home.style.display = 'none';
+      home.classList.remove('closing');
+      // Now the workspace is actually on screen, so the first-run walkthrough
+      // has something real to point at.
+      if (typeof Tutor !== 'undefined') Tutor.maybeStartEmpty();
+    }, 220);
   },
 
   RECENTS_KEY: 'fabu.recents',

@@ -24,7 +24,19 @@ const Tutor = {
   maybeStartEmpty() {
     if (this.active || this.seen()) return;
     if (UI.playing || !S || S.tracks.length) return;
-    setTimeout(() => { if (!S.tracks.length && !this.active) this.start(true); }, 700);
+    // newProject() also runs at startup, while the home screen is still up.
+    // Firing there pointed at a button nobody could see yet.
+    setTimeout(() => {
+      if (this.active || this.seen() || !S || S.tracks.length) return;
+      if (this.homeVisible()) return;
+      if (!document.querySelector('.thead-add button')) return;   // nothing to point at
+      this.start(true);
+    }, 700);
+  },
+
+  homeVisible() {
+    const home = document.getElementById('home');
+    return !!home && home.style.display !== 'none';
   },
 
   start(fromEmpty) {

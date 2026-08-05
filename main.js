@@ -260,23 +260,24 @@ function readWindowState() {
 
 function trackWindowState(w) {
   let t = null;
-  const save = () => {
-    clearTimeout(t);
-    t = setTimeout(() => {
-      if (!w || w.isDestroyed()) return;
-      try {
-        // getBounds while maximized returns the maximized size, which would
-        // become the "restored" size forever after; keep the normal bounds
-        const b = w.isMaximized() || w.isFullScreen() ? w.getNormalBounds() : w.getBounds();
-        fs.writeFileSync(WIN_STATE(), JSON.stringify({
-          x: b.x, y: b.y, width: b.width, height: b.height,
-          maximized: w.isMaximized(), fullscreen: w.isFullScreen()
-        }));
-      } catch (e) { /* disk full or read-only profile: not worth a crash */ }
-    }, 400);
+  const writeNow = () => {
+    if (!w || w.isDestroyed()) return;
+    try {
+      // getBounds while maximized returns the maximized size, which would
+      // become the "restored" size forever after; keep the normal bounds
+      const b = w.isMaximized() || w.isFullScreen() ? w.getNormalBounds() : w.getBounds();
+      fs.writeFileSync(WIN_STATE(), JSON.stringify({
+        x: b.x, y: b.y, width: b.width, height: b.height,
+        maximized: w.isMaximized(), fullscreen: w.isFullScreen()
+      }));
+    } catch (e) { /* disk full or read-only profile: not worth a crash */ }
   };
+  // resizing fires continuously, so those are debounced
+  const save = () => { clearTimeout(t); t = setTimeout(writeNow, 400); };
   for (const ev of ['resize', 'move', 'maximize', 'unmaximize', 'enter-full-screen', 'leave-full-screen']) w.on(ev, save);
-  w.on('close', save);
+  // On the way out there is no time to debounce: the process is about to go and
+  // the timer would never fire, losing whatever the user just did to the window.
+  w.on('close', () => { clearTimeout(t); writeNow(); });
 }
 
 function createWindow() {
