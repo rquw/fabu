@@ -7,6 +7,31 @@
 
 const MidiFile = {
 
+  // General MIDI instrument names. Only used to LABEL the lane a part landed
+  // on, so you can tell the trumpet line from the bass line while dragging it
+  // around. The sound is always piano: a MIDI file is notes, not instruments.
+  GM: ('Piano,Bright Piano,Electric Grand,Honky Tonk,Electric Piano,Electric Piano 2,Harpsichord,Clavinet,' +
+    'Celesta,Glockenspiel,Music Box,Vibraphone,Marimba,Xylophone,Tubular Bells,Dulcimer,' +
+    'Drawbar Organ,Percussive Organ,Rock Organ,Church Organ,Reed Organ,Accordion,Harmonica,Tango Accordion,' +
+    'Nylon Guitar,Steel Guitar,Jazz Guitar,Clean Guitar,Muted Guitar,Overdrive Guitar,Distortion Guitar,Guitar Harmonics,' +
+    'Acoustic Bass,Finger Bass,Pick Bass,Fretless Bass,Slap Bass,Slap Bass 2,Synth Bass,Synth Bass 2,' +
+    'Violin,Viola,Cello,Contrabass,Tremolo Strings,Pizzicato Strings,Harp,Timpani,' +
+    'String Ensemble,String Ensemble 2,Synth Strings,Synth Strings 2,Choir Aahs,Voice Oohs,Synth Voice,Orchestra Hit,' +
+    'Trumpet,Trombone,Tuba,Muted Trumpet,French Horn,Brass Section,Synth Brass,Synth Brass 2,' +
+    'Soprano Sax,Alto Sax,Tenor Sax,Baritone Sax,Oboe,English Horn,Bassoon,Clarinet,' +
+    'Piccolo,Flute,Recorder,Pan Flute,Blown Bottle,Shakuhachi,Whistle,Ocarina,' +
+    'Square Lead,Saw Lead,Calliope,Chiff Lead,Charang,Voice Lead,Fifths Lead,Bass and Lead,' +
+    'New Age Pad,Warm Pad,Polysynth Pad,Choir Pad,Bowed Pad,Metallic Pad,Halo Pad,Sweep Pad,' +
+    'Rain,Soundtrack,Crystal,Atmosphere,Brightness,Goblins,Echoes,Sci-Fi,' +
+    'Sitar,Banjo,Shamisen,Koto,Kalimba,Bagpipe,Fiddle,Shanai,' +
+    'Tinkle Bell,Agogo,Steel Drums,Woodblock,Taiko Drum,Melodic Tom,Synth Drum,Reverse Cymbal,' +
+    'Guitar Fret Noise,Breath Noise,Seashore,Bird Tweet,Telephone Ring,Helicopter,Applause,Gunshot').split(','),
+
+  partName(chan, prog) {
+    if (chan === 9) return 'Drums';        // GM channel 10 is always percussion
+    return this.GM[prog] || 'Part';
+  },
+
   // ---------- parsing ----------
 
   // Reads a Standard MIDI File into { ppq, tempoBpm, tracks: [{ name, notes }] }
@@ -42,6 +67,7 @@ const MidiFile = {
 
       const notes = [];
       const open = new Map();                  // (channel<<8|pitch) -> [{tick, vel}]
+      const prog = new Map();                  // channel -> instrument in force right now
       let tick = 0, status = 0, name = '';
 
       const varint = () => {
@@ -84,13 +110,15 @@ const MidiFile = {
           // a note-on with velocity 0 is the common way of writing note-off
           if (type === 0x90 && vel > 0) {
             if (!open.has(key)) open.set(key, []);
-            open.get(key).push({ tick, vel });
+            // stamp the note with whatever instrument was selected at the time,
+            // so a part that changes instrument later can be split off
+            open.get(key).push({ tick, vel, prog: prog.get(chan) || 0 });
           } else {
             const stack = open.get(key);
             if (stack && stack.length) {
               const on = stack.shift();         // oldest first, so repeats nest right
               notes.push({
-                pitch, chan,
+                pitch, chan, prog: on.prog,
                 start: on.tick / ppq,
                 length: Math.max(1 / 32, (tick - on.tick) / ppq),
                 vel: Math.max(0.05, Math.min(1, on.vel / 127))
@@ -100,15 +128,17 @@ const MidiFile = {
           continue;
         }
 
-        // program change and channel aftertouch carry one data byte, the rest two
-        p += (type === 0xc0 || type === 0xd0) ? 1 : 2;
+        // program change picks a new instrument for this channel from here on
+        if (type === 0xc0) { prog.set(chan, u8[p]); p += 1; continue; }
+        // channel aftertouch carries one data byte, everything else two
+        p += (type === 0xd0) ? 1 : 2;
       }
 
       // notes still held when the track ends (sloppily written files): close them
       for (const [key, stack] of open) {
         for (const on of stack) {
           notes.push({
-            pitch: key & 0xff, chan: key >> 8,
+            pitch: key & 0xff, chan: key >> 8, prog: on.prog,
             start: on.tick / ppq, length: 1,
             vel: Math.max(0.05, Math.min(1, on.vel / 127))
           });
@@ -116,7 +146,17 @@ const MidiFile = {
       }
 
       notes.sort((a, b) => a.start - b.start);
-      if (notes.length) tracks.push({ name, notes });
+      // A MIDI "track" is not a part. Format 0 files put every instrument in one
+      // chunk separated only by channel, and a single channel can switch
+      // instrument partway through. Split on both so each distinct voice gets
+      // its own lane you can drag around on its own.
+      const byPart = new Map();
+      for (const n of notes) {
+        const key = n.chan + ':' + (n.prog || 0);
+        if (!byPart.has(key)) byPart.set(key, { name, chan: n.chan, prog: n.prog || 0, notes: [] });
+        byPart.get(key).notes.push(n);
+      }
+      for (const part of byPart.values()) if (part.notes.length) tracks.push(part);
       p = end;
     }
 
@@ -172,13 +212,17 @@ const MidiFile = {
 
       const track = makeTrack('midi');
       track.name = multi ? tr('midi_track_n', 'Imported Midi {n}', { n: i + 1 }) : tr('midi_track', 'Imported Midi');
+      // Always piano. A MIDI file is notes; picking sounds is your job.
       track.instrument = 'rpiano';
       S.tracks.push(track);
 
+      // The clip is labelled with what the file called this part, so you can
+      // tell the trumpet line from the bass line when dragging lanes around.
+      const label = [mt.name, this.partName(mt.chan, mt.prog)].filter(Boolean).join(' ');
       const clip = {
         id: uid('clip'), kind: 'midi',
         by: typeof authorName === 'function' ? authorName() : null,
-        name: mt.name || track.name,
+        name: label || track.name,
         start, length, notes
       };
       track.clips.push(clip);
