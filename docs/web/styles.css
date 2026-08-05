@@ -2226,4 +2226,77 @@ body.shift-held .fx-item:not(.samp-item) { position: relative; overflow: visible
 .prof-bio i { color: var(--faint); }
 .prof-stats { display: flex; gap: 14px; flex-wrap: wrap; font-size: 11px; color: var(--faint); margin-bottom: 4px; }
 .prof-stats b { color: var(--text); font-size: 13px; margin-right: 3px; }
-.samp-from { font-size: 9px; color: var(--faint); margin-left: 4px; }
+/* The credit gives way before the loop's own name does: whose loop it is
+   matters, but not more than which loop it is. */
+.samp-from {
+  font-size: 9px; color: var(--faint); margin-left: 4px;
+  flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.samp-item .samp-nm { flex: 2 1 auto; }
+
+/* ---------- phones ----------
+   fabu is a desktop tool and stays one, but a phone should be able to open a
+   song, hear it, and move things around rather than showing a sliver of
+   timeline behind a track list that eats the whole screen. */
+@media (max-width: 760px) {
+  /* The headers took 415 of 375 available pixels, leaving the music offscreen. */
+  :root { --heads-w: 132px; }
+  .thead { padding: 6px 7px; gap: 4px; }
+  .thead select { max-width: 100%; font-size: 10.5px; }
+  .thead-vol { display: none; }          /* the mixer has the same slider, larger */
+  .thead-add { flex-direction: column; align-items: stretch; gap: 5px; padding: 6px 7px; }
+  .thead-add > * { width: 100%; justify-content: center; }
+
+  /* The desktop breakpoints drop tools one at a time assuming a wider screen is
+     coming. On a phone there is no wider screen and no second place to find
+     them, so the bar wraps onto a second row and keeps everything. Sideways
+     scrolling would hide half the app behind a gesture nobody would guess. */
+  #topbar { flex-wrap: wrap; height: auto; row-gap: 6px; padding-bottom: 8px; }
+  #topbar .tb-group { flex: 0 0 auto; }
+  #topbar .tbtn { min-width: 34px; height: 34px; }
+  #topbar .tb-sep { display: none; }
+
+  /* A floating window on a 375px screen is a window with nothing around it, so
+     it becomes a sheet along the bottom edge instead. */
+  .fwin {
+    position: fixed !important;
+    left: 0 !important; right: 0; top: auto !important; bottom: 0;
+    width: 100% !important; max-width: 100%;
+    height: auto !important; max-height: 76vh !important;
+    border-radius: 14px 14px 0 0;
+    box-shadow: 0 -10px 40px rgba(0, 0, 0, .55);
+  }
+  .fwin-body { max-height: calc(76vh - 44px); overflow-y: auto; }
+  .fwin-rz { display: none; }             /* nothing to resize when it spans the screen */
+
+  /* A toolbar group is one nowrap unit, and one unit is wider than a phone, so
+     the group has to be allowed to break inside itself too. */
+  .proll-tools .pt-group, .chord-sug { flex-wrap: wrap; }
+  .proll-tools { gap: 6px; }
+  .fwin-head { padding: 12px 12px; }      /* a drag handle you can actually hit */
+
+  /* Windows are sheets along the bottom edge now, and the nudge used to sit
+     there too, covering whatever was open. */
+  #webNudge { bottom: auto; top: 10px; }
+  #webNudge { transform: translateY(-14px); }
+  #webNudge.in { transform: translateY(0); }
+
+  .modal-card { max-width: calc(100vw - 24px); }
+  .gal-card { padding: 10px; }
+  .gal-acts .fbtn { padding: 7px 12px; }
+}
+
+/* A finger on a drag surface means "move this", so the browser must not also
+   scroll, pan or zoom underneath it. Without this the clip slides while the
+   timeline slides the other way.
+
+   Scoped to touch screens on purpose. A trackpad reports as a fine pointer and
+   its two-finger scroll IS how you move around the timeline on a laptop, so
+   switching this on everywhere would take that away. */
+@media (pointer: coarse) {
+  #lanes, #ruler, .clip,
+  .proll-grid, .proll-keys, .proll-ruler, .proll-vel,
+  .autom-canvas, .eq-canvas, .fwin-head, .fwin-rz {
+    touch-action: none;
+  }
+}

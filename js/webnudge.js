@@ -1,4 +1,8 @@
-// Web-only: on phones, gently note that fabu is really a desktop app.
+// Web-only: on phones, note that there is a desktop app.
+// The wording matters. It used to say the phone version does not really work,
+// which was true then and is not now: dragging, the piano roll and the loops
+// all work with a finger. So it points at the app as the better tool for a long
+// session rather than as the only one that functions.
 // Never runs in the packaged desktop app (electronAPI is present there).
 (function () {
   if (window.electronAPI) return;                 // desktop app: do nothing
@@ -14,7 +18,7 @@
     var bar = document.createElement('div');
     bar.id = 'webNudge';
     bar.innerHTML =
-      '<span class="wn-txt">You are using fabu in the browser. It works best as a free app on a computer.</span>' +
+      '<span class="wn-txt">This works on your phone. For a long session, there is a free app for computers.</span>' +
       '<a class="wn-get" href="https://rquw.github.io/fabu/" target="_blank" rel="noopener">the app</a>' +
       '<button class="wn-x" type="button" aria-label="dismiss">&times;</button>';
     document.body.appendChild(bar);
