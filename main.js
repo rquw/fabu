@@ -9,7 +9,7 @@ let win;
 // (its differential download kept failing halfway and could even remove the
 // app). We only use it to CHECK for new versions. When the user clicks Update,
 // we download the FULL installer ourselves, verify its sha512 against the
-// release manifest, and only then hand over — the installed app is never
+// release manifest, and only then hand over. The installed app is never
 // touched until a complete, verified new version is on disk.
 let updateInfo = null;
 let updater = null;
@@ -20,7 +20,7 @@ function setupAutoUpdate() {
   try { ({ autoUpdater: updater } = require('electron-updater')); } catch (e) { return; }
   updater.autoDownload = false;
   updater.autoInstallOnAppQuit = false;
-  // full download instead of the differential/blockmap one — the diff download
+  // full download instead of the differential/blockmap one, because the diff download
   // was what kept cancelling halfway on the unsigned build.
   updater.disableDifferentialDownload = true;
   updater.on('update-available', (info) => {
@@ -34,7 +34,7 @@ function setupAutoUpdate() {
     if (win) win.webContents.send('update-progress', Math.floor(p.percent || 0));
   });
   updater.on('update-downloaded', () => {
-    // don't restart yet — let the user pick "now" or "in a minute" so they can save
+    // don't restart yet: let the user pick "now" or "in a minute" so they can save
     pendingRestart = () => { quitOk = true; try { updater.quitAndInstall(false, true); } catch (e) { /* ignore */ } };
     if (win) win.webContents.send('update-downloaded');
   });
@@ -162,7 +162,7 @@ async function applyUpdateMac() {
 // Windows.
 // The NSIS one-click installer UNINSTALLS the old version before installing the
 // new one, so anything that makes the install step fail leaves the machine with
-// no app at all — which is exactly what kept happening. Two causes, both fixed
+// no app at all, which is exactly what kept happening. Two causes, both fixed
 // here by doing what macOS already does instead of handing off to
 // electron-updater's installer:
 //   1. the app was still running when the installer tried to replace its files,
@@ -170,7 +170,7 @@ async function applyUpdateMac() {
 //   2. every release ships an installer called plain "fabu.exe", so a stale or
 //      half-written file from an earlier attempt could be the one that ran.
 // Now: download the FULL installer ourselves to a version-stamped path, verify
-// its sha512 against the release manifest, and only then quit and hand over —
+// its sha512 against the release manifest, and only then quit and hand over.
 // and the app is completely gone before the installer starts.
 async function applyUpdateWin() {
   const files = (updateInfo && updateInfo.files) || [];
@@ -375,7 +375,7 @@ ipcMain.handle('save-file', async (e, { defaultName, filters, data, encoding }) 
   }
 });
 
-// write straight to a known path (a project that already has a .fab file) — no dialog
+// write straight to a known path (a project that already has a .fab file), so no dialog
 ipcMain.handle('write-file', async (e, { filePath, data, encoding }) => {
   try {
     if (encoding === 'base64') fs.writeFileSync(filePath, Buffer.from(data, 'base64'));

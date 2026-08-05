@@ -33,7 +33,7 @@ const Automation = {
     drive: 'Drive', crush: 'Crush', filter: 'Filter', transpose: 'Transpose'
   },
 
-  // where a parameter "rests" — drawn as a dashed guide so it's always findable
+  // where a parameter "rests", drawn as a dashed guide so it's always findable
   DEFAULTS: { volume: 1, gain: 1, low: 0, mid: 0, high: 0, pan: 0, drive: 0, crush: 0, filter: 20000, transpose: 0, pitch: 0, speed: 1 },
   // initial visible slice of the huge no-limit ranges; scroll to reach the rest
   VIEWS: { transpose: [-12, 12], pitch: [-12, 12], speed: [0, 2], gain: [0, 2], volume: [0, 2] },
@@ -66,7 +66,7 @@ const Automation = {
     }
     return this.H;
   },
-  // 1/2/5-style steps so the axis reads 0, 5, 10 — never 0, 48, 96
+  // 1/2/5-style steps so the axis reads 0, 5, 10 rather than 0, 48, 96
   niceStep(raw) {
     if (!(raw > 0)) return 1;
     const p = Math.pow(10, Math.floor(Math.log10(raw)));
@@ -102,12 +102,12 @@ const Automation = {
   targetLabel() {
     if (this.fxTarget) {
       const pd = this.fxDef();
-      return fxName(this.fxTarget.fx.type) + ' · ' + (pd ? tr(pd.labelKey, pd.labelFb) : this.fxTarget.key);
+      return fxName(this.fxTarget.fx.type) + ': ' + (pd ? tr(pd.labelKey, pd.labelFb) : this.fxTarget.key);
     }
     if (this.clipTarget) {
       const f = getClip(this.clipTarget.clipId);
       const nm = f ? (f.clip.name || tr('word_audio', 'Audio')) : tr('word_audio', 'Audio');
-      return nm + ' · ' + tr('autoparam_' + this.clipTarget.prop, this.clipTarget.prop === 'pitch' ? 'Pitch' : 'Speed');
+      return nm + ': ' + tr('autoparam_' + this.clipTarget.prop, this.clipTarget.prop === 'pitch' ? 'Pitch' : 'Speed');
     }
     return this.paramLabel(this.param);
   },

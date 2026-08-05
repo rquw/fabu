@@ -193,7 +193,7 @@ const Timeline = {
     return { left, right };
   },
   // the free start closest to `desired` (searching both directions) where a clip
-  // of `len` beats fits without overlapping — used to snap a dragged clip on drop
+  // of `len` beats fits without overlapping. Used to snap a dragged clip on drop
   nearestFreeStart(track, len, desired, ignore) {
     desired = Math.max(0, desired);
     const overlaps = (s) => track.clips.some(c => c !== ignore &&
@@ -251,8 +251,8 @@ const Timeline = {
     let clipCount = 0;
     const firstMidiIdx = S.tracks.findIndex(t => t.kind === 'midi');
     // Only build the clips inside (or near) the visible window. A long song can
-    // hold hundreds of clips, and building every one of them — each with its own
-    // canvas — on every edit was the main source of slowdown.
+    // hold hundreds of clips, and building every one of them, each with its own
+    // canvas, on every edit was the main source of slowdown.
     const vw = this.scroller ? this.scroller.clientWidth : 1200;
     const sl = this.scroller ? this.scroller.scrollLeft : 0;
     const viewFrom = (sl - vw) / UI.zoom;          // one screen of margin each side
@@ -654,7 +654,7 @@ const Timeline = {
     const label = document.createElement('div');
     label.className = 'clip-label';
     const inRoom = typeof Sync !== 'undefined' && Sync.connected;
-    const byTag = inRoom && clip.by ? '  · ' + clip.by : '';
+    const byTag = inRoom && clip.by ? '  ' + clip.by : '';
     label.textContent = (clip.name || (clip.kind === 'midi' ? 'Pattern' : 'Audio')) + byTag;
     el.appendChild(label);
 
@@ -670,10 +670,14 @@ const Timeline = {
     if (clip.fx && clip.fx.length) {
       el.classList.add('has-fx');
       const fxb = document.createElement('div');
-      fxb.className = 'clip-fx-badge';
+      // Named while it is fresh, then collapsed to the sparkle. Reading the
+      // effect names matters right after you add one and never again, and a row
+      // of clips each spelling out their effects is just noise.
+      const fresh = this._fxFresh === clip.id;
+      fxb.className = 'clip-fx-badge' + (fresh ? ' fresh' : '');
       const names = clip.fx.map(f => fxName(f.type));
       fxb.innerHTML = '<span class="fx-spark"></span>' +
-        `<span class="fx-names">${names.slice(0, 2).join(' · ')}${names.length > 2 ? ' +' + (names.length - 2) : ''}</span>`;
+        `<span class="fx-names">${names.slice(0, 2).join(', ')}${names.length > 2 ? ' +' + (names.length - 2) : ''}</span>`;
       fxb.dataset.tip = names.join(', ');
       el.appendChild(fxb);
     }
@@ -693,6 +697,11 @@ const Timeline = {
       e.stopPropagation();
       e.dataTransfer.dropEffect = 'copy';
       el.classList.add('fx-over');
+      // Holding shift paints: the effect lands as you pass over each clip rather
+      // than on drop. Each clip takes it once per stroke, so dragging back over
+      // one you already covered does nothing. Let go and start again to apply
+      // the same effect a second time.
+      if (e.shiftKey) Timeline.paintFx(clip);
     });
     el.addEventListener('dragleave', () => el.classList.remove('fx-over'));
     el.addEventListener('drop', (e) => {
@@ -701,6 +710,8 @@ const Timeline = {
       e.preventDefault();
       e.stopPropagation();
       el.classList.remove('fx-over');
+      // a painted stroke has already applied it everywhere it passed, here too
+      if (Timeline._brush && Timeline._brush.painted.size) return;
       App.addFxToClip(clip, type);
     });
 
@@ -774,12 +785,38 @@ const Timeline = {
     window.addEventListener('mousedown', close, true);
   },
 
+  // ---------- painting effects across clips ----------
+  // A stroke lasts from picking an effect up to letting it go. Each clip takes
+  // the effect once per stroke: passing over the same one again is the hand
+  // wobbling, not a request for a second copy.
+  beginBrush(type) { this._brush = { type, painted: new Set() }; },
+  endBrush() { this._brush = null; },
+
+  paintFx(clip) {
+    const b = this._brush;
+    if (!b || !clip || clip.kind === 'group' || b.painted.has(clip.id)) return;
+    b.painted.add(clip.id);
+    App.addFxToClip(clip, b.type);
+  },
+
   // A single sweep across the clip the moment an effect is dropped on it, so you
   // see WHERE it landed. It takes the class off again when the animation ends,
   // because a permanent animation is decoration, not information.
   flashFx(clipId) {
+    // keep the names on show for a moment, then let the badge shrink back
+    this._fxFresh = clipId;
+    clearTimeout(this._fxFreshTimer);
+    this._fxFreshTimer = setTimeout(() => {
+      this._fxFresh = null;
+      const b = this.lanes.querySelector(`[data-clip-id="${clipId}"] .clip-fx-badge`);
+      if (b) b.classList.remove('fresh');
+    }, 3000);
     const el = this.lanes.querySelector(`[data-clip-id="${clipId}"]`);
     if (!el) return;
+    // the badge was built by the render that ran just before this, so open it
+    // here rather than relying on the next one
+    const badge = el.querySelector('.clip-fx-badge');
+    if (badge) badge.classList.add('fresh');
     el.classList.remove('fx-landed');
     void el.offsetWidth;                 // restart it if one is already running
     el.classList.add('fx-landed');
@@ -1293,7 +1330,7 @@ const Timeline = {
   },
 
   updatePlayhead() {
-    // when idle (not playing, no pending move), skip the work entirely — saves
+    // when idle (not playing, no pending move), skip the work entirely, which saves
     // battery/CPU since this fires ~60x a second forever
     if (!UI.playing && this._lastX === UI.playhead * UI.zoom) return;
 

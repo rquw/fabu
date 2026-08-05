@@ -208,8 +208,8 @@ const Sampler = {
     if (!this.buffer) { el.textContent = ''; return; }
     const f = (s) => s.toFixed(2) + 's';
     el.innerHTML =
-      `${tr('samp_start', 'Start')} <b style="color:var(--green)">${f(this.start)}</b> · ` +
-      `${tr('samp_end', 'End')} <b style="color:var(--red)">${f(this.end)}</b> · ` +
+      `${tr('samp_start', 'Start')} <b style="color:var(--green)">${f(this.start)}</b>, ` +
+      `${tr('samp_end', 'End')} <b style="color:var(--red)">${f(this.end)}</b>, ` +
       `${tr('samp_length', 'Length')} <b style="color:var(--text)">${f(Math.max(0, this.end - this.start))}</b>`;
   },
 

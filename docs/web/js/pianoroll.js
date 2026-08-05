@@ -280,7 +280,7 @@ const PianoRoll = {
 
   // ---------- drawing ----------
 
-  // Resize a canvas only when its size actually changes — reallocating the
+  // Resize a canvas only when its size actually changes. Reallocating the
   // (potentially huge) backing store every frame was what made scrolling a long
   // pattern lag. setTransform is idempotent whether or not we reallocated.
   sizeCanvas(cv, w, h, dpr) {
