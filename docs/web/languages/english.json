@@ -883,5 +883,12 @@
   "fver_title": "Warning!",
   "fver_body": "This project was made in version {made}. You're on {mine}. This might cause problems and corrupt the file!",
   "fver_update": "Update now",
-  "fver_open": "Open anyway"
+  "fver_open": "Open anyway",
+  "mp_someone": "Someone",
+  "ver_pre123": "an older version",
+  "ver_refused_title": "{who} could not join",
+  "ver_refused_body": "They are on {theirs} and this room is on {mine}. Everyone has to be on the same version. Older versions of fabu cannot show them why, so you will need to tell them.",
+  "ver_copy": "Copy message for them",
+  "ver_copied": "Copied. Paste it to them.",
+  "ver_share": "{who}: you need fabu {need} to join this room. Get it here: {url}"
 }
