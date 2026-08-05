@@ -71,6 +71,9 @@ const App = {
       if (window.electronAPI.onFullscreen) window.electronAPI.onFullscreen((fs) => document.body.classList.toggle('is-fullscreen', fs));
     }
     // greet the user once after an update went through
+    // the web build has no electronAPI, so start from the built-in constant and
+    // let the packaged app correct it below
+    this.version = (typeof APP_VERSION !== 'undefined' && APP_VERSION) || this.version || '0.0.0';
     if (window.electronAPI && window.electronAPI.getVersion) {
       window.electronAPI.getVersion().then((v) => {
         if (!v) return;
@@ -837,6 +840,88 @@ const App = {
     setTimeout(() => { inp.focus(); inp.select(); }, 40);
   },
 
+  // ---------- versions ----------
+
+  RELEASES_URL: 'https://github.com/rquw/fabu/releases',
+
+  // -1 if a < b, 0 if equal, 1 if a > b. Missing parts count as zero.
+  cmpVersion(a, b) {
+    const pa = String(a || '0').split('.').map(n => parseInt(n, 10) || 0);
+    const pb = String(b || '0').split('.').map(n => parseInt(n, 10) || 0);
+    for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+      const d = (pa[i] || 0) - (pb[i] || 0);
+      if (d) return d > 0 ? 1 : -1;
+    }
+    return 0;
+  },
+
+  // The newest published release, cached for a few hours. Never throws and
+  // never blocks anything important: if it cannot be reached we simply do not
+  // claim to know what the latest version is.
+  async latestVersion() {
+    try {
+      const raw = localStorage.getItem('fabu.latestVer');
+      if (raw) {
+        const c = JSON.parse(raw);
+        if (c && c.v && Date.now() - c.ts < 6 * 3600e3) return c.v;
+      }
+    } catch (e) {}
+    try {
+      const res = await fetch('https://api.github.com/repos/rquw/fabu/releases/latest', {
+        headers: { Accept: 'application/vnd.github+json' }
+      });
+      if (!res.ok) return null;
+      const j = await res.json();
+      const v = (j.tag_name || '').replace(/^v/, '');
+      if (!v) return null;
+      try { localStorage.setItem('fabu.latestVer', JSON.stringify({ v, ts: Date.now() })); } catch (e) {}
+      return v;
+    } catch (e) { return null; }
+  },
+
+  // A dialog with as many buttons as the situation needs. Each button is
+  // { label, value, style } where style picks the look: 'accent' for the
+  // recommended one, 'danger' for the one that can hurt, plain otherwise.
+  askChoice({ title, body, buttons }) {
+    return new Promise((resolve) => {
+      const old = document.getElementById('choiceModal');
+      if (old) old.remove();
+      const wrap = document.createElement('div');
+      wrap.id = 'choiceModal';
+      wrap.className = 'modal-back';
+      wrap.innerHTML = `
+        <div class="modal-card">
+          <div class="modal-title"></div>
+          <div class="modal-sub"></div>
+          <div class="modal-btns choice-btns"></div>
+        </div>`;
+      wrap.querySelector('.modal-title').textContent = title;
+      wrap.querySelector('.modal-sub').textContent = body;
+      const row = wrap.querySelector('.choice-btns');
+      const done = (v) => { wrap.remove(); window.removeEventListener('keydown', key, true); resolve(v); };
+      const key = (e) => { if (e.key === 'Escape') { e.stopPropagation(); done(null); } };
+      for (const b of buttons) {
+        const el = document.createElement('button');
+        el.className = 'fbtn' + (b.style === 'accent' ? ' accent' : b.style === 'danger' ? ' danger-outline' : '');
+        el.textContent = b.label;
+        el.addEventListener('click', () => done(b.value));
+        row.appendChild(el);
+      }
+      document.body.appendChild(wrap);
+      wrap.addEventListener('mousedown', (e) => { if (e.target === wrap) done(null); });
+      window.addEventListener('keydown', key, true);
+      const first = row.querySelector('.accent') || row.firstChild;
+      setTimeout(() => first && first.focus(), 40);
+    });
+  },
+
+  // main.js routes window.open with an http url to the system browser, so this
+  // works the same in the desktop app and the web build
+  openReleases(tag) {
+    const url = tag ? this.RELEASES_URL + '/tag/v' + tag : this.RELEASES_URL;
+    window.open(url, '_blank', 'noopener');
+  },
+
   // A plain yes/no, in the app's own dialog style. Resolves false if the user
   // dismisses it, because "no" is always the safe answer here.
   askYesNo({ title, body, yes, no }) {
@@ -1443,6 +1528,7 @@ const App = {
   collectFab() {
     const data = JSON.parse(JSON.stringify(S));
     data.name = $('#projName').value;
+    data.appVersion = this.version;   // so opening it in an older build can warn
     data.samples = {};
     const used = new Set();
     for (const t of S.tracks)
@@ -1532,6 +1618,23 @@ const App = {
         } catch (e) {
           toast(tr('toast_sound_decode_fail', 'A sound could not be decoded'), 'red');
         }
+      }
+
+      // A file written by a newer build may use fields this one does not know
+      // about, and saving over it would drop them. Ask before that happens.
+      if (data.appVersion && this.cmpVersion(data.appVersion, this.version) > 0) {
+        const choice = await this.askChoice({
+          title: tr('fver_title', 'Warning!'),
+          body: tr('fver_body', 'This project was made in version {made}. You\'re on {mine}. This might cause problems and corrupt the file!',
+                   { made: data.appVersion, mine: this.version }),
+          buttons: [
+            { label: tr('fver_update', 'Update now'), value: 'update', style: 'accent' },
+            { label: tr('fver_open', 'Open anyway'), value: 'open', style: 'danger' },
+            { label: tr('cancel', 'Cancel'), value: null }
+          ]
+        });
+        if (choice === 'update') { this.openReleases(); return false; }
+        if (choice !== 'open') return false;
       }
 
       const name = data.name || fileName.replace(/\.fab$/i, '');

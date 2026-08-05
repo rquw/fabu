@@ -869,5 +869,19 @@
   "mpf_relay_many_t": "Too many connections from here",
   "mpf_relay_many_b": "Close some other fabu windows and try again.",
   "mpf_relay_full_t": "That room is full",
-  "mpf_relay_full_b": "The room has reached the number of people the server allows."
+  "mpf_relay_full_b": "The room has reached the number of people the server allows.",
+  "ver_title": "Version mismatch!",
+  "ver_newer": "You're on a newer version of fabu ({mine}) than the host ({host}). This is not your fault! You can download an older version here:",
+  "ver_older_latest": "You're on an older version of fabu ({mine}) than the host ({host}). You can update to the newest version here:",
+  "ver_older_pinned": "You're on an older version of fabu ({mine}) than the host ({host}). You can download this version here:",
+  "ver_update": "Download update",
+  "ver_get_that": "Download {host}",
+  "ver_open_releases": "Open downloads",
+  "ver_continue": "Continue anyway",
+  "ver_host_title": "You're not on the latest version!",
+  "ver_host_body": "It's recommended you use the latest version of fabu. Other people might not be able to join you.",
+  "fver_title": "Warning!",
+  "fver_body": "This project was made in version {made}. You're on {mine}. This might cause problems and corrupt the file!",
+  "fver_update": "Update now",
+  "fver_open": "Open anyway"
 }
