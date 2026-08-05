@@ -3,28 +3,49 @@
 ## 1.2.2
 
 **Windows: please download this one from the website.**
-Updating from inside the app is broken on Windows and has been for a while. It half-installs, gives up, and leaves you with no fabu at all. That is fixed, but the fix lives in this version, so it cannot rescue the update *into* it. Grab the installer from the site this once and in-app updates will work normally from here on. Sorry about that one.
+Updating from inside the app is broken on Windows and has been for a while. It half installs, gives up, and leaves you with no fabu at all. That is fixed, but the fix lives in this version, so it cannot rescue the update into it. Grab the installer from the site this once and in app updates will work normally from here on. Sorry about that one.
 
-**Drop a MIDI file on the timeline.**
-It turns into real patterns you can open and edit, not a locked block of audio. Each part of the file gets its own track, and parts that came in at different times stay where they were, so a bass that entered two bars late still does. Everything lands on Grand Piano to start with.
+**Drop a MIDI file onto the timeline.**
+It becomes real patterns you can open and edit, not a locked block of audio. Every part of the file gets its own lane, split wherever the file changes instrument, so a piece that goes piano, then trumpet, then violin arrives as three lanes you can move around separately. Drum parts land on their own lane too. Each lane starts on the closest instrument fabu has, or the grand piano when nothing is close.
 
-**Jam rooms hold together now.**
-The server this runs on goes to sleep when nobody is using it and can take a few seconds to wake up. Before, the app gave up long before that, so the room just died. Now it keeps trying, quietly, and puts you back in without anyone seeing you leave. Lose your wifi and get it back, and you land in the same room you were in.
+Drop one into an empty project and the project reshapes itself to fit: tempo, time signature and the file's name. Drop one into a project you are already working on and it asks before touching your tempo.
 
-**And when something does go wrong, it says so.**
-Every way a room can break now has an actual sentence attached. "Servers went down." "You are offline." "Host disconnected." No more sitting there wondering whether it is you, your internet, or the app. If it can be retried, there is a button. If your work was in danger, it was already saved.
+**Sustain pedal.**
+Hold Shift while the keyboard is open, click the Sustain button, or use a real pedal on a MIDI keyboard. Notes keep ringing after you let go, like a real piano. It records as you play it, it comes through in exported files, and you can draw it by hand in the piano roll on the strip under the bar numbers. MIDI files bring their pedal with them, which is most of what makes a piano piece sound like one.
 
-**Big rooms stay smooth.**
-Cursors used to be sent so often that a full room drowned the server in its own chatter. They now slow down as the room fills and switch off entirely past 40 people, which is the difference between a hundred-person room working and falling over. Small rooms feel exactly as they did.
+**Time signatures.**
+3/4, 6/8 and the rest, in Settings. The ruler, the bar numbers, the metronome accent and where patterns snap all follow it.
+
+**New projects start empty.**
+No lanes to clear out first. Add what you want with the Instrument and Audio buttons. The walkthrough for new users starts there now.
+
+**Windows remember their size and place.**
+The main window and every panel inside it. Size the mixer how you like it once and it stays that way.
+
+**Big songs stopped breaking.**
+Opening the piano roll on a long piece could come up blank or full of broken boxes, and zooming into a busy project could leave clips empty. Both were the same thing: the app was asking for a drawing surface far larger than the browser allows, and being handed nothing. It now draws only the part you can see. A four thousand note part redraws in about a millisecond.
+
+**Jam rooms hold together.**
+The server sleeps when nobody is using it and can take a few seconds to wake. The app used to give up before that and the room would just die. Now it keeps trying quietly and puts you back without anyone seeing you leave. Lose your wifi and get it back and you land in the same room.
+
+**When something goes wrong it says so.**
+Every way a room can break now has a real sentence attached. "Servers went down." "You are offline." "Host disconnected." No more guessing whether it is you, your internet or the app. If it can be retried there is a button, and your work is saved before anything else happens.
+
+**Rooms use a fraction of the traffic.**
+Project changes are compressed, cursors slow down as a room fills and switch off past forty people, and the presence heartbeat eases off too. A hundred people in one room went from impossible to tested and working.
 
 **The host leaving is no longer a game show.**
-The spinning name-picker is gone. If the host drops, it waits a moment in case they are just reconnecting, then hands over quietly and tells you who has it now.
+The spinning name picker is gone. If the host drops it waits a moment in case they are reconnecting, then hands over quietly and tells you who has it.
 
 **Smaller things**
-- New projects start with Grand Piano, Drums, 808 Bass and an audio track, so you can start writing instead of setting up.
-- You can change a track's colour. Click the dot next to its name.
-- Reconnecting no longer puts a second copy of you in the player list, wearing your own crown.
-- The 808 no longer clicks at the very start of a note.
+- Click the BPM number and just type. It still drags if you drag it.
+- fabu now mentions the L key when you look like you want it: after you mark a section, after you replay the same spot a few times, or when a repeat is holding the playhead in. Marking a section no longer switches repeat on by itself.
+- Dragging a MIDI file in says MIDI instead of calling it an audio file.
+- Track colours. Click the dot next to a track's name.
+- Reconnecting no longer puts a second copy of you in the player list wearing your own crown.
+- The 808 no longer clicks at the start of a note.
+- Settings opens again. A mistake in this release's own time signature work had broken it.
+- The walkthrough no longer appears over the home screen, no longer repeats a step, and its "change the sound" step works again after quietly pointing at a control that no longer existed.
 
 ## 1.2.1
 - "Restart in 1 minute" no longer traps you. It now counts down in a small bar in the corner so you can keep working and save, restart early, or cancel it.
