@@ -838,5 +838,8 @@
   "tut_first_t": "Start with an instrument",
   "tut_first_b": "Click Instrument to add your first track. Audio adds a lane for recordings and sound files.",
   "tut_make_t": "Make a pattern",
-  "tut_make_b": "Double click the empty lane next to the track to create a pattern, then double click the pattern to draw notes."
+  "tut_make_b": "Double click the empty lane next to the track to create a pattern, then double click the pattern to draw notes.",
+  "hint_loop_made": "Press L to repeat this section",
+  "hint_loop_repeat": "Playing that part a lot? Press L to repeat it automatically",
+  "hint_loop_escape": "Repeat is on, so the playhead stays in the loop. Press L to turn it off."
 }

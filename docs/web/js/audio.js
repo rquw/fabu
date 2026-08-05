@@ -1118,6 +1118,7 @@ const Engine = {
     UI.playing = true;
     this.sounding = new Map();
     this.startBeat = UI.playhead;
+    if (typeof App !== 'undefined' && App.noteReplay) App.noteReplay(UI.playhead);
     this.startCtxTime = (atTime && atTime > this.ctx.currentTime + 0.005) ? atTime : this.ctx.currentTime + 0.08;
     this.events = this.collectEvents(this.startBeat);
     this.evIdx = 0;
@@ -1211,6 +1212,10 @@ const Engine = {
 
   seek(beat) {
     const wasPlaying = UI.playing;
+    // trying to move outside a live loop: the loop will pull you straight back,
+    // which looks broken unless we say what is happening
+    if (S.loopOn && S.loopEnd > S.loopStart && (beat < S.loopStart - 1e-6 || beat >= S.loopEnd)
+        && typeof App !== 'undefined' && App.hintLoop) App.hintLoop('escape');
     if (wasPlaying) this.haltPlayback();
     UI.playhead = Math.max(0, beat);
     if (wasPlaying) this.play();

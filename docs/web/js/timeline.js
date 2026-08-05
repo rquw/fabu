@@ -65,8 +65,12 @@ const Timeline = {
         const done = () => {
           window.removeEventListener('mousemove', setLoop);
           window.removeEventListener('mouseup', done);
-          if (!S.loopOn) App.setLoop(true); else this.drawRuler();
+          // Marking a region is not the same as asking to repeat it, so this no
+          // longer switches looping on behind your back. Only the button and L
+          // do that.
+          this.drawRuler();
           UI.dirty = UI.fileDirty = true;
+          if (!S.loopOn) App.hintLoop('made');
         };
         window.addEventListener('mousemove', setLoop);
         window.addEventListener('mouseup', done);
