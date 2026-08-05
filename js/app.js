@@ -458,6 +458,11 @@ const App = {
     home.style.display = 'flex';
   },
 
+  homeVisible() {
+    const home = document.getElementById('home');
+    return !!home && home.style.display !== 'none';
+  },
+
   hideHome() {
     const home = $('#home');
     if (home.style.display === 'none') return;
@@ -1769,6 +1774,18 @@ const App = {
     });
 
     $('#projName').addEventListener('change', () => { UI.dirty = true; UI.fileDirty = true; });
+
+    // the bar counter is where the time signature lives now
+    const pos = $('#posDisplay');
+    if (pos) {
+      pos.style.cursor = 'pointer';
+      pos.addEventListener('click', () => Timeline.openTimeSigMenu(pos));
+    }
+
+    // Settings is reachable before you open a project too, showing only the
+    // things that really are app-wide.
+    const homeSet = $('#homeSettings');
+    if (homeSet) homeSet.addEventListener('click', () => Windows.toggleSettings());
   },
 
   // vertical drag on a number field, cross-platform. Overlay captures the drag

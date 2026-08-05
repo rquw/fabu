@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>fabu</title>
-<link rel="stylesheet" href="styles.css?v=68">
+<link rel="stylesheet" href="styles.css?v=71">
 </head>
 <body>
 
@@ -67,8 +67,8 @@
     <button id="btnRec" class="tbtn big rec" data-tip="Record the microphone (R)" data-i18n-tip="tip_record">
       <svg class="ic"><use href="#i-mic"/></svg></button>
 
-    <div id="posDisplay" data-tip="Bar and beat. Click the ruler to move." data-i18n-tip="tip_position">
-      <span id="posBars">1.1</span><span id="posTime">0:00.0</span>
+    <div id="posDisplay" data-tip="Bar and beat. Click to change the time signature." data-i18n-tip="tip_position">
+      <span id="posBars">1.1</span><span id="posTime">0:00.0</span><span id="posSig">4/4</span>
     </div>
 
     <div class="tb-sep"></div>
@@ -203,31 +203,32 @@
   <div id="homeVerWrap">
     <span id="homeVer"></span>
     <button id="homeCheckUpd" class="home-check-upd hidden" data-i18n="set_check_updates">Check for updates</button>
+    <button id="homeSettings" class="home-check-upd" data-i18n="win_settings">Settings</button>
   </div>
 </div>
 
 <div id="toasts"></div>
 <div id="tooltip" class="hidden"></div>
 
-<script src="js/vendor/lame.min.js?v=68"></script>
-<script src="js/vendor/WasmMediaEncoder.min.js?v=68"></script>
-<script src="js/vendor/ogg.wasm.js?v=68"></script>
-<script src="js/util.js?v=68"></script>
-<script src="js/state.js?v=68"></script>
-<script src="js/audio.js?v=68"></script>
-<script src="js/windows.js?v=68"></script>
-<script src="js/timeline.js?v=68"></script>
-<script src="js/pianoroll.js?v=68"></script>
-<script src="js/automation.js?v=68"></script>
-<script src="js/sampler.js?v=68"></script>
-<script src="js/profanity.js?v=68"></script>
-<script src="js/auth.js?v=68"></script>
-<script src="js/app.js?v=68"></script>
-<script src="js/midifile.js?v=68"></script>
-<script src="js/midi.js?v=68"></script>
-<script src="js/tutor.js?v=68"></script>
-<script src="js/loadtest.js?v=68"></script>
-<script src="js/sync.js?v=68"></script>
-<script src="js/webnudge.js?v=68"></script>
+<script src="js/vendor/lame.min.js?v=71"></script>
+<script src="js/vendor/WasmMediaEncoder.min.js?v=71"></script>
+<script src="js/vendor/ogg.wasm.js?v=71"></script>
+<script src="js/util.js?v=71"></script>
+<script src="js/state.js?v=71"></script>
+<script src="js/audio.js?v=71"></script>
+<script src="js/windows.js?v=71"></script>
+<script src="js/timeline.js?v=71"></script>
+<script src="js/pianoroll.js?v=71"></script>
+<script src="js/automation.js?v=71"></script>
+<script src="js/sampler.js?v=71"></script>
+<script src="js/profanity.js?v=71"></script>
+<script src="js/auth.js?v=71"></script>
+<script src="js/app.js?v=71"></script>
+<script src="js/midifile.js?v=71"></script>
+<script src="js/midi.js?v=71"></script>
+<script src="js/tutor.js?v=71"></script>
+<script src="js/loadtest.js?v=71"></script>
+<script src="js/sync.js?v=71"></script>
+<script src="js/webnudge.js?v=71"></script>
 </body>
 </html>

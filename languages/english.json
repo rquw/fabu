@@ -18,7 +18,7 @@
   "tip_play": "Play or pause (Space)",
   "tip_stop": "Stop (Enter)",
   "tip_record": "Record the microphone (R)",
-  "tip_position": "Bar and beat, click the ruler to move",
+  "tip_position": "Bar and beat. Click to change the time signature.",
   "tip_tempo": "Tempo. Drag or type.",
   "tip_metronome": "Metronome (M)",
   "tip_snap": "Snap to grid",
@@ -850,5 +850,10 @@
   "help_col_pedal_strip": "Drag under the bar numbers",
   "help_pedal_edit": "Paint the sustain pedal in the piano roll",
   "help_col_drop_midi": "Drop a MIDI file in",
-  "help_drop_midi": "Turns it into patterns you can edit"
+  "help_drop_midi": "Turns it into patterns you can edit",
+  "set_sec_project": "This song",
+  "set_sec_project_note": "saved in the file",
+  "set_sec_app": "fabu",
+  "set_sec_app_note": "every project",
+  "set_timesig_moved": "Time signature is on the bar counter in the top bar. Click it."
 }
