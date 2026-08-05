@@ -1902,6 +1902,7 @@ const App = {
     $('#btnZoomOut').addEventListener('click', () => Timeline.setZoom(UI.zoom / 1.3));
     $('#btnFx').addEventListener('click', () => Windows.toggleFxBrowser());
     $('#btnSamples').addEventListener('click', () => Windows.toggleSampleBrowser());
+    $('#btnGallery').addEventListener('click', () => Gallery.toggle());
     $('#btnHome').addEventListener('click', () => this.goHome());
     $('#btnJam').addEventListener('click', () => Sync.togglePanel());
 
@@ -1991,6 +1992,7 @@ const App = {
     $('#btnMixer').classList.toggle('on', Windows.isOpen('mixer'));
     $('#btnFx').classList.toggle('on', Windows.isOpen('fxbrowser'));
     $('#btnSamples').classList.toggle('on', Windows.isOpen('samples'));
+    $('#btnGallery').classList.toggle('on', Windows.isOpen('gallery'));
     $('#btnSettings').classList.toggle('on', Windows.isOpen('settings'));
     $('#btnHelp').classList.toggle('on', Windows.isOpen('help'));
     $('#btnKeys').classList.toggle('on', KeysPanel.visible);

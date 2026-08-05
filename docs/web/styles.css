@@ -2162,3 +2162,68 @@ body.shift-held .fx-item:not(.samp-item) { position: relative; overflow: visible
 .req-row .req-line { display: flex; align-items: center; gap: 8px; }
 .req-row .req-why { font-size: 10px; color: var(--faint); margin-left: 16px; }
 .req-row.req-blocked .fbtn { flex: 0 0 auto; white-space: nowrap; }
+
+/* ---------- the loop gallery ---------- */
+.gal-bar { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
+.gal-tabs { display: flex; gap: 4px; }
+.gal-tab {
+  flex: 1; padding: 5px 8px; font-size: 11px; font-weight: 600; cursor: pointer;
+  border: 1px solid var(--line); background: var(--panel); color: var(--dim); border-radius: 7px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.gal-tab.on { background: var(--accent); border-color: var(--accent); color: #1a1206; }
+.gal-filters { display: flex; gap: 6px; }
+.gal-filters input {
+  flex: 1; min-width: 0; background: var(--panel2); border: 1px solid var(--line);
+  border-radius: 7px; padding: 6px 9px; color: var(--text); outline: none; font-size: 12px;
+}
+.gal-filters select {
+  background: var(--panel); color: var(--text); border: 1px solid var(--line);
+  border-radius: 7px; padding: 5px 6px; font-size: 11px; flex: 0 0 auto;
+}
+.gal-list { display: flex; flex-direction: column; gap: 6px; overflow-y: auto; max-height: 100%; }
+.gal-note { color: var(--faint); font-size: 12px; padding: 12px 2px; line-height: 1.5; }
+
+.gal-card {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--bg2);
+  transition: border-color .12s;
+}
+.gal-card:hover { border-color: var(--accent); }
+.gal-card.gal-reported { opacity: 0.45; }
+.gal-main { flex: 1; min-width: 0; }
+.gal-nm { font-size: 12.5px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gal-meta { display: flex; align-items: center; gap: 6px; margin-top: 3px; flex-wrap: wrap; }
+.gal-author {
+  background: none; border: none; padding: 0; cursor: pointer;
+  font-size: 10.5px; font-weight: 600; color: var(--accent);
+}
+.gal-author:hover { text-decoration: underline; }
+.gal-tag {
+  font-size: 9.5px; color: var(--faint); border: 1px solid var(--line);
+  border-radius: 999px; padding: 1px 6px;
+}
+.gal-acts { display: flex; align-items: center; gap: 5px; flex: 0 0 auto; }
+.gal-acts .fbtn { padding: 4px 10px; font-size: 11px; }
+.gal-like {
+  display: flex; align-items: center; gap: 3px; cursor: pointer;
+  background: none; border: none; color: var(--faint); font-size: 11px; padding: 2px;
+}
+.gal-like .ic { width: 14px; height: 14px; }
+.gal-like.on { color: var(--red); }
+.gal-like.on .ic { fill: var(--red); }
+.gal-more {
+  background: none; border: none; color: var(--faint); cursor: pointer;
+  font-size: 13px; letter-spacing: 1px; padding: 0 4px; line-height: 1;
+}
+.gal-more:hover { color: var(--text); }
+
+/* profiles */
+.prof-head { display: flex; align-items: center; gap: 9px; margin-bottom: 8px; }
+.prof-dot { width: 13px; height: 13px; border-radius: 50%; flex: 0 0 auto; }
+.prof-name { font-size: 16px; font-weight: 800; }
+.prof-bio { font-size: 12px; color: var(--dim); line-height: 1.5; margin-bottom: 10px; }
+.prof-bio i { color: var(--faint); }
+.prof-stats { display: flex; gap: 14px; flex-wrap: wrap; font-size: 11px; color: var(--faint); margin-bottom: 4px; }
+.prof-stats b { color: var(--text); font-size: 13px; margin-right: 3px; }
+.samp-from { font-size: 9px; color: var(--faint); margin-left: 4px; }

@@ -363,9 +363,41 @@ const SAMPLE_LIB = [
   { id: 'jz_stabs', cat: 'jazz', name: 'Horn Stabs', instrument: 'rtrumpet', length: 4,
     notes: _chords([[0, [72, 76], 0.3], [1.5, [74, 77], 0.3], [2.5, [71, 76], 0.3], [3, [72, 79], 0.7]]) },
 ];
-const SAMPLE_CATS = ['mine', 'drums', 'bass', 'melodic', 'jazz'];
+// Anything that came from another person goes through here before it reaches
+// innerHTML. A loop name is typed by a stranger, which is exactly the kind of
+// text that must never be read as markup.
+function escapeHtml(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+// A small menu under whatever was clicked. items is [[label, fn], ...].
+function ctxMenu(ev, items) {
+  const old = document.getElementById('ctxShared');
+  if (old) old.remove();
+  const m = document.createElement('div');
+  m.id = 'ctxShared';
+  m.className = 'ctx-menu';
+  for (const [label, fn] of items) {
+    const b = document.createElement('button');
+    b.className = 'ctx-item';
+    b.textContent = label;
+    b.addEventListener('click', () => { m.remove(); fn(); });
+    m.appendChild(b);
+  }
+  document.body.appendChild(m);
+  const r = (ev.currentTarget || ev.target).getBoundingClientRect();
+  m.style.left = Math.max(8, Math.min(r.left, window.innerWidth - m.offsetWidth - 8)) + 'px';
+  m.style.top = Math.min(r.bottom + 6, window.innerHeight - m.offsetHeight - 8) + 'px';
+  const close = (e) => { if (!m.contains(e.target)) { m.remove(); window.removeEventListener('mousedown', close, true); } };
+  setTimeout(() => window.addEventListener('mousedown', close, true), 0);
+  return m;
+}
+
+const SAMPLE_CATS = ['mine', 'drums', 'bass', 'melodic', 'jazz', 'other'];
 function sampleCatName(c) {
-  const fallback = { mine: 'Yours', drums: 'Drums', bass: 'Bass', melodic: 'Melodic', jazz: 'Jazz', fx: 'Sound FX' };
+  const fallback = { mine: 'Yours', drums: 'Drums', bass: 'Bass', melodic: 'Melodic', jazz: 'Jazz', other: 'Other', fx: 'Sound FX' };
   return tr('samp_cat_' + c, fallback[c] || c);
 }
 
@@ -617,7 +649,7 @@ const MyLoops = {
   asPresets() {
     return this.all().map(l => ({
       id: l.id, cat: 'mine', name: l.name, instrument: l.instrument,
-      length: l.length, notes: l.notes, sustain: l.sustain, mine: true
+      length: l.length, notes: l.notes, sustain: l.sustain, mine: true, from: l.from || null
     }));
   }
 };

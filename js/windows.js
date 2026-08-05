@@ -639,7 +639,9 @@ const Windows = {
           item.draggable = true;
           item.dataset.tip = tr('tip_samp_item', 'Click to hear it, drag or double-click to add it');
           const inst = s.cat === 'fx' ? '' : `<span class="samp-inst">${instrLabel(s.instrument)}</span>`;
-          item.innerHTML = `<button class="samp-play" title="${tr('samp_preview', 'Preview')}"><svg class="ic"><use href="#i-play"/></svg></button><span class="samp-nm">${s.name}</span>${inst}`;
+          // a loop taken from the gallery keeps the name of whoever wrote it
+          const credit = s.from ? `<span class="samp-from">${escapeHtml(tr('loop_by', 'by {name}', { name: s.from }))}</span>` : '';
+          item.innerHTML = `<button class="samp-play" title="${tr('samp_preview', 'Preview')}"><svg class="ic"><use href="#i-play"/></svg></button><span class="samp-nm">${escapeHtml(s.name)}</span>${credit}${inst}`;
           item.addEventListener('dragstart', (e) => {
             e.dataTransfer.setData('text/fabu-sample', s.id);
             e.dataTransfer.effectAllowed = 'copy';
@@ -753,6 +755,7 @@ const Windows = {
         <div class="loop-meta" id="loopMeta"></div>
         <div class="modal-btns" style="flex-wrap:wrap">
           <button id="loopShare" class="fbtn">${tr('loop_share', 'Share as file')}</button>
+          <button id="loopPublish" class="fbtn">${tr('loop_publish', 'Put in the gallery')}</button>
           <button id="loopDelete" class="fbtn danger-outline">${tr('loop_delete', 'Delete')}</button>
           <button id="loopDone" class="fbtn accent">${tr('loop_done', 'Done')}</button>
         </div>
@@ -780,6 +783,11 @@ const Windows = {
       const safe = (l.name || 'loop').replace(/[\\/:*?"<>|]/g, '') || 'loop';
       App.browserDownload(new Blob([MyLoops.toFile(l)], { type: 'application/json' }), safe + MyLoops.EXT);
       toast(tr('loop_shared', 'Saved {name}{ext}, send it to anyone', { name: safe, ext: MyLoops.EXT }), 'green');
+    });
+    wrap.querySelector('#loopPublish').addEventListener('click', () => {
+      commit();
+      wrap.remove();
+      Gallery.publish(MyLoops.all().find(x => x.id === id));
     });
     wrap.querySelector('#loopDelete').addEventListener('click', async () => {
       const yes = await App.askYesNo({
