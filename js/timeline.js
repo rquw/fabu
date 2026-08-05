@@ -1106,6 +1106,13 @@ const Timeline = {
       const beat = snapBeat(this.xToBeat(e.clientX), S.snap);
       const laneIdx = clamp(Math.floor((e.clientY - this.lanes.getBoundingClientRect().top) / TRACK_H), 0, Math.max(0, S.tracks.length - 1));
       const samp = types.includes('text/fabu-sample') ? (typeof Windows !== 'undefined' && Windows._dragSample) : null;
+      // files aren't readable during dragover, but their names/types are, so
+      // the ghost can say MIDI instead of promising an audio file
+      const items = e.dataTransfer.items;
+      let isMidi = false;
+      if (!samp && items) for (const it of items) {
+        if (it.kind === 'file' && /midi/.test(it.type || '')) { isMidi = true; break; }
+      }
       const lenB = samp ? samp.length : 4; // audio: real length unknown until dropped, show a placeholder
       // translucent preview of exactly how big it'll be and where it starts
       ghost.className = 'preview';
@@ -1114,10 +1121,11 @@ const Timeline = {
       ghost.style.top = (laneIdx * TRACK_H + 2) + 'px';
       ghost.style.width = Math.max(24, lenB * UI.zoom - 2) + 'px';
       ghost.style.height = (TRACK_H - 6) + 'px';
-      ghost.innerHTML = `<span class="dp-name">${samp ? samp.name : tr('drop_audio', 'Audio')}</span>`;
+      ghost.innerHTML = `<span class="dp-name">${samp ? samp.name : (isMidi ? tr('drop_midi', 'MIDI') : tr('drop_audio', 'Audio'))}</span>`;
       if (samp) this.drawGhostNotes(ghost, samp, lenB * UI.zoom - 2);
       const dropBar = Math.floor(beat / beatsPerBar()) + 1;
       setHint(samp ? tr('hint_drop_loop', 'Drop to add this loop at bar {bar}.', { bar: dropBar })
+        : isMidi ? tr('hint_drop_midi', 'Drop to turn this MIDI into patterns at bar {bar}.', { bar: dropBar })
         : tr('hint_drop_at_bar', 'Drop to place the sound at bar {bar}.', { bar: dropBar }));
     });
     area.addEventListener('dragleave', () => { ghost.style.display = 'none'; ghost.className = ''; ghost.innerHTML = ''; });

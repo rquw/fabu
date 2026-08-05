@@ -832,5 +832,7 @@
   "tip_pedal": "Sustain pedal (hold Shift)",
   "midi_adopted": "{n} notes imported. Project set to {bpm} BPM, {sig}.",
   "help_pedal": "Sustain pedal",
-  "proll_pedal": "drag the strip under the bar numbers to hold the sustain pedal"
+  "proll_pedal": "drag the strip under the bar numbers to hold the sustain pedal",
+  "hint_drop_midi": "Drop to turn this MIDI into patterns at bar {bar}.",
+  "hint_loop_key": "Press L to turn looping on and off"
 }
