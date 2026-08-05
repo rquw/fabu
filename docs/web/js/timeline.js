@@ -977,7 +977,8 @@ const Timeline = {
 
     // Lean the clip the way it is being dragged. Not a physics toy: it snaps to
     // one of two angles and stays there until the direction changes, so it reads
-    // as a deliberate lean rather than something wobbling around.
+    // as a deliberate lean rather than something wobbling around. Five degrees
+    // is enough to feel, and a wide clip tilted further looks broken.
     let tilt = 0, lastTiltX = startX;
     const applyTilt = () => {
       const els = [el, ...group.map(g => this.lanes.querySelector(`[data-clip-id="${g.clip.id}"]`))];
@@ -987,7 +988,7 @@ const Timeline = {
       const dx = clientX - lastTiltX;
       if (Math.abs(dx) < 2) return;          // ignore jitter, keep the current lean
       lastTiltX = clientX;
-      const want = dx > 0 ? 15 : -15;
+      const want = dx > 0 ? 5 : -5;
       if (want === tilt) return;
       tilt = want;
       applyTilt();
