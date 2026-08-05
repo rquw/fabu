@@ -883,5 +883,12 @@
   "fver_title": "Achtung!",
   "fver_body": "Dieses Projekt wurde in Version {made} erstellt. Du bist auf {mine}. Das kann Probleme verursachen und die Datei beschädigen!",
   "fver_update": "Jetzt aktualisieren",
-  "fver_open": "Trotzdem öffnen"
+  "fver_open": "Trotzdem öffnen",
+  "mp_someone": "Jemand",
+  "ver_pre123": "einer älteren Version",
+  "ver_refused_title": "{who} konnte nicht beitreten",
+  "ver_refused_body": "Die Person hat {theirs}, dieser Raum läuft auf {mine}. Alle müssen dieselbe Version haben. Ältere fabu-Versionen können das nicht anzeigen, du musst es ihr also selbst sagen.",
+  "ver_copy": "Nachricht kopieren",
+  "ver_copied": "Kopiert. Schick es ihr.",
+  "ver_share": "{who}: du brauchst fabu {need}, um diesem Raum beizutreten. Hier bekommst du es: {url}"
 }

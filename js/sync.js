@@ -931,6 +931,11 @@ const Sync = {
     // so they can be told exactly what they need.
     if (App.cmpVersion(m.ver || '0.0.0', App.version) !== 0) {
       this.send({ type: 'deny', to: m.id, reason: 'version', hostVer: App.version });
+      // A client older than 1.2.3 has no code for this and will only see a
+      // generic "the host declined your request". Nothing we send can change
+      // that: every string it shows comes from its own language file. So tell
+      // the HOST instead, who is usually the one talking to them anyway.
+      this.noteVersionRefusal(m.name, m.ver);
       return;
     }
     // someone we already know is just reconnecting: let them straight back in,
@@ -1428,6 +1433,42 @@ const Sync = {
     if (this.isHost) this.pruneAudioBans();
     if (lostHost) this.hostLost();
     if (changed) { this.renderPanel(); this.renderCursors(); }
+  },
+
+  // Show the host who bounced and why, with a ready-made sentence they can
+  // paste to the person. Repeats from the same name are folded together so a
+  // client retrying does not spam the room owner.
+  noteVersionRefusal(name, theirVer) {
+    const who = name || tr('mp_someone', 'Someone');
+    const ver = theirVer && /^\d/.test(theirVer) ? theirVer : tr('ver_pre123', 'an older version');
+    this._refused = this._refused || new Map();
+    const last = this._refused.get(who) || 0;
+    if (Date.now() - last < 20000) return;
+    this._refused.set(who, Date.now());
+
+    const line = tr('ver_share', '{who}: you need fabu {need} to join this room. Get it here: {url}',
+      { who, need: App.version, url: App.RELEASES_URL + '/tag/v' + App.version });
+
+    App.askChoice({
+      title: tr('ver_refused_title', '{who} could not join', { who }),
+      body: tr('ver_refused_body',
+        "They are on {theirs} and this room is on {mine}. Everyone has to be on the same version. Older versions of fabu cannot show them why, so you will need to tell them.",
+        { theirs: ver, mine: App.version }),
+      buttons: [
+        { label: tr('ver_copy', 'Copy message for them'), value: 'copy', style: 'accent' },
+        { label: tr('close', 'Close'), value: null }
+      ]
+    }).then((v) => {
+      if (v !== 'copy') return;
+      const done = () => toast(tr('ver_copied', 'Copied. Paste it to them.'), 'green');
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(line).then(done, () => {});
+      else {
+        const ta = document.createElement('textarea');
+        ta.value = line; document.body.appendChild(ta); ta.select();
+        try { document.execCommand('copy'); done(); } catch (e) {}
+        ta.remove();
+      }
+    });
   },
 
   // Turned away for being on a different build. Which advice is right depends
