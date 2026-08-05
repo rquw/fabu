@@ -18,7 +18,7 @@
   "tip_play": "Spielen oder pausieren (Leertaste)",
   "tip_stop": "Stopp (Enter)",
   "tip_record": "Mikrofon aufnehmen (R)",
-  "tip_position": "Bar und Takt",
+  "tip_position": "Takt und Schlag. Klicken, um die Taktart zu ändern.",
   "tip_tempo": "Tempo, ziehen oder eingeben",
   "tip_metronome": "Metronom (M)",
   "tip_snap": "Auf Raster ausrichten",
@@ -850,5 +850,10 @@
   "help_col_pedal_strip": "Unter den Taktzahlen ziehen",
   "help_pedal_edit": "Haltepedal in der Piano-Roll einzeichnen",
   "help_col_drop_midi": "MIDI-Datei hineinziehen",
-  "help_drop_midi": "Wird in bearbeitbare Patterns umgewandelt"
+  "help_drop_midi": "Wird in bearbeitbare Patterns umgewandelt",
+  "set_sec_project": "Dieser Song",
+  "set_sec_project_note": "in der Datei gespeichert",
+  "set_sec_app": "fabu",
+  "set_sec_app_note": "jedes Projekt",
+  "set_timesig_moved": "Die Taktart sitzt am Taktzähler in der oberen Leiste. Klick ihn an."
 }

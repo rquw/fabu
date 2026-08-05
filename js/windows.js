@@ -651,6 +651,17 @@ const Windows = {
     const w = this.create('settings', tr('win_settings', 'Settings'), 'i-gear', { x: 220, y: 140, width: 320 });
     w.refresh = () => {
       w.body.innerHTML = '';
+      // Two kinds of setting were sitting in one undivided list, so per-song
+      // ones looked like preferences that applied to everything you open.
+      // They are labelled and separated now, and the project half is simply
+      // absent when no project is open (Settings opens from the home screen).
+      const inProject = !!S && !App.homeVisible();
+      const head = (text, note) => {
+        const h = document.createElement('div');
+        h.className = 'set-head';
+        h.innerHTML = `<span>${text}</span>` + (note ? `<em>${note}</em>` : '');
+        w.body.appendChild(h);
+      };
       const mkCheck = (labelText, checked, tip, onChange) => {
         const r = document.createElement('div');
         r.className = 'frow';
@@ -667,40 +678,21 @@ const Windows = {
         r.append(cb, l);
         w.body.appendChild(r);
       };
-      // Time signature. Everything counts in quarter beats internally, so this
-      // just changes how long a bar is: the ruler, the metronome accent, bar
-      // numbers and where new patterns snap all follow it.
-      {
-        const row = document.createElement('div');
-        row.className = 'set-row';
-        const lbl = document.createElement('span');
-        lbl.textContent = tr('set_timesig', 'Time signature');
-        const sel = document.createElement('select');
-        sel.dataset.tip = tr('tip_timesig', 'How many beats are in a bar');
-        for (const sig of ['4/4', '3/4', '2/4', '5/4', '6/8', '7/8', '12/8', '6/4']) {
-          const o = document.createElement('option');
-          o.value = sig; o.textContent = sig;
-          sel.appendChild(o);
-        }
-        sel.value = ((S.timeSig && S.timeSig[0]) || 4) + '/' + ((S.timeSig && S.timeSig[1]) || 4);
-        sel.addEventListener('change', () => {
-          Undo.push('Time signature');
-          const [n, d] = sel.value.split('/').map(Number);
-          S.timeSig = [n, d];
-          Timeline.drawRuler();
-          Timeline.render();
-          UI.dirty = UI.fileDirty = true;
-          toast(tr('toast_timesig', 'Time signature: {v}', { v: sel.value }));
-        });
-        row.appendChild(lbl); row.appendChild(sel);
-        w.body.appendChild(row);
+      if (inProject) {
+        head(tr('set_sec_project', 'This song'), tr('set_sec_project_note', 'saved in the file'));
+        mkCheck(tr('set_countin', 'Count-in before recording'), S.countIn,
+          tr('tip_countin', 'Four beats count you in before recording.'),
+          (v) => { Undo.push('Count-in setting'); S.countIn = v; toast(tr(v ? 'toast_countin_on' : 'toast_countin_off', 'Count-in ' + (v ? 'on' : 'off'))); });
+        mkCheck(tr('set_metro', 'Metronome while playing'), S.metronome,
+          tr('tip_set_metro', 'Click on every beat (M)'),
+          (v) => { App.setMetronome(v); w.refresh(); });
+        const sigRow = document.createElement('div');
+        sigRow.className = 'set-note';
+        sigRow.textContent = tr('set_timesig_moved', 'Time signature is on the bar counter in the top bar. Click it.');
+        w.body.appendChild(sigRow);
       }
-      mkCheck(tr('set_countin', 'Count-in before recording'), S.countIn,
-        tr('tip_countin', 'Four beats count you in before recording.'),
-        (v) => { Undo.push('Count-in setting'); S.countIn = v; toast(tr(v ? 'toast_countin_on' : 'toast_countin_off', 'Count-in ' + (v ? 'on' : 'off'))); });
-      mkCheck(tr('set_metro', 'Metronome while playing'), S.metronome,
-        tr('tip_set_metro', 'Click on every beat (M)'),
-        (v) => { App.setMetronome(v); w.refresh(); });
+
+      head(tr('set_sec_app', 'fabu'), tr('set_sec_app_note', 'every project'));
       mkCheck(tr('set_eco', 'Reduce CPU load (weaker computers)'), Engine.ecoMode(),
         tr('tip_eco', 'Turns off the room reverb and limits voices so playback stays smooth.'),
         (v) => { Engine.setEco(v); toast(tr(v ? 'toast_eco_on' : 'toast_eco_off', 'CPU saver ' + (v ? 'on' : 'off'))); });
@@ -724,10 +716,11 @@ const Windows = {
 
       const r = document.createElement('div');
       r.className = 'frow';
+      if (!inProject) r.style.display = 'none';   // master volume is part of the song
       r.innerHTML = `<label>${tr('set_master_vol', 'Master vol.')}</label>`;
       const inp = document.createElement('input');
       inp.type = 'range';
-      inp.min = 0; inp.max = 3; inp.step = 0.01; inp.value = S.masterVol;
+      inp.min = 0; inp.max = 3; inp.step = 0.01; inp.value = S ? S.masterVol : 0.9;
       inp.addEventListener('input', () => {
         if (!inp._gesture) { Undo.push('Master volume'); inp._gesture = true; }
         S.masterVol = parseFloat(inp.value);

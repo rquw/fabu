@@ -465,6 +465,46 @@ const Timeline = {
     box.appendChild(slot);
   },
 
+  // Time signature lives with the bar counter, not in Settings. It belongs to
+  // the song, and sitting in a settings window made it look like a preference
+  // that applied to everything you ever open.
+  openTimeSigMenu(anchor) {
+    const old = document.getElementById('sigMenu');
+    if (old) { old.remove(); return; }
+    const m = document.createElement('div');
+    m.id = 'sigMenu';
+    m.className = 'ctx-menu';
+    const cur = ((S.timeSig && S.timeSig[0]) || 4) + '/' + ((S.timeSig && S.timeSig[1]) || 4);
+    for (const sig of ['4/4', '3/4', '2/4', '5/4', '6/4', '6/8', '7/8', '12/8']) {
+      const b = document.createElement('button');
+      b.className = 'ctx-item' + (sig === cur ? ' on' : '');
+      b.textContent = sig;
+      b.addEventListener('click', () => {
+        m.remove();
+        if (sig === cur) return;
+        Undo.push('Time signature');
+        const [n, d] = sig.split('/').map(Number);
+        S.timeSig = [n, d];
+        UI.dirty = UI.fileDirty = true;
+        // repaint the label straight away instead of waiting for the next
+        // playhead tick, which never comes while the transport is stopped
+        const lbl = document.getElementById('posSig');
+        if (lbl) lbl.textContent = sig;
+        this.drawRuler();
+        this.render();
+        Windows.refreshAll();
+        toast(tr('toast_timesig', 'Time signature: {v}', { v: sig }));
+      });
+      m.appendChild(b);
+    }
+    document.body.appendChild(m);
+    const r = anchor.getBoundingClientRect();
+    m.style.left = Math.min(r.left, window.innerWidth - m.offsetWidth - 8) + 'px';
+    m.style.top = Math.min(r.bottom + 6, window.innerHeight - m.offsetHeight - 8) + 'px';
+    const close = (ev) => { if (!m.contains(ev.target)) { m.remove(); window.removeEventListener('mousedown', close, true); } };
+    setTimeout(() => window.addEventListener('mousedown', close, true), 0);
+  },
+
   // pick a track colour: the swatches, or any colour you like
   openColorMenu(track, anchor) {
     const old = document.getElementById('colorMenu');
@@ -1238,6 +1278,11 @@ const Timeline = {
       const beats = Math.floor(beat % bpb) + 1;
       this._posBars.textContent = bars + '.' + beats;
       this._posTime.textContent = fmtSec(beat * (60 / S.bpm));
+      if (!this._posSig) this._posSig = $('#posSig');
+      if (this._posSig) {
+        const sig = ((S.timeSig && S.timeSig[0]) || 4) + '/' + ((S.timeSig && S.timeSig[1]) || 4);
+        if (this._posSig.textContent !== sig) this._posSig.textContent = sig;
+      }
     }
 
     if (UI.playing) {
