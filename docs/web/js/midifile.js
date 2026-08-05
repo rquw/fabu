@@ -49,7 +49,15 @@ const MidiFile = {
       [/bass\b|contrabass|tuba/, 'bass'],
       [/violin|viola|cello|string|fiddle|orchestra/, 'strings'],
       [/choir|voice|vocal|aah|ooh|pad\b|halo|sweep|atmosphere|new age|warm/, 'pad'],
-      [/trumpet|trombone|horn|brass|sax|clarinet|oboe|bassoon|flute|piccolo|recorder|whistle|ocarina|lead\b|square|saw\b/, 'synth'],
+      // Brass and reeds keep the synth lead on purpose: it is three detuned
+      // sawtooths behind a resonant lowpass with a fast attack, which is
+      // literally how synth brass is built, so a trumpet or sax line lands
+      // somewhere recognisable.
+      [/trumpet|trombone|horn|brass|sax|clarinet|oboe|bassoon|lead\b|square|saw\b/, 'synth'],
+      // Flutes and whistles deliberately fall through to the grand. They are
+      // near-sine and soft; a resonant saw is the wrong timbre, strings bow in
+      // over 0.22s and the pad over 0.5s, so both smear a melody. Nothing here
+      // is close enough, and the rule is close enough or fall back.
       [/e[- ]?piano|rhodes|wurli|electric piano|clav/, 'epiano'],
       [/piano|grand|keys/, 'rpiano']
     ];
