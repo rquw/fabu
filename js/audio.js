@@ -1566,18 +1566,46 @@ const Engine = {
 
   // ----- real melodic instruments (bundled CC0 samples, multi-zone) -----
   MELODICBUF: {},
+  // Load the sampled instruments. Two things this has to get right, because
+  // getting them wrong means an instrument is silently mute:
+  //   * a failed fetch must be RETRYABLE. This used to swallow the error and
+  //     set _melodicReady anyway, so one hiccup muted that zone for the whole
+  //     session with nothing in the console.
+  //   * requests are limited to a few at a time. Firing all of them at once
+  //     (there are 40-odd now) is what made those hiccups happen.
   ensureMelodic() {
     if (this._melodicReady) return Promise.resolve();
     if (this._melodicLoading) return this._melodicLoading;
     this.ensureCtx();
-    const files = [...new Set(Object.values(MELODIC).flatMap(m => m.zones.map(z => z.file)))];
-    this._melodicLoading = Promise.all(files.map(async (fn) => {
-      try {
-        const res = await fetch('assets/instr/' + fn + '.mp3');
-        const buf = await res.arrayBuffer();
-        this.MELODICBUF[fn] = await this.ctx.decodeAudioData(buf);
-      } catch (e) { /* a missing zone just stays silent */ }
-    })).then(() => { this._melodicReady = true; });
+    const all = [...new Set(Object.values(MELODIC).flatMap(m => m.zones.map(z => z.file)))];
+    const todo = all.filter(fn => !this.MELODICBUF[fn]);
+    if (!todo.length) { this._melodicReady = true; return Promise.resolve(); }
+
+    const LANES = 6;
+    let next = 0;
+    const failed = [];
+    const worker = async () => {
+      while (next < todo.length) {
+        const fn = todo[next++];
+        for (let attempt = 0; attempt < 2; attempt++) {
+          try {
+            const res = await fetch('assets/instr/' + fn + '.mp3');
+            if (!res.ok) throw new Error('http ' + res.status);
+            this.MELODICBUF[fn] = await this.ctx.decodeAudioData(await res.arrayBuffer());
+            break;
+          } catch (e) {
+            if (attempt) { failed.push(fn); console.warn('[fabu] sample failed to load:', fn, e.message); }
+            else await new Promise(r => setTimeout(r, 150));
+          }
+        }
+      }
+    };
+    this._melodicLoading = Promise.all(Array.from({ length: LANES }, worker)).then(() => {
+      this._melodicLoading = null;
+      // only "ready" when everything really is; otherwise the next call retries
+      this._melodicReady = failed.length === 0;
+      this._melodicFailed = failed;
+    });
     return this._melodicLoading;
   },
   makeMelodicVoice(ac, dest, instr, pitch, t, vel = 0.9, noAttack = false) {
@@ -1795,6 +1823,9 @@ const Engine = {
   // own track's chain (EQ, volume, effects, reverb) exactly as it sounds now.
   async bounceClips(items, startBeat, lenBeats) {
     this.ensureCtx();
+    // the sampled instruments must actually be decoded before we render, or
+    // the export comes out silent for every one of them
+    await this.ensureMelodic();
     const spb = this.spb();
     const lead = 0;   // no lead-in: the bounce must line up exactly with the group's start
     const sr = 44100;
@@ -1846,6 +1877,7 @@ const Engine = {
   // so you always get every stem).
   async renderStems(onProgress) {
     this.ensureCtx();
+    await this.ensureMelodic();   // same as renderSong: no samples, no sound
     const spb = this.spb();
     const lead = 0.05;
     const lenSec = songEndBeat() * spb + 2;
@@ -1894,6 +1926,9 @@ const Engine = {
   // Render the whole song offline into a stereo AudioBuffer.
   async renderSong() {
     this.ensureCtx();
+    // the sampled instruments must actually be decoded before we render, or
+    // the export comes out silent for every one of them
+    await this.ensureMelodic();
     const spb = this.spb();
     const lead = 0.05;
     const lenSec = songEndBeat() * spb + 2;
