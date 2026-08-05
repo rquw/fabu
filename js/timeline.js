@@ -774,6 +774,23 @@ const Timeline = {
     window.addEventListener('mousedown', close, true);
   },
 
+  // A single sweep across the clip the moment an effect is dropped on it, so you
+  // see WHERE it landed. It takes the class off again when the animation ends,
+  // because a permanent animation is decoration, not information.
+  flashFx(clipId) {
+    const el = this.lanes.querySelector(`[data-clip-id="${clipId}"]`);
+    if (!el) return;
+    el.classList.remove('fx-landed');
+    void el.offsetWidth;                 // restart it if one is already running
+    el.classList.add('fx-landed');
+    const done = () => { clearTimeout(timer); el.classList.remove('fx-landed'); };
+    // animationend is the normal path, but it never fires if the animation is
+    // suppressed (reduced motion) or the tab is not painting, and the class must
+    // not be able to stick. The timer is the guarantee.
+    const timer = setTimeout(done, 900);
+    el.addEventListener('animationend', done, { once: true });
+  },
+
   drawClip(clipId) {
     const el = this.lanes.querySelector(`[data-clip-id="${clipId}"]`);
     const found = getClip(clipId);

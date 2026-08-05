@@ -1661,25 +1661,30 @@ input[type="range"].locked { opacity: 0.45; filter: saturate(0.4); }
 .fx-item .ic { width: 14px; height: 14px; color: var(--accent); }
 .clip.fx-over { outline: 2px dashed var(--accent); outline-offset: 1px; }
 /* ---- a pattern carrying effects ---- */
-/* Lit edge so you can tell across the whole timeline which patterns are
-   processed, without reading anything. */
+/* Marked, not animated: a quiet gold edge you can pick out across the timeline
+   without anything moving. The only motion is the one flash when it lands. */
 .clip.has-fx {
-  box-shadow: inset 0 0 0 1.5px rgba(255, 211, 94, .75),
-              0 0 12px rgba(255, 211, 94, .28);
+  box-shadow: inset 0 0 0 1.5px rgba(255, 211, 94, .7);
 }
-.clip.has-fx::after {
+
+/* the single sweep when an effect is dropped on */
+@keyframes fxLanded {
+  0%   { opacity: 0;   background-position: 130% 0; }
+  12%  { opacity: 1; }
+  100% { opacity: 0;   background-position: -130% 0; }
+}
+.clip.fx-landed::after {
   content: '';
   position: absolute; inset: 0;
   border-radius: inherit;
   pointer-events: none;
   background: linear-gradient(115deg,
-    transparent 30%, rgba(255, 211, 94, .16) 47%, rgba(255,255,255,.10) 50%,
-    rgba(255, 211, 94, .16) 53%, transparent 70%);
+    transparent 32%, rgba(255, 211, 94, .38) 47%, rgba(255,255,255,.5) 50%,
+    rgba(255, 211, 94, .38) 53%, transparent 68%);
   background-size: 260% 100%;
-  animation: fxSheen 4.5s linear infinite;
+  animation: fxLanded 0.62s cubic-bezier(.3,.7,.4,1) 1 both;
 }
-@keyframes fxSheen { from { background-position: 130% 0; } to { background-position: -130% 0; } }
-@media (prefers-reduced-motion: reduce) { .clip.has-fx::after { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .clip.fx-landed::after { display: none; } }
 
 .clip-fx-badge {
   position: absolute; left: 4px; bottom: 4px;
@@ -1699,13 +1704,7 @@ input[type="range"].locked { opacity: 0.45; filter: saturate(0.4); }
   flex: 0 0 auto; width: 9px; height: 9px;
   background: currentColor;
   clip-path: polygon(50% 0%, 61% 39%, 100% 50%, 61% 61%, 50% 100%, 39% 61%, 0% 50%, 39% 39%);
-  animation: fxTwinkle 2.4s ease-in-out infinite;
 }
-@keyframes fxTwinkle {
-  0%, 100% { opacity: .75; transform: scale(.88) rotate(0deg); }
-  50%      { opacity: 1;   transform: scale(1.1) rotate(90deg); }
-}
-@media (prefers-reduced-motion: reduce) { .fx-spark { animation: none; } }
 .clip.group { border-style: dashed; }
 .clip-group-badge {
   position: absolute; right: 3px; bottom: 3px;

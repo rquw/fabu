@@ -1382,6 +1382,7 @@ const App = {
     for (const [k, def] of Object.entries(FX_DEFS[type].p)) p[k] = def.def;
     clip.fx.push({ id: uid('fx'), type, p });
     Timeline.render();
+    Timeline.flashFx(clip.id);   // one flash to show it landed, then nothing
     if (UI.playing) Engine.reschedule();
     toast(tr('fx_added', '{name} added to the clip', { name: fxName(type) }), 'green');
   },
