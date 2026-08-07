@@ -43,6 +43,19 @@ const Windows = {
     try { localStorage.removeItem(this.GEO_KEY); } catch (e) {}
   },
 
+  // A window opened over the home screen has to sit above it, and the home
+  // overlay is at 400. Raising a window used to set a bare counter starting at
+  // 30, which dropped it straight behind home: still painted, but every click
+  // landed on the home screen behind it. That was "the Account button does
+  // nothing". Windows are banded instead, so raising one can never drop it out
+  // of its own layer.
+  Z_BASE: 20,
+  Z_OVER_HOME: 1000,
+  raise(el) {
+    const base = el.classList.contains('fwin-over-home') ? this.Z_OVER_HOME : this.Z_BASE;
+    el.style.zIndex = base + (this.zTop = (this.zTop + 1) % 400);
+  },
+
   create(id, title, iconId, opts = {}) {
     this.close(id);
     const { x = 120, y = 90, width = null, height = null } =
@@ -67,7 +80,7 @@ const Windows = {
       <div class="fwin-body"></div>`;
     (overHome ? document.body : $('#workspace')).appendChild(el);
 
-    el.addEventListener('mousedown', () => { el.style.zIndex = ++this.zTop; });
+    el.addEventListener('mousedown', () => this.raise(el));
     el.querySelector('.fwin-close').addEventListener('click', () => this.close(id));
 
     // drag by header
@@ -106,7 +119,7 @@ const Windows = {
       el.appendChild(h);
       h.addEventListener('mousedown', (e) => {
         e.preventDefault(); e.stopPropagation();
-        el.style.zIndex = ++this.zTop;
+        this.raise(el);
         const sx = e.clientX, sy = e.clientY, sw = el.offsetWidth, sh = el.offsetHeight;
         el.classList.add('resizing');
         el.style.maxHeight = 'none';   // let the user size it freely
@@ -615,10 +628,21 @@ const Windows = {
   toggleSampleBrowser() {
     if (this.isOpen('samples')) { this.close('samples'); return; }
     const w = this.create('samples', tr('samp_title', 'Loops'), 'i-loops', { x: 60, y: 130, width: 250 });
+    // The gallery used to be a lone heart in the top bar with nothing to say what
+    // it was, and there was no way at all to reach your own profile. Both belong
+    // here, next to the loops they are about.
     w.body.innerHTML = `
+      <div class="samp-links">
+        <button id="sampGallery" class="fbtn" data-tip="${tr('tip_browse_gallery', 'Loops other people have shared')}">
+          <svg class="ic"><use href="#i-library"/></svg>${tr('nav_gallery', 'Gallery')}</button>
+        <button id="sampProfile" class="fbtn" data-tip="${tr('samp_your_profile', 'Your profile')}">
+          <svg class="ic"><use href="#i-users"/></svg>${tr('nav_profile', 'Profile')}</button>
+      </div>
       <input id="sampSearch" type="text" placeholder="${tr('samp_search', 'Search loops')}" spellcheck="false"
         style="width:100%;background:var(--panel2);border:1px solid var(--line);border-radius:7px;padding:6px 9px;color:var(--text);outline:none;font-size:12px;margin-bottom:8px">
       <div id="sampList" class="samp-scroll"></div>`;
+    w.body.querySelector('#sampGallery').addEventListener('click', () => Gallery.toggle());
+    w.body.querySelector('#sampProfile').addEventListener('click', () => Gallery.openMyProfile());
     const list = w.body.querySelector('#sampList');
     const search = w.body.querySelector('#sampSearch');
     const render = () => {

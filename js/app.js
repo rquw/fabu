@@ -74,6 +74,8 @@ const App = {
     // the web build has no electronAPI, so start from the built-in constant and
     // let the packaged app correct it below
     this.version = (typeof APP_VERSION !== 'undefined' && APP_VERSION) || this.version || '0.0.0';
+    const hv0 = document.getElementById('homeVer');
+    if (hv0) hv0.textContent = 'v' + this.version;
     if (window.electronAPI && window.electronAPI.getVersion) {
       window.electronAPI.getVersion().then((v) => {
         if (!v) return;
@@ -443,9 +445,63 @@ const App = {
     toast(tr('toast_demo_loaded', 'Example loaded. Press play, then take it apart.'));
   },
 
+  // The changelog is baked into the build, so this works offline and can never
+  // describe a version other than the one you are running.
+  openWhatsNew() {
+    const old = document.getElementById('newsModal');
+    if (old) old.remove();
+    const wrap = document.createElement('div');
+    wrap.id = 'newsModal';
+    wrap.className = 'modal-back';
+    const rel = (typeof CHANGELOG !== 'undefined' && CHANGELOG) || [];
+    const body = rel.length ? rel.map(r => `
+      <div class="news-rel">
+        <div class="news-ver">${escapeHtml(r.version)}</div>
+        ${r.items.map(i => `<div class="news-item">
+            ${i.title ? `<div class="news-title">${escapeHtml(i.title)}</div>` : ''}
+            ${i.body ? `<div class="news-body">${escapeHtml(i.body)}</div>` : ''}
+          </div>`).join('')}
+      </div>`).join('')
+      : `<div class="gal-note">${tr('news_none', 'No release notes in this build.')}</div>`;
+    wrap.innerHTML = `
+      <div class="modal-card news-card">
+        <div class="modal-title">${tr('home_whats_new', "What's new in fabu?")}</div>
+        <div class="news-scroll">${body}</div>
+        <div class="modal-btns"><button id="newsClose" class="fbtn accent">${tr('close', 'Close')}</button></div>
+      </div>`;
+    document.body.appendChild(wrap);
+    wrap.addEventListener('mousedown', (e) => { if (e.target === wrap) wrap.remove(); });
+    wrap.querySelector('#newsClose').addEventListener('click', () => wrap.remove());
+  },
+
   // ---------- homescreen ----------
 
   wireHome() {
+    // The sidebar. Everything here is a real place you can get to; nothing is a
+    // label for something that does not exist yet.
+    const NAV = {
+      home: () => this.renderRecents(),
+      projects: () => this.setRecentsExpanded(true),
+      loops: () => { if (!Windows.isOpen('samples')) Windows.toggleSampleBrowser(); },
+      gallery: () => { if (!Windows.isOpen('gallery')) Gallery.toggle(); },
+      profile: () => Gallery.openMyProfile(),
+      settings: () => { if (!Windows.isOpen('settings')) Windows.toggleSettings(); }
+    };
+    for (const b of $$('#homeNav .hn-item')) {
+      b.addEventListener('click', () => {
+        // Home and All projects change what this screen shows, so they stay
+        // marked. The rest open something on top and the mark would be a lie.
+        const stays = b.dataset.nav === 'home' || b.dataset.nav === 'projects';
+        if (stays) for (const o of $$('#homeNav .hn-item')) o.classList.toggle('on', o === b);
+        (NAV[b.dataset.nav] || (() => {}))();
+      });
+    }
+    $('#homeViewAll').addEventListener('click', () => {
+      this.setRecentsExpanded(true);
+      for (const o of $$('#homeNav .hn-item')) o.classList.toggle('on', o.dataset.nav === 'projects');
+    });
+    $('#homeWhatsNew').addEventListener('click', () => this.openWhatsNew());
+
     $('#homeNew').addEventListener('click', () => { this.stopHomePreview(); this.newProject(false); this.hideHome(); });
     $('#homeDemo').addEventListener('click', () => { this.stopHomePreview(); this.loadDemo(); this.hideHome(); });
     $('#homeOpen').addEventListener('click', () => { this.stopHomePreview(); this.open(); });
@@ -509,9 +565,38 @@ const App = {
     return d === 1 ? tr('yesterday', 'yesterday') : tr('days_ago', '{n} days ago', { n: d });
   },
 
+  // "All projects" is the same shelf without the cut-off, rather than a second
+  // screen that would have to be kept in step with this one.
+  recentsExpanded: false,
+  RECENT_SHELF: 6,
+  setRecentsExpanded(on) {
+    this.recentsExpanded = on;
+    this.renderRecents();
+  },
+
   renderRecents() {
     const box = $('#homeRecentList');
-    const list = this.getRecents();
+    const all = this.getRecents();
+    const list = this.recentsExpanded ? all : all.slice(0, this.RECENT_SHELF);
+    const head = document.querySelector('.home-recent-head');
+    if (head) head.textContent = this.recentsExpanded
+      ? tr('nav_projects', 'All projects') : tr('recent_projects', 'Recent projects');
+    const viewAll = document.getElementById('homeViewAll');
+    if (viewAll) {
+      const more = all.length > this.RECENT_SHELF;
+      viewAll.classList.toggle('hidden', !more && !this.recentsExpanded);
+      viewAll.textContent = this.recentsExpanded
+        ? tr('home_view_less', 'Show fewer') : tr('home_view_all', 'View all');
+      viewAll.onclick = () => {
+        this.setRecentsExpanded(!this.recentsExpanded);
+        for (const o of $$('#homeNav .hn-item'))
+          o.classList.toggle('on', o.dataset.nav === (this.recentsExpanded ? 'projects' : 'home'));
+      };
+    }
+    // "Welcome back" is wrong the first time somebody opens it.
+    const greet = document.getElementById('homeGreet');
+    if (greet) greet.textContent = all.length
+      ? tr('home_greet', 'Welcome back!') : tr('home_greet_first', 'Welcome to fabu.');
     box.innerHTML = '';
     if (!list.length) {
       const el = document.createElement('div');
@@ -524,7 +609,7 @@ const App = {
       const card = document.createElement('button');
       card.className = 'home-card';
       card.style.setProperty('--i', i);
-      const hue = (r.name.charCodeAt(0) * 47) % 360;
+      const hue = 12 + ((r.name.charCodeAt(0) * 47) % 37);
       card.innerHTML = `
         <div class="home-card-art" style="--h:${hue}">
           <svg class="ic"><use href="#i-note"/></svg>
@@ -533,8 +618,10 @@ const App = {
             <span class="card-act" data-act="edit" data-tip="${tr('recent_edit', 'Open to edit')}"><svg class="ic"><use href="#i-edit"/></svg></span>
           </div>
         </div>
-        <div class="home-card-name">${r.name || 'Untitled'}</div>
-        <div class="home-card-sub">${this.agoText(r.at)}</div>`;
+        <div class="home-card-text">
+          <div class="home-card-name">${escapeHtml(r.name || 'Untitled')}</div>
+          <div class="home-card-sub">${this.agoText(r.at)}</div>
+        </div>`;
       card.addEventListener('click', (e) => {
         const act = e.target.closest && e.target.closest('.card-act');
         if (act && act.dataset.act === 'listen') {
@@ -1344,6 +1431,20 @@ const App = {
 
   // Add a preset loop as an editable pattern clip. Drops onto a matching-
   // instrument track, otherwise spins up a fresh track with the right sound.
+  // Take a pattern off the timeline and keep it, then open the editor so it can
+  // be named before it disappears into a list as "Pattern 4".
+  saveClipAsLoop(clipId) {
+    const f = getClip(clipId);
+    if (!f) return;
+    const loop = MyLoops.fromClip(f.clip, f.track);
+    if (!loop) { toast(tr('loop_empty', 'That pattern has no notes in it.'), 'red'); return; }
+    if (!MyLoops.add(loop)) return;
+    if (!Windows.isOpen('samples')) Windows.toggleSampleBrowser();
+    else if (Windows._sampRender) Windows._sampRender();
+    toast(tr('loop_added', '{name} added to your loops', { name: loop.name }), 'green');
+    Windows.editMyLoop(loop.id, () => { if (Windows._sampRender) Windows._sampRender(); });
+  },
+
   addSampleToProject(id, beat = null, laneIdx = null) {
     // your own loops are placed exactly like the built-in ones
     const preset = SAMPLE_LIB.find(s => s.id === id)
@@ -1902,7 +2003,6 @@ const App = {
     $('#btnZoomOut').addEventListener('click', () => Timeline.setZoom(UI.zoom / 1.3));
     $('#btnFx').addEventListener('click', () => Windows.toggleFxBrowser());
     $('#btnSamples').addEventListener('click', () => Windows.toggleSampleBrowser());
-    $('#btnGallery').addEventListener('click', () => Gallery.toggle());
     $('#btnHome').addEventListener('click', () => this.goHome());
     $('#btnJam').addEventListener('click', () => Sync.togglePanel());
 
@@ -1934,10 +2034,7 @@ const App = {
       pos.addEventListener('click', () => Timeline.openTimeSigMenu(pos));
     }
 
-    // Settings is reachable before you open a project too, showing only the
-    // things that really are app-wide.
-    const homeSet = $('#homeSettings');
-    if (homeSet) homeSet.addEventListener('click', () => Windows.toggleSettings());
+    // Settings lives in the home sidebar now, wired with the rest of it.
   },
 
   // vertical drag on a number field, cross-platform. Overlay captures the drag
@@ -1992,7 +2089,6 @@ const App = {
     $('#btnMixer').classList.toggle('on', Windows.isOpen('mixer'));
     $('#btnFx').classList.toggle('on', Windows.isOpen('fxbrowser'));
     $('#btnSamples').classList.toggle('on', Windows.isOpen('samples'));
-    $('#btnGallery').classList.toggle('on', Windows.isOpen('gallery'));
     $('#btnSettings').classList.toggle('on', Windows.isOpen('settings'));
     $('#btnHelp').classList.toggle('on', Windows.isOpen('help'));
     $('#btnKeys').classList.toggle('on', KeysPanel.visible);

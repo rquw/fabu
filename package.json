@@ -9,12 +9,13 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "build:web": "npm run sync:version && rm -rf docs/web && mkdir -p docs/web && cp index.html styles.css docs/web/ && cp -R js languages assets docs/web/",
+    "build:web": "npm run sync:version && npm run sync:changelog && rm -rf docs/web && mkdir -p docs/web && cp index.html styles.css docs/web/ && cp -R js languages assets docs/web/",
     "dist": "electron-builder",
     "dist:mac": "electron-builder --mac",
     "dist:win": "electron-builder --win",
     "release": "electron-builder --publish always",
-    "sync:version": "node build/sync-version.js"
+    "sync:version": "node build/sync-version.js",
+    "sync:changelog": "node build/sync-changelog.js"
   },
   "devDependencies": {
     "electron": "^33.2.0",

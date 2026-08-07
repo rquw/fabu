@@ -236,7 +236,13 @@ begin
          (select count(*)::int from public.fabu_follows f where f.follower = p.username),
          (me is not null and exists (select 1 from public.fabu_follows f
                                       where f.follower = me and f.followee = p.username))
-    from public.fabu_profiles p where p.username = target;
+    from (select a.username,
+                 coalesce(p.bio, '') as bio,
+                 coalesce(p.accent, '') as accent,
+                 coalesce(p.created_at, now()) as created_at
+            from public.accounts a
+            left join public.fabu_profiles p on p.username = a.username
+           where a.username = target) p;
 end; $$;
 
 create or replace function public.fabu_profile_set(t text, bio_in text, accent_in text)

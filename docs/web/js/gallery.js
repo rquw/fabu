@@ -128,7 +128,7 @@ const Gallery = {
 
   toggle() {
     if (Windows.isOpen('gallery')) { Windows.close('gallery'); return; }
-    const w = Windows.create('gallery', tr('gal_title', 'Loop gallery'), 'i-heart',
+    const w = Windows.create('gallery', tr('gal_title', 'Loop gallery'), 'i-library',
       { x: 200, y: 110, width: 420, height: 460 });
     w.body.innerHTML = `
       <div class="gal-bar">
@@ -304,6 +304,13 @@ const Gallery = {
   },
 
   // ---------- profiles ----------
+
+  // Your own profile, from wherever you are. Signing in first is the point of
+  // the profile, so it asks rather than doing nothing.
+  async openMyProfile() {
+    if (!Auth.isLoggedIn()) { Auth.open(() => this.openMyProfile()); return; }
+    this.openProfile(Auth.user);
+  },
 
   async openProfile(name) {
     const old = document.getElementById('profModal');

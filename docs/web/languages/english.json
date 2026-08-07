@@ -1015,5 +1015,22 @@
   "loop_publish": "Put in the gallery",
   "samp_cat_other": "Other",
   "word_bpm": "BPM",
-  "loop_by": "by {name}"
+  "loop_by": "by {name}",
+  "menu_save_loop": "Save to my loops",
+  "samp_browse_gallery": "Browse the gallery",
+  "tip_browse_gallery": "Loops other people have shared",
+  "samp_your_profile": "Your profile",
+  "nav_home": "Home",
+  "nav_projects": "All projects",
+  "nav_loops": "Loops",
+  "nav_gallery": "Gallery",
+  "nav_profile": "Profile",
+  "home_greet": "Welcome back!",
+  "home_greet_first": "Welcome to fabu.",
+  "home_greet_sub": "What will you make today?",
+  "home_view_all": "View all",
+  "home_view_less": "Show fewer",
+  "home_whats_new": "What's new in fabu?",
+  "home_whats_new_sub": "See what changed",
+  "news_none": "No release notes in this build."
 }

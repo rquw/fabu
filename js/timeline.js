@@ -779,6 +779,10 @@ const Timeline = {
       add(tr('insp_delete', 'Delete group'), () => App.deleteSelectedClip(), true);
     } else {
       if (clip.kind === 'midi') add(tr('menu_pianoroll', 'Open piano roll'), () => PianoRoll.open(clip.id));
+      // Dragging the pattern's label strip into the loop browser does the same
+      // thing, but nobody finds a handle they cannot see. This is the route you
+      // can actually discover.
+      if (clip.kind === 'midi') add(tr('menu_save_loop', 'Save to my loops'), () => App.saveClipAsLoop(clip.id));
       if (clip.bounce) add(tr('menu_ungroup', 'Ungroup'), () => App.ungroupClip(clip.id));
       add(tr('menu_settings', 'Clip settings'), () => Windows.openInspector());
       if (clip.fx && clip.fx.length) {
