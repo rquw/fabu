@@ -1069,6 +1069,33 @@ const Timeline = {
     };
     const clearTilt = () => { tilt = 0; applyTilt(); };
 
+    // Dragging a pattern into the Loops window to keep it.
+    //
+    // The label strip has been an HTML5 drag handle for a while, but it is 17
+    // pixels tall and nothing marks it, so what people actually do is grab the
+    // pattern and drag it over there, which did nothing. The timeline's own
+    // drag is a plain mousedown/mousemove, not an HTML5 drag, so the two never
+    // met. This watches for the pointer entering the Loops window during an
+    // ordinary clip move and treats letting go there as "keep this".
+    const loopsBox = () => {
+      const w = Windows.wins && Windows.wins.get('samples');
+      return w && w.el ? w.el : null;
+    };
+    const overLoops = (ev) => {
+      if (mode !== 'move' || clip.kind !== 'midi') return false;
+      const box = loopsBox();
+      if (!box) return false;
+      const r = box.getBoundingClientRect();
+      return ev.clientX >= r.left && ev.clientX <= r.right && ev.clientY >= r.top && ev.clientY <= r.bottom;
+    };
+    let loopsArmed = false;
+    const markLoops = (on) => {
+      if (on === loopsArmed) return;
+      loopsArmed = on;
+      const box = loopsBox();
+      if (box) box.classList.toggle('samp-catch', on);
+    };
+
     const move = (ev) => {
       const dxBeats = (ev.clientX - startX) / UI.zoom;
       if (!moved && Math.abs(ev.clientX - startX) < 4 && Math.abs(ev.clientY - startY) < 4) return;
@@ -1152,13 +1179,27 @@ const Timeline = {
         }
       }
       applyVisual();
+      markLoops(overLoops(ev));
     };
-    const up = () => {
+    const up = (ev) => {
       window.removeEventListener('mousemove', move);
       window.removeEventListener('mouseup', up);
       clearTilt();
+      const intoLoops = loopsArmed && ev && overLoops(ev);
+      markLoops(false);
       if (typeof Sync !== 'undefined') Sync.setLock(clipLock, false);
       this.hideTrackInsert();
+      // Let go over the Loops window: keep the pattern and put it back where it
+      // was, because you were copying it out, not moving it.
+      if (intoLoops) {
+        clip.start = orig.start;
+        if (clip.kind === 'midi') clip.length = orig.length;
+        for (const g of group) g.clip.start = g.start;
+        this._clipInsertAt = null;
+        this.render();
+        App.saveClipAsLoop(clip.id);
+        return;
+      }
       if (moved) {
         // dropped in a gap between tracks -> spin up a fresh track for it
         if (this._clipInsertAt != null && !group.length && mode === 'move') {

@@ -43,54 +43,76 @@ const Tutor = {
     if (this.active) return;
     this.active = true;
     this.step = 0;
+    // What the sound was when we started, so "pick another instrument" can tell
+    // that they picked another one rather than opening the menu and closing it.
+    this._instr0 = (S.tracks[0] && S.tracks[0].instrument) || null;
+
+    // Every step ends when the thing it asks for actually happens. There is no
+    // Next button: a walkthrough you can click past without doing anything
+    // teaches nothing, and the click you are being asked to make is right
+    // there under the spotlight.
     this.steps = [
       {
         target: () => document.querySelector('.thead-add button'),
         title: tr('tut_first_t', 'Start with an instrument'),
-        body: tr('tut_first_b', 'Click Instrument to add your first track. Audio adds a lane for recordings and sound files.'),
+        body: tr('tut_first_b', 'Click Instrument. That gives you a track to put music on.'),
+        done: () => S.tracks.length > 0
       },
       {
-        target: () => document.querySelector('.lane') || document.querySelector('.clip'),
+        target: () => document.querySelector('.lane'),
         title: tr('tut_make_t', 'Make a pattern'),
-        body: tr('tut_make_b', 'Double click the empty lane next to the track to create a pattern, then double click the pattern to draw notes.'),
-      },
-      {
-        target: () => document.querySelector('.ms-btn.mute'),
-        title: tr('tut_ms_t', 'Mute and solo'),
-        body: tr('tut_ms_b', 'M silences a track. S plays only that track so you can focus on one sound.'),
+        body: tr('tut_make_b', 'Double click the empty lane to the right to make a pattern.'),
+        done: () => S.tracks.some(tr2 => tr2.clips && tr2.clips.length)
       },
       {
         target: () => document.querySelector('.tinst-btn'),
         title: tr('tut_instr_t', 'Change the sound'),
-        body: tr('tut_instr_b', 'Pick another instrument from this menu, like keys, bass or drums.'),
+        body: tr('tut_instr_b', 'Pick a different instrument here. The same notes, a different sound.'),
+        done: () => {
+          const now = S.tracks[0] && S.tracks[0].instrument;
+          return !!now && now !== this._instr0;
+        }
       },
       {
         target: () => document.querySelector('.thead-add'),
-        title: tr('tut_add_t', 'Stack more layers'),
-        body: tr('tut_add_b', 'Add another track here to layer more instruments on top of each other.'),
+        title: tr('tut_add_t', 'Stack another layer'),
+        body: tr('tut_add_b', 'Add a second track. Layers on top of each other are what makes it a song.'),
+        done: () => S.tracks.length >= 2
       },
       {
         target: () => document.querySelector('#btnSamples'),
         title: tr('tut_samp_t', 'Ready made loops'),
-        body: tr('tut_samp_b', 'Open this to grab drums, bass and effects. Drag one straight onto your song.'),
+        body: tr('tut_samp_b', 'Open the loops. Drag one onto your song and it plays straight away.'),
+        done: () => typeof Windows !== 'undefined' && Windows.isOpen('samples')
       },
       {
         target: () => document.querySelector('#btnJam'),
         title: tr('tut_jam_t', 'Play together'),
-        body: tr('tut_jam_b', 'Start a room and a friend can build the track live with you. That is it, have fun.'),
-      },
+        body: tr('tut_jam_b', 'Start a room and a friend builds the track live with you. That is it, have fun.'),
+        done: () => !!document.getElementById('jamPanel') || !!document.getElementById('mpMenu')
+                    || (typeof Sync !== 'undefined' && Sync.connected)
+      }
     ];
-    // entering from "you just made a pattern" skips the two setup steps and
-    // says so, since they have plainly already done both
-    if (!fromEmpty) {
-      this.steps.splice(0, 2, {
-        target: () => document.querySelector('.clip.sel') || document.querySelector('.clip'),
-        title: tr('tut_clip_t', 'You made a pattern'),
-        body: tr('tut_clip_b', 'Double click it to open the note editor, then draw a melody by clicking on the grid.'),
-      });
-    }
+    // Coming in from "you just made a pattern" means the first two are already
+    // done, so they are dropped rather than shown as things to go and do.
+    if (!fromEmpty) this.steps.splice(0, 2);
+
     this._buildDom();
     this.show();
+    this._watch();
+  },
+
+  // One timer does both jobs: notice the step is finished, and keep the
+  // spotlight on the target while the layout moves under it.
+  _watch() {
+    clearInterval(this._timer);
+    this._timer = setInterval(() => {
+      if (!this.active) { clearInterval(this._timer); return; }
+      const s = this.steps[this.step];
+      if (!s) { this.finish(); return; }
+      if (s.done && s.done()) { this.next(); return; }
+      this._place(s.target && s.target());
+    }, 240);
   },
 
   _buildDom() {
@@ -115,7 +137,6 @@ const Tutor = {
     const s = this.steps[this.step];
     if (!s) return this.finish();
     const el = s.target && s.target();
-    const last = this.step === this.steps.length - 1;
 
     // move the spotlight over the target (or hide it if the target is gone)
     if (el) {
@@ -135,10 +156,7 @@ const Tutor = {
       '<div class="tc-body"></div>' +
       '<div class="tc-row">' +
         '<span class="tc-step"></span>' +
-        '<div class="tc-btns">' +
-          '<button class="tc-skip"></button>' +
-          '<button class="tc-next"></button>' +
-        '</div>' +
+        '<div class="tc-btns"><button class="tc-skip"></button></div>' +
       '</div>';
     this._card.querySelector('.tc-title').textContent = s.title;
     this._card.querySelector('.tc-body').textContent = s.body;
@@ -147,11 +165,21 @@ const Tutor = {
     const skip = this._card.querySelector('.tc-skip');
     skip.textContent = tr('tut_skip', 'Skip');
     skip.onclick = () => this.finish();
-    const next = this._card.querySelector('.tc-next');
-    next.textContent = last ? tr('tut_done', 'Got it') : tr('tut_next', 'Next');
-    next.onclick = () => this.next();
 
     this._position(el);
+  },
+
+  // keep the spotlight on the target as things move around it
+  _place(el) {
+    if (!this._hl) return;
+    if (!el) { this._hl.style.display = 'none'; return; }
+    const r = el.getBoundingClientRect();
+    const pad = 6;
+    this._hl.style.display = 'block';
+    this._hl.style.left = (r.left - pad) + 'px';
+    this._hl.style.top = (r.top - pad) + 'px';
+    this._hl.style.width = (r.width + pad * 2) + 'px';
+    this._hl.style.height = (r.height + pad * 2) + 'px';
   },
 
   // place the card near the target without running off screen
@@ -181,11 +209,14 @@ const Tutor = {
   next() {
     this.step++;
     if (this.step >= this.steps.length) return this.finish();
-    this.show();
+    // the target for the next step often does not exist for a frame or two
+    // after the click that finished this one
+    setTimeout(() => { if (this.active) this.show(); }, 260);
   },
 
   finish() {
     this.active = false;
+    clearInterval(this._timer);
     this.markSeen();
     if (this._card) this._card.remove();
     if (this._hl) this._hl.remove();

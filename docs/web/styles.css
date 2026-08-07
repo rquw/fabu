@@ -957,6 +957,7 @@ kbd {
 }
 #home::after {
   width: 120vw; height: 120vw; max-width: 1500px; max-height: 1500px;
+  opacity: 0.55;
   top: -66vh; right: -30vw;
   border-radius: 50%;
   background:
@@ -2428,3 +2429,77 @@ body.shift-held .fx-item:not(.samp-item) { position: relative; overflow: visible
 .home-card-more .ic { width: 17px; height: 17px; }
 .home-card:hover .home-card-more { color: var(--dim); }
 .home-card-more:hover { background: var(--panel3); color: var(--text); }
+
+/* the Loops window while a pattern is being dragged over it */
+.fwin.samp-catch {
+  outline: 2px dashed var(--accent);
+  outline-offset: -3px;
+  background: var(--accent-soft);
+}
+
+/* ---------- home pages (All projects, Loops, Profile, Settings) ---------- */
+.home-page.hidden, #pageHome.hidden { display: none; }
+.hp-head { margin-bottom: 4px; }
+.hp-title { font-size: 34px; font-weight: 700; letter-spacing: -0.8px; margin: 0; }
+.hp-sub { font-size: 14px; color: var(--dim); margin-top: 8px; }
+/* A list stretched to a 1600px window puts the name and the date at opposite
+   ends of the screen, so every page is capped at a readable measure. */
+.hp-body { flex: 1; min-height: 0; max-width: 900px; }
+.hp-head { max-width: 900px; }
+
+/* the settings page is a form, not a floating panel, so it gets a column */
+.hp-settings { max-width: 560px; }
+.hp-settings .frow { margin-bottom: 4px; }
+
+/* the loops page: wider cards, more of them across */
+.hp-loops .gal-list { gap: 10px; }
+.hp-loops { max-width: 820px; }
+.hp-loops .gal-bar { max-width: 720px; }
+.hp-loops .gal-tabs { gap: 6px; }
+.hp-loops .gal-tab { flex: 0 0 auto; padding: 8px 16px; font-size: 12.5px; }
+.gal-filters.hidden { display: none; }
+.gal-tag-on { border-color: var(--accent); color: var(--accent); }
+
+/* a literal list of every project */
+.proj-list { display: flex; flex-direction: column; }
+.proj-row {
+  display: flex; align-items: center; gap: 14px;
+  padding: 12px 12px; border-radius: 10px; cursor: pointer;
+  border-bottom: 1px solid var(--line);
+  transition: background 0.11s var(--ease);
+}
+.proj-row:hover { background: var(--panel2); }
+.proj-dot { width: 9px; height: 9px; border-radius: 3px; flex: 0 0 auto; }
+.proj-name {
+  flex: 1 1 40%; min-width: 0; font-size: 14px; font-weight: 600;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.proj-when { flex: 0 0 auto; font-size: 12px; color: var(--faint); }
+.proj-path {
+  flex: 0 0 auto; max-width: 220px; font-size: 11.5px; color: var(--faint);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; opacity: 0.7;
+}
+.proj-more {
+  flex: 0 0 auto; background: none; border: none; cursor: pointer;
+  color: var(--faint); width: 26px; height: 26px; border-radius: 7px;
+  display: flex; align-items: center; justify-content: center;
+}
+.proj-more .ic { width: 17px; height: 17px; }
+.proj-more:hover { background: var(--panel3); color: var(--text); }
+
+/* the profile page */
+.pf-head { display: flex; align-items: flex-start; gap: 16px; margin-bottom: 22px; }
+.pf-dot { width: 46px; height: 46px; border-radius: 14px; flex: 0 0 auto; }
+.pf-id { flex: 1; min-width: 0; }
+.pf-name { font-size: 22px; font-weight: 700; }
+.pf-bio { font-size: 13.5px; color: var(--dim); margin-top: 5px; line-height: 1.5; }
+.pf-bio i { color: var(--faint); }
+.pf-btns { display: flex; gap: 8px; flex: 0 0 auto; }
+.pf-stats { display: flex; gap: 34px; margin-bottom: 26px; }
+.pf-stat { display: flex; flex-direction: column; gap: 2px; }
+.pf-stat b { font-size: 22px; font-weight: 700; }
+.pf-stat span { font-size: 11.5px; color: var(--faint); }
+.pf-sec {
+  font-size: 11px; font-weight: 800; letter-spacing: 0.09em; text-transform: uppercase;
+  color: var(--faint); margin: 4px 0 12px;
+}

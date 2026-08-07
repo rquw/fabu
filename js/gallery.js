@@ -88,7 +88,7 @@ const Gallery = {
       if (typeof id === 'number' && id > 0) {
         MyLoops.update(loop.id, { publishedId: id });
         toast(tr('gal_published', '{name} is in the gallery', { name: loop.name }), 'green');
-        if (Windows.isOpen('gallery')) this.refresh();
+        this.refresh();
       } else if (id === -1) { this.forgetToken(); toast(tr('gal_signed_out', 'Sign in again to publish.'), 'red'); }
       else if (id === -2) toast(tr('gal_too_big', 'That loop is too big to share.'), 'red');
       else if (id === -3) toast(tr('gal_daily', 'You have shared a lot today. Try again tomorrow.'), 'red');
@@ -126,16 +126,27 @@ const Gallery = {
   cat: '',
   query: '',
 
+  // The gallery shows up in two places: a floating window over a project, and a
+  // full page on the home screen. Only the box it draws into differs, so the
+  // browser itself is built once and told where to go.
   toggle() {
     if (Windows.isOpen('gallery')) { Windows.close('gallery'); return; }
     const w = Windows.create('gallery', tr('gal_title', 'Loop gallery'), 'i-library',
       { x: 200, y: 110, width: 420, height: 460 });
-    w.body.innerHTML = `
+    this.mount(w.body);
+    w.refresh = () => this.refresh();
+    App.syncWindowButtons();
+  },
+
+  mount(box) {
+    this.box = box;
+    box.innerHTML = `
       <div class="gal-bar">
         <div class="gal-tabs">
           <button class="gal-tab" data-sort="new">${tr('gal_new', 'Newest')}</button>
           <button class="gal-tab" data-sort="top">${tr('gal_top', 'Most liked')}</button>
           <button class="gal-tab" data-sort="friends">${tr('gal_friends', 'People you follow')}</button>
+          <button class="gal-tab" data-sort="mine">${tr('gal_mine', 'Yours')}</button>
         </div>
         <div class="gal-filters">
           <input id="galSearch" type="text" placeholder="${tr('gal_search', 'Search loops or people')}" spellcheck="false">
@@ -146,30 +157,50 @@ const Gallery = {
         </div>
       </div>
       <div id="galList" class="gal-list"></div>`;
-    w.refresh = () => this.refresh();
 
     const setSort = (s) => {
       this.sort = s;
-      w.body.querySelectorAll('.gal-tab').forEach(b => b.classList.toggle('on', b.dataset.sort === s));
+      box.querySelectorAll('.gal-tab').forEach(b => b.classList.toggle('on', b.dataset.sort === s));
+      // searching and filtering by kind mean nothing on your own local loops
+      box.querySelector('.gal-filters').classList.toggle('hidden', s === 'mine');
       this.refresh();
     };
-    w.body.querySelectorAll('.gal-tab').forEach(b => b.addEventListener('click', () => setSort(b.dataset.sort)));
-    const search = w.body.querySelector('#galSearch');
+    box.querySelectorAll('.gal-tab').forEach(b => b.addEventListener('click', () => setSort(b.dataset.sort)));
+    const search = box.querySelector('#galSearch');
     let typing;
     search.addEventListener('input', () => {
       clearTimeout(typing);
       typing = setTimeout(() => { this.query = search.value.trim(); this.refresh(); }, 250);
     });
-    w.body.querySelector('#galCatFilter').addEventListener('change', (e) => { this.cat = e.target.value; this.refresh(); });
+    box.querySelector('#galCatFilter').addEventListener('change', (e) => { this.cat = e.target.value; this.refresh(); });
     setSort(this.sort);
-    App.syncWindowButtons();
+  },
+
+  // whichever copy is currently on screen
+  list() {
+    const w = Windows.wins.get('gallery');
+    if (w) return w.body.querySelector('#galList');
+    return this.box ? this.box.querySelector('#galList') : null;
   },
 
   async refresh() {
-    const w = Windows.wins.get('gallery');
-    if (!w) return;
-    const list = w.body.querySelector('#galList');
+    const list = this.list();
+    if (!list) return;
     list.innerHTML = `<div class="gal-note">${tr('gal_loading', 'Loading…')}</div>`;
+
+    // Your own loops live in this browser, not on the server, so this tab needs
+    // nothing from the network and works with no account at all.
+    if (this.sort === 'mine') {
+      const mine = MyLoops.all();
+      if (!mine.length) {
+        list.innerHTML = `<div class="gal-note">${tr('gal_mine_none', 'No loops of your own yet. Drag a pattern from your song into the Loops window to keep one.')}</div>`;
+        return;
+      }
+      list.innerHTML = '';
+      for (const l of mine.slice().reverse()) list.appendChild(this.mineCard(l));
+      return;
+    }
+
     // "People you follow" is the one view that means nothing signed out, so it
     // says so rather than showing an empty shelf.
     if (this.sort === 'friends' && !this.token()) {
@@ -187,7 +218,7 @@ const Gallery = {
         t: this.token(), cat: this.cat, sort_by: this.sort, q: this.query, lim: 40, off: 0
       });
     } catch (e) {
-      list.innerHTML = `<div class="gal-note">${tr('auth_offline', 'Cannot reach the server.')}</div>`;
+      list.innerHTML = `<div class="gal-note">${tr('gal_offline', 'The gallery cannot be reached right now. Your own loops are under Yours and still work.')}</div>`;
       return;
     }
     if (!Array.isArray(rows) || !rows.length) {
@@ -196,6 +227,39 @@ const Gallery = {
     }
     list.innerHTML = '';
     for (const r of rows) list.appendChild(this.card(r));
+  },
+
+  // one of your own loops: play it, publish it, edit it
+  mineCard(l) {
+    const el = document.createElement('div');
+    el.className = 'gal-card';
+    el.innerHTML = `
+      <div class="gal-main">
+        <div class="gal-nm">${escapeHtml(l.name)}</div>
+        <div class="gal-meta">
+          <span class="gal-tag">${escapeHtml(instrLabel(l.instrument))}</span>
+          <span class="gal-tag">${l.length} ${tr('word_beats', 'beats')}</span>
+          ${l.from ? `<span class="gal-tag">${escapeHtml(tr('loop_by', 'by {name}', { name: l.from }))}</span>` : ''}
+          ${l.publishedId ? `<span class="gal-tag gal-tag-on">${tr('gal_shared', 'shared')}</span>` : ''}
+        </div>
+      </div>
+      <div class="gal-acts">
+        <button class="gal-play fbtn" data-tip="${tr('samp_preview', 'Preview')}"><svg class="ic"><use href="#i-play"/></svg></button>
+        <button class="gal-pub fbtn accent">${l.publishedId ? tr('gal_pub_again', 'Share again') : tr('gal_pub_go', 'Share it')}</button>
+        <button class="gal-more" data-tip="${tr('gal_more', 'More')}">...</button>
+      </div>`;
+    el.querySelector('.gal-play').addEventListener('click', () =>
+      Engine.auditionSample(MyLoops.asPresets().find(p => p.id === l.id)));
+    el.querySelector('.gal-pub').addEventListener('click', () => this.publish(l));
+    el.querySelector('.gal-more').addEventListener('click', (e) => ctxMenu(e, [
+      [tr('loop_edit_title', 'Your loop'), () => Windows.editMyLoop(l.id, () => this.refresh())],
+      [tr('loop_share', 'Share as file'), () => {
+        const safe = (l.name || 'loop').replace(/[\\/:*?"<>|]/g, '') || 'loop';
+        App.browserDownload(new Blob([MyLoops.toFile(l)], { type: 'application/json' }), safe + MyLoops.EXT);
+      }],
+      [tr('loop_delete', 'Delete'), () => { MyLoops.remove(l.id); this.refresh(); if (Windows._sampRender) Windows._sampRender(); }]
+    ]));
+    return el;
   },
 
   card(r) {
@@ -412,6 +476,93 @@ const Gallery = {
       } catch (e) { toast(tr('auth_offline', 'Cannot reach the server.'), 'red'); }
       close();
     });
+  },
+
+  // The same profile as the modal, laid out as a page for the home screen.
+  async mountProfile(box, name) {
+    box.innerHTML = `<div class="gal-note">${tr('gal_loading', 'Loading…')}</div>`;
+    if (!name) {
+      box.innerHTML = `<div class="gal-note">${tr('prof_need_signin', 'Sign in and your profile lives here: what you have shared, who follows you, and a line about the music you make.')}</div>`;
+      const b = document.createElement('button');
+      b.className = 'fbtn accent';
+      b.textContent = tr('gal_signin', 'Sign in');
+      b.addEventListener('click', () => Auth.open(() => App.showHomePage('profile')));
+      box.appendChild(b);
+      return;
+    }
+    let p = null;
+    try {
+      const rows = await this.rpc('fabu_profile_get', { t: this.token(), who: name });
+      p = Array.isArray(rows) ? rows[0] : rows;
+    } catch (e) { /* handled below */ }
+    // With no server reachable there is still something true to show: the name
+    // they are signed in as, and the loops sitting in this browser.
+    if (!p) p = { username: name, bio: '', accent: '', loops: 0, likes: 0,
+                  followers: 0, following: 0, i_follow: false, offline: true };
+    const mine = Auth.user === p.username;
+
+    box.innerHTML = `
+      <div class="pf-head">
+        <span class="pf-dot" style="background:${p.accent || hashColor(p.username)}"></span>
+        <div class="pf-id">
+          <div class="pf-name">${escapeHtml(p.username)}</div>
+          <div class="pf-bio">${escapeHtml(p.bio) || `<i>${tr('prof_no_bio', 'No introduction yet.')}</i>`}</div>
+        </div>
+        <div class="pf-btns"></div>
+      </div>
+      <div class="pf-stats">
+        <div class="pf-stat"><b>${p.loops}</b><span>${tr('prof_loops', 'loops')}</span></div>
+        <div class="pf-stat"><b>${p.likes}</b><span>${tr('prof_likes', 'likes')}</span></div>
+        <div class="pf-stat"><b>${p.followers}</b><span>${tr('prof_followers', 'followers')}</span></div>
+        <div class="pf-stat"><b>${p.following}</b><span>${tr('prof_following', 'following')}</span></div>
+      </div>
+      ${p.offline ? `<div class="gal-note">${tr('prof_offline', 'These counts need the server, which is not answering. Your own loops below are kept in this browser and are unaffected.')}</div>` : ''}
+      <div class="pf-sec">${mine ? tr('gal_mine', 'Yours') : tr('prof_their_loops', 'Their loops')}</div>
+      <div id="pfLoops" class="gal-list"></div>`;
+
+    const btns = box.querySelector('.pf-btns');
+    if (mine) {
+      const e = document.createElement('button');
+      e.className = 'fbtn'; e.textContent = tr('prof_edit', 'Edit profile');
+      e.addEventListener('click', () => this.editProfile(p));
+      const f = document.createElement('button');
+      f.className = 'fbtn'; f.textContent = tr('gal_following_title', 'People you follow');
+      f.addEventListener('click', () => this.openFollowing());
+      btns.append(e, f);
+    } else {
+      const f = document.createElement('button');
+      f.className = 'fbtn' + (p.i_follow ? '' : ' accent');
+      f.textContent = p.i_follow ? tr('prof_unfollow', 'Unfollow') : tr('prof_follow', 'Follow');
+      f.addEventListener('click', async () => {
+        const t = await this.needToken();
+        if (!t) return;
+        try {
+          const now = await this.rpc('fabu_follow', { t, who: p.username });
+          p.i_follow = !!now;
+          f.textContent = now ? tr('prof_unfollow', 'Unfollow') : tr('prof_follow', 'Follow');
+          f.classList.toggle('accent', !now);
+        } catch (err) { toast(tr('auth_offline', 'Cannot reach the server.'), 'red'); }
+      });
+      btns.appendChild(f);
+    }
+
+    const list = box.querySelector('#pfLoops');
+    if (mine) {
+      const ml = MyLoops.all();
+      if (!ml.length) list.innerHTML = `<div class="gal-note">${tr('gal_mine_none', 'No loops of your own yet.')}</div>`;
+      else for (const l of ml.slice().reverse()) list.appendChild(this.mineCard(l));
+      return;
+    }
+    try {
+      const rows = await this.rpc('fabu_loop_list', {
+        t: this.token(), cat: '', sort_by: 'new', q: p.username, lim: 40, off: 0
+      });
+      const theirs = (rows || []).filter(r => r.author === p.username);
+      if (!theirs.length) list.innerHTML = `<div class="gal-note">${tr('prof_no_loops', 'Nothing shared yet.')}</div>`;
+      else for (const r of theirs) list.appendChild(this.card(r));
+    } catch (e) {
+      list.innerHTML = `<div class="gal-note">${tr('auth_offline', 'Cannot reach the server.')}</div>`;
+    }
   },
 
   // ---------- people you follow ----------

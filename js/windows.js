@@ -627,7 +627,8 @@ const Windows = {
 
   toggleSampleBrowser() {
     if (this.isOpen('samples')) { this.close('samples'); return; }
-    const w = this.create('samples', tr('samp_title', 'Loops'), 'i-loops', { x: 60, y: 130, width: 250 });
+    const w = this.create('samples', tr('samp_title', 'Loops'), 'i-loops',
+      { x: 60, y: 130, width: 250, height: 330 });
     // The gallery used to be a lone heart in the top bar with nothing to say what
     // it was, and there was no way at all to reach your own profile. Both belong
     // here, next to the loops they are about.
@@ -832,7 +833,14 @@ const Windows = {
   toggleSettings() {
     if (this.isOpen('settings')) { this.close('settings'); return; }
     const w = this.create('settings', tr('win_settings', 'Settings'), 'i-gear', { x: 220, y: 140, width: 320 });
-    w.refresh = () => {
+    w.refresh = () => this.buildSettings(w.body);
+    w.refresh();
+    App.syncWindowButtons();
+  },
+
+  buildSettings(box) {
+    const w = { body: box };
+    {
       w.body.innerHTML = '';
       // Two kinds of setting were sitting in one undivided list, so per-song
       // ones looked like preferences that applied to everything you open.
@@ -1001,9 +1009,7 @@ const Windows = {
         ver.appendChild(vLabel);
       }
       w.body.appendChild(ver);
-    };
-    w.refresh();
-    App.syncWindowButtons();
+    }
   },
 
   // ---------- Help ----------

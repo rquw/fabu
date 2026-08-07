@@ -502,27 +502,13 @@ const App = {
     this.drawHomeArt();
     // The sidebar. Everything here is a real place you can get to; nothing is a
     // label for something that does not exist yet.
-    const NAV = {
-      home: () => this.renderRecents(),
-      projects: () => this.setRecentsExpanded(true),
-      loops: () => { if (!Windows.isOpen('samples')) Windows.toggleSampleBrowser(); },
-      gallery: () => { if (!Windows.isOpen('gallery')) Gallery.toggle(); },
-      profile: () => Gallery.openMyProfile(),
-      settings: () => { if (!Windows.isOpen('settings')) Windows.toggleSettings(); }
-    };
+    // Every sidebar entry is a page in this screen. Nothing here opens a small
+    // floating window over the home screen: a popup is what you use next to
+    // your song, not what you use when the song is not even open yet.
     for (const b of $$('#homeNav .hn-item')) {
-      b.addEventListener('click', () => {
-        // Home and All projects change what this screen shows, so they stay
-        // marked. The rest open something on top and the mark would be a lie.
-        const stays = b.dataset.nav === 'home' || b.dataset.nav === 'projects';
-        if (stays) for (const o of $$('#homeNav .hn-item')) o.classList.toggle('on', o === b);
-        (NAV[b.dataset.nav] || (() => {}))();
-      });
+      b.addEventListener('click', () => this.showHomePage(b.dataset.nav));
     }
-    $('#homeViewAll').addEventListener('click', () => {
-      this.setRecentsExpanded(true);
-      for (const o of $$('#homeNav .hn-item')) o.classList.toggle('on', o.dataset.nav === 'projects');
-    });
+    $('#homeViewAll').addEventListener('click', () => this.showHomePage('projects'));
     $('#homeWhatsNew').addEventListener('click', () => this.openWhatsNew());
 
     $('#homeNew').addEventListener('click', () => { this.stopHomePreview(); this.newProject(false); this.hideHome(); });
@@ -533,8 +519,83 @@ const App = {
     $('#logo').addEventListener('click', () => this.goHome());
   },
 
+  homePage: 'home',
+
+  showHomePage(name) {
+    this.homePage = name;
+    for (const o of $$('#homeNav .hn-item')) o.classList.toggle('on', o.dataset.nav === name);
+    const home = $('#pageHome'), other = $('#pageOther');
+    if (name === 'home') {
+      home.classList.remove('hidden');
+      other.classList.add('hidden');
+      this.renderRecents();
+      return;
+    }
+    home.classList.add('hidden');
+    other.classList.remove('hidden');
+    const title = $('#hpTitle'), sub = $('#hpSub'), body = $('#hpBody');
+    body.innerHTML = '';
+    body.className = 'hp-body hp-' + name;
+
+    if (name === 'projects') {
+      title.textContent = tr('nav_projects', 'All projects');
+      sub.textContent = tr('hp_projects_sub', 'Everything you have opened, newest first.');
+      this.renderProjectList(body);
+    } else if (name === 'loops') {
+      title.textContent = tr('nav_loops', 'Loops');
+      sub.textContent = tr('hp_loops_sub', 'Your own loops, and loops other people have shared.');
+      Gallery.mount(body);
+    } else if (name === 'profile') {
+      title.textContent = tr('nav_profile', 'Profile');
+      sub.textContent = Auth.isLoggedIn()
+        ? tr('hp_profile_sub', 'How you look to everyone else.')
+        : tr('hp_profile_out', 'Not signed in.');
+      Gallery.mountProfile(body, Auth.isLoggedIn() ? Auth.user : null);
+    } else if (name === 'settings') {
+      title.textContent = tr('win_settings', 'Settings');
+      sub.textContent = tr('hp_settings_sub', 'These apply to fabu itself. Settings for one song live inside that song.');
+      Windows.buildSettings(body);
+    }
+  },
+
+  // A literal list. A wall of tiles is fine for the six you touched this week
+  // and useless for finding one project out of eighty.
+  renderProjectList(box) {
+    const all = this.getRecents();
+    if (!all.length) {
+      box.innerHTML = `<div class="gal-note">${t('no_projects') || 'No projects yet. Make one and save it.'}</div>`;
+      return;
+    }
+    const list = document.createElement('div');
+    list.className = 'proj-list';
+    for (const r of all) {
+      const row = document.createElement('div');
+      row.className = 'proj-row';
+      const hue = 12 + ((r.name.charCodeAt(0) * 47) % 37);
+      row.innerHTML = `
+        <span class="proj-dot" style="background:hsl(${hue} 62% 42%)"></span>
+        <span class="proj-name">${escapeHtml(r.name || 'Untitled')}</span>
+        <span class="proj-when">${this.agoText(r.at)}</span>
+        <span class="proj-path" title="${escapeHtml(r.path || '')}">${escapeHtml(this.shortPath(r.path))}</span>
+        <button class="proj-more" data-tip="${tr('recent_more', 'More')}"><svg class="ic"><use href="#i-dots"/></svg></button>`;
+      row.addEventListener('click', (e) => {
+        if (e.target.closest('.proj-more')) { this.recentMenu(e, r); return; }
+        this.openRecent(r.path);
+      });
+      list.appendChild(row);
+    }
+    box.appendChild(list);
+  },
+
+  // just the folder it sits in, which is what tells two "sketch" files apart
+  shortPath(p) {
+    if (!p) return '';
+    const parts = String(p).split(/[\\/]/).filter(Boolean);
+    return parts.length > 1 ? parts[parts.length - 2] : '';
+  },
+
   showHome() {
-    this.renderRecents();
+    this.showHomePage('home');
     const home = $('#home');
     home.classList.remove('closing');
     home.style.display = 'flex';

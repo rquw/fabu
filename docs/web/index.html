@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>fabu</title>
-<link rel="stylesheet" href="styles.css?v=130">
+<link rel="stylesheet" href="styles.css?v=134">
 </head>
 <body>
 
@@ -176,8 +176,7 @@
     <div class="hn-items">
       <button class="hn-item on" data-nav="home"><svg class="ic"><use href="#i-home"/></svg><span data-i18n="nav_home">Home</span></button>
       <button class="hn-item" data-nav="projects"><svg class="ic"><use href="#i-folder"/></svg><span data-i18n="nav_projects">All projects</span></button>
-      <button class="hn-item" data-nav="loops"><svg class="ic"><use href="#i-loops"/></svg><span data-i18n="nav_loops">Loops</span></button>
-      <button class="hn-item" data-nav="gallery"><svg class="ic"><use href="#i-library"/></svg><span data-i18n="nav_gallery">Gallery</span></button>
+      <button class="hn-item" data-nav="loops"><svg class="ic"><use href="#i-library"/></svg><span data-i18n="nav_loops">Loops</span></button>
       <button class="hn-item" data-nav="profile"><svg class="ic"><use href="#i-users"/></svg><span data-i18n="nav_profile">Profile</span></button>
       <button class="hn-item" data-nav="settings"><svg class="ic"><use href="#i-gear"/></svg><span data-i18n="win_settings">Settings</span></button>
     </div>
@@ -194,7 +193,7 @@
     </div>
   </nav>
 
-  <div class="home-inner">
+  <div class="home-inner" id="pageHome">
     <div class="home-top">
       <h1 id="homeGreet" class="home-greet" data-i18n="home_greet">Welcome back!</h1>
       <div class="home-greet-sub" data-i18n="home_greet_sub">What will you make today?</div>
@@ -256,34 +255,42 @@
       </a>
     </div>
   </div>
+
+  <div class="home-inner home-page hidden" id="pageOther">
+    <div class="hp-head">
+      <h1 id="hpTitle" class="hp-title"></h1>
+      <div id="hpSub" class="hp-sub"></div>
+    </div>
+    <div id="hpBody" class="hp-body"></div>
+  </div>
 </div>
 
 <div id="toasts"></div>
 <div id="tooltip" class="hidden"></div>
 
-<script src="js/vendor/lame.min.js?v=130"></script>
-<script src="js/vendor/WasmMediaEncoder.min.js?v=130"></script>
-<script src="js/vendor/ogg.wasm.js?v=130"></script>
-<script src="js/version.js?v=130"></script>
-<script src="js/changelog.js?v=130"></script>
-<script src="js/util.js?v=130"></script>
-<script src="js/state.js?v=130"></script>
-<script src="js/audio.js?v=130"></script>
-<script src="js/windows.js?v=130"></script>
-<script src="js/timeline.js?v=130"></script>
-<script src="js/pianoroll.js?v=130"></script>
-<script src="js/automation.js?v=130"></script>
-<script src="js/sampler.js?v=130"></script>
-<script src="js/profanity.js?v=130"></script>
-<script src="js/auth.js?v=130"></script>
-<script src="js/app.js?v=130"></script>
-<script src="js/gallery.js?v=130"></script>
-<script src="js/midifile.js?v=130"></script>
-<script src="js/midi.js?v=130"></script>
-<script src="js/tutor.js?v=130"></script>
-<script src="js/loadtest.js?v=130"></script>
-<script src="js/sync.js?v=130"></script>
-<script src="js/touch.js?v=130"></script>
-<script src="js/webnudge.js?v=130"></script>
+<script src="js/vendor/lame.min.js?v=134"></script>
+<script src="js/vendor/WasmMediaEncoder.min.js?v=134"></script>
+<script src="js/vendor/ogg.wasm.js?v=134"></script>
+<script src="js/version.js?v=134"></script>
+<script src="js/changelog.js?v=134"></script>
+<script src="js/util.js?v=134"></script>
+<script src="js/state.js?v=134"></script>
+<script src="js/audio.js?v=134"></script>
+<script src="js/windows.js?v=134"></script>
+<script src="js/timeline.js?v=134"></script>
+<script src="js/pianoroll.js?v=134"></script>
+<script src="js/automation.js?v=134"></script>
+<script src="js/sampler.js?v=134"></script>
+<script src="js/profanity.js?v=134"></script>
+<script src="js/auth.js?v=134"></script>
+<script src="js/app.js?v=134"></script>
+<script src="js/gallery.js?v=134"></script>
+<script src="js/midifile.js?v=134"></script>
+<script src="js/midi.js?v=134"></script>
+<script src="js/tutor.js?v=134"></script>
+<script src="js/loadtest.js?v=134"></script>
+<script src="js/sync.js?v=134"></script>
+<script src="js/touch.js?v=134"></script>
+<script src="js/webnudge.js?v=134"></script>
 </body>
 </html>
