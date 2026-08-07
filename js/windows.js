@@ -711,7 +711,7 @@ const Windows = {
       tile.classList.add('samp-new-hint');
       const hint = tile.querySelector('.samp-new-say') || document.createElement('span');
       hint.className = 'samp-new-say';
-      hint.textContent = tr('loop_new_hint', 'Drag a pattern or a .fabloop file here to add it to your Loops!');
+      hint.textContent = tr('loop_new_hint', 'Drag a pattern from your song anywhere into this window, or drop a .fabloop file here.');
       tile.appendChild(hint);
       clearTimeout(tile._t);
       tile._t = setTimeout(() => { tile.classList.remove('samp-new-hint'); hint.remove(); }, 4000);
@@ -839,177 +839,174 @@ const Windows = {
   },
 
   buildSettings(box) {
-    const w = { body: box };
-    {
-      w.body.innerHTML = '';
-      // Two kinds of setting were sitting in one undivided list, so per-song
-      // ones looked like preferences that applied to everything you open.
-      // They are labelled and separated now, and the project half is simply
-      // absent when no project is open (Settings opens from the home screen).
-      const inProject = !!S && !App.homeVisible();
-      const head = (text, note) => {
-        const h = document.createElement('div');
-        h.className = 'set-head';
-        h.innerHTML = `<span>${text}</span>` + (note ? `<em>${note}</em>` : '');
-        w.body.appendChild(h);
-      };
-      const mkCheck = (labelText, checked, tip, onChange) => {
-        const r = document.createElement('div');
-        r.className = 'frow';
-        const cb = document.createElement('input');
-        cb.type = 'checkbox';
-        cb.checked = checked;
-        cb.style.cssText = 'width:16px;height:16px;accent-color:var(--accent)';
-        const l = document.createElement('label');
-        l.textContent = labelText;
-        l.style.width = 'auto';
-        l.style.flex = '1';
-        if (tip) r.dataset.tip = tip;
-        cb.addEventListener('change', () => onChange(cb.checked));
-        r.append(cb, l);
-        w.body.appendChild(r);
-      };
-      if (inProject) {
-        head(tr('set_sec_project', 'This song'), tr('set_sec_project_note', 'saved in the file'));
-        mkCheck(tr('set_countin', 'Count-in before recording'), S.countIn,
-          tr('tip_countin', 'Four beats count you in before recording.'),
-          (v) => { Undo.push('Count-in setting'); S.countIn = v; toast(tr(v ? 'toast_countin_on' : 'toast_countin_off', 'Count-in ' + (v ? 'on' : 'off'))); });
-        mkCheck(tr('set_metro', 'Metronome while playing'), S.metronome,
-          tr('tip_set_metro', 'Click on every beat (M)'),
-          (v) => { App.setMetronome(v); w.refresh(); });
-        const sigRow = document.createElement('div');
-        sigRow.className = 'set-note';
-        sigRow.textContent = tr('set_timesig_moved', 'Time signature is on the bar counter in the top bar. Click it.');
-        w.body.appendChild(sigRow);
-      }
-
-      head(tr('set_sec_app', 'fabu'));
-      mkCheck(tr('set_eco', 'Reduce CPU load (weaker computers)'), Engine.ecoMode(),
-        tr('tip_eco', 'Turns off the room reverb and limits voices so playback stays smooth.'),
-        (v) => { Engine.setEco(v); toast(tr(v ? 'toast_eco_on' : 'toast_eco_off', 'CPU saver ' + (v ? 'on' : 'off'))); });
-      mkCheck(tr('set_chord_hints', 'Suggest the next chord in the piano roll'), ChordSuggest.enabled(),
-        tr('tip_chord_hints', 'Shows the chord that usually follows what you have written. Tab adds it.'),
-        (v) => { ChordSuggest.setEnabled(v); if (PianoRoll.isOpen()) PianoRoll.redraw();
-                 toast(tr(v ? 'toast_chord_hints_on' : 'toast_chord_hints_off', 'Chord suggestions ' + (v ? 'on' : 'off'))); });
-      mkCheck(tr('set_scrub', 'Scrub while dragging the playhead'), Engine.scrubOn(),
-        tr('tip_scrub', 'Hear the notes under the playhead as you drag it (when stopped).'),
-        (v) => { Engine.setScrub(v); toast(tr(v ? 'toast_scrub_on' : 'toast_scrub_off', 'Scrubbing ' + (v ? 'on' : 'off'))); });
-
-      // MIDI keyboard input
-      if (typeof MIDI !== 'undefined' && MIDI.supported()) {
-        mkCheck(tr('set_midi', 'MIDI keyboard input'), MIDI.enabled,
-          tr('tip_midi', 'Play and record instruments from a connected MIDI keyboard.'),
-          (v) => { MIDI.setEnabled(v); w.refresh(); });
-        const midiInfo = document.createElement('div');
-        midiInfo.style.cssText = 'font-size:11px;color:var(--faint);margin:-4px 0 8px 26px';
-        const devs = MIDI.deviceNames();
-        midiInfo.textContent = !MIDI.enabled ? tr('set_midi_off', 'Turned off.')
-          : devs.length ? tr('set_midi_devices', 'Connected: {list}', { list: devs.join(', ') })
-          : tr('set_midi_none', 'No MIDI keyboard detected. Plug one in and it appears here.');
-        w.body.appendChild(midiInfo);
-      }
-
+    box.innerHTML = '';
+    // Two kinds of setting were sitting in one undivided list, so per-song
+    // ones looked like preferences that applied to everything you open.
+    // They are labelled and separated now, and the project half is simply
+    // absent when no project is open (Settings opens from the home screen).
+    const inProject = !!S && !App.homeVisible();
+    const head = (text, note) => {
+      const h = document.createElement('div');
+      h.className = 'set-head';
+      h.innerHTML = `<span>${text}</span>` + (note ? `<em>${note}</em>` : '');
+      box.appendChild(h);
+    };
+    const mkCheck = (labelText, checked, tip, onChange) => {
       const r = document.createElement('div');
       r.className = 'frow';
-      if (!inProject) r.style.display = 'none';   // master volume is part of the song
-      r.innerHTML = `<label>${tr('set_master_vol', 'Master vol.')}</label>`;
-      const inp = document.createElement('input');
-      inp.type = 'range';
-      inp.min = 0; inp.max = 3; inp.step = 0.01; inp.value = S ? S.masterVol : 0.9;
-      inp.addEventListener('input', () => {
-        if (!inp._gesture) { Undo.push('Master volume'); inp._gesture = true; }
-        S.masterVol = parseFloat(inp.value);
-        Engine.updateAllTracks();
-      });
-      inp.addEventListener('change', () => { inp._gesture = false; });
-      r.appendChild(inp);
-      w.body.appendChild(r);
-
-      // microphone input picker (recording is raw, with no noise suppression)
-      const micRow = document.createElement('div');
-      micRow.className = 'frow';
-      micRow.style.marginTop = '4px';
-      const micLbl = document.createElement('label');
-      micLbl.textContent = tr('set_mic', 'Microphone');
-      micLbl.style.cssText = 'flex:0 0 auto;width:auto';
-      const micSel = document.createElement('select');
-      micSel.style.cssText = 'flex:1;min-width:0;background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:4px 6px;color:var(--text)';
-      const optDefault = document.createElement('option');
-      optDefault.value = ''; optDefault.textContent = tr('set_mic_default', 'System default');
-      micSel.appendChild(optDefault);
-      micSel.value = Engine.micId();
-      micSel.addEventListener('change', () => { Engine.setMicId(micSel.value); toast(tr('toast_mic_set', 'Microphone changed')); });
-      micRow.append(micLbl, micSel);
-      w.body.appendChild(micRow);
-      // populate device list (labels appear once mic permission is granted)
-      if (navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) {
-        navigator.mediaDevices.enumerateDevices().then((devs) => {
-          const ins = devs.filter(d => d.kind === 'audioinput');
-          for (const d of ins) {
-            const o = document.createElement('option');
-            o.value = d.deviceId;
-            o.textContent = d.label || tr('set_mic_generic', 'Microphone');
-            micSel.appendChild(o);
-          }
-          micSel.value = Engine.micId();
-          if (!ins.some(d => d.label)) {
-            const hint = document.createElement('div');
-            hint.style.cssText = 'color:var(--faint);font-size:10px;margin:-2px 0 4px';
-            hint.textContent = tr('set_mic_hint', 'Record once to see device names.');
-            micRow.after(hint);
-          }
-        }).catch(() => {});
-      }
-
-      const note = document.createElement('div');
-      note.style.cssText = 'color:var(--faint);font-size:10.5px;margin-top:10px;line-height:1.5';
-      note.textContent = tr('set_note', 'Projects save as .fab files, sounds included. Export makes a WAV audio file.');
-      w.body.appendChild(note);
-
-      // Account
-      const acct = document.createElement('div');
-      acct.className = 'frow';
-      acct.style.cssText = 'margin-top:12px;border-top:1px solid var(--line);padding-top:12px';
-      const label = document.createElement('label');
-      label.style.cssText = 'flex:1;width:auto';
-      label.textContent = Auth.isLoggedIn()
-        ? tr('set_signed_in', 'Signed in as {name}', { name: Auth.user })
-        : tr('set_no_account', 'Not signed in');
-      const btn = document.createElement('button');
-      btn.className = 'fbtn';
-      btn.textContent = Auth.isLoggedIn() ? tr('set_manage_acct', 'Account') : tr('auth_login', 'Log in');
-      btn.addEventListener('click', () => { Auth.openAccount(); });
-      acct.append(label, btn);
-      w.body.appendChild(acct);
-
-      // version + manual update check
-      const ver = document.createElement('div');
-      ver.className = 'frow';
-      ver.style.marginTop = '10px';
-      const vLabel = document.createElement('label');
-      vLabel.style.cssText = 'flex:1;width:auto;color:var(--faint)';
-      if (window.electronAPI && window.electronAPI.checkUpdates) {
-        vLabel.textContent = 'fabu v' + (App.version || '…');
-        const vBtn = document.createElement('button');
-        vBtn.className = 'fbtn';
-        vBtn.textContent = tr('set_check_updates', 'Check for updates');
-        vBtn.addEventListener('click', async () => {
-          vBtn.disabled = true;
-          vBtn.textContent = tr('set_checking', 'Checking…');
-          const r = await App.checkForUpdates();
-          vBtn.disabled = false;
-          vBtn.textContent = tr('set_check_updates', 'Check for updates');
-          if (r === 'latest') toast(tr('set_up_to_date', "You're on the latest version."), 'green');
-          else if (r === 'error') toast(tr('set_check_failed', 'Could not check. Are you online?'), 'red');
-          // 'update' shows the update banner by itself
-        });
-        ver.append(vLabel, vBtn);
-      } else {
-        vLabel.textContent = tr('set_web_version', 'fabu web, always the latest version');
-        ver.appendChild(vLabel);
-      }
-      w.body.appendChild(ver);
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = checked;
+      cb.style.cssText = 'width:16px;height:16px;accent-color:var(--accent)';
+      const l = document.createElement('label');
+      l.textContent = labelText;
+      l.style.width = 'auto';
+      l.style.flex = '1';
+      if (tip) r.dataset.tip = tip;
+      cb.addEventListener('change', () => onChange(cb.checked));
+      r.append(cb, l);
+      box.appendChild(r);
+    };
+    if (inProject) {
+      head(tr('set_sec_project', 'This song'), tr('set_sec_project_note', 'saved in the file'));
+      mkCheck(tr('set_countin', 'Count-in before recording'), S.countIn,
+        tr('tip_countin', 'Four beats count you in before recording.'),
+        (v) => { Undo.push('Count-in setting'); S.countIn = v; toast(tr(v ? 'toast_countin_on' : 'toast_countin_off', 'Count-in ' + (v ? 'on' : 'off'))); });
+      mkCheck(tr('set_metro', 'Metronome while playing'), S.metronome,
+        tr('tip_set_metro', 'Click on every beat (M)'),
+        (v) => { App.setMetronome(v); w.refresh(); });
+      const sigRow = document.createElement('div');
+      sigRow.className = 'set-note';
+      sigRow.textContent = tr('set_timesig_moved', 'Time signature is on the bar counter in the top bar. Click it.');
+      box.appendChild(sigRow);
     }
+
+    head(tr('set_sec_app', 'fabu'));
+    mkCheck(tr('set_eco', 'Reduce CPU load (weaker computers)'), Engine.ecoMode(),
+      tr('tip_eco', 'Turns off the room reverb and limits voices so playback stays smooth.'),
+      (v) => { Engine.setEco(v); toast(tr(v ? 'toast_eco_on' : 'toast_eco_off', 'CPU saver ' + (v ? 'on' : 'off'))); });
+    mkCheck(tr('set_chord_hints', 'Suggest the next chord in the piano roll'), ChordSuggest.enabled(),
+      tr('tip_chord_hints', 'Shows the chord that usually follows what you have written. Tab adds it.'),
+      (v) => { ChordSuggest.setEnabled(v); if (PianoRoll.isOpen()) PianoRoll.redraw();
+               toast(tr(v ? 'toast_chord_hints_on' : 'toast_chord_hints_off', 'Chord suggestions ' + (v ? 'on' : 'off'))); });
+    mkCheck(tr('set_scrub', 'Scrub while dragging the playhead'), Engine.scrubOn(),
+      tr('tip_scrub', 'Hear the notes under the playhead as you drag it (when stopped).'),
+      (v) => { Engine.setScrub(v); toast(tr(v ? 'toast_scrub_on' : 'toast_scrub_off', 'Scrubbing ' + (v ? 'on' : 'off'))); });
+
+    // MIDI keyboard input
+    if (typeof MIDI !== 'undefined' && MIDI.supported()) {
+      mkCheck(tr('set_midi', 'MIDI keyboard input'), MIDI.enabled,
+        tr('tip_midi', 'Play and record instruments from a connected MIDI keyboard.'),
+        (v) => { MIDI.setEnabled(v); w.refresh(); });
+      const midiInfo = document.createElement('div');
+      midiInfo.style.cssText = 'font-size:11px;color:var(--faint);margin:-4px 0 8px 26px';
+      const devs = MIDI.deviceNames();
+      midiInfo.textContent = !MIDI.enabled ? tr('set_midi_off', 'Turned off.')
+        : devs.length ? tr('set_midi_devices', 'Connected: {list}', { list: devs.join(', ') })
+        : tr('set_midi_none', 'No MIDI keyboard detected. Plug one in and it appears here.');
+      box.appendChild(midiInfo);
+    }
+
+    const r = document.createElement('div');
+    r.className = 'frow';
+    if (!inProject) r.style.display = 'none';   // master volume is part of the song
+    r.innerHTML = `<label>${tr('set_master_vol', 'Master vol.')}</label>`;
+    const inp = document.createElement('input');
+    inp.type = 'range';
+    inp.min = 0; inp.max = 3; inp.step = 0.01; inp.value = S ? S.masterVol : 0.9;
+    inp.addEventListener('input', () => {
+      if (!inp._gesture) { Undo.push('Master volume'); inp._gesture = true; }
+      S.masterVol = parseFloat(inp.value);
+      Engine.updateAllTracks();
+    });
+    inp.addEventListener('change', () => { inp._gesture = false; });
+    r.appendChild(inp);
+    box.appendChild(r);
+
+    // microphone input picker (recording is raw, with no noise suppression)
+    const micRow = document.createElement('div');
+    micRow.className = 'frow';
+    micRow.style.marginTop = '4px';
+    const micLbl = document.createElement('label');
+    micLbl.textContent = tr('set_mic', 'Microphone');
+    micLbl.style.cssText = 'flex:0 0 auto;width:auto';
+    const micSel = document.createElement('select');
+    micSel.style.cssText = 'flex:1;min-width:0;background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:4px 6px;color:var(--text)';
+    const optDefault = document.createElement('option');
+    optDefault.value = ''; optDefault.textContent = tr('set_mic_default', 'System default');
+    micSel.appendChild(optDefault);
+    micSel.value = Engine.micId();
+    micSel.addEventListener('change', () => { Engine.setMicId(micSel.value); toast(tr('toast_mic_set', 'Microphone changed')); });
+    micRow.append(micLbl, micSel);
+    box.appendChild(micRow);
+    // populate device list (labels appear once mic permission is granted)
+    if (navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) {
+      navigator.mediaDevices.enumerateDevices().then((devs) => {
+        const ins = devs.filter(d => d.kind === 'audioinput');
+        for (const d of ins) {
+          const o = document.createElement('option');
+          o.value = d.deviceId;
+          o.textContent = d.label || tr('set_mic_generic', 'Microphone');
+          micSel.appendChild(o);
+        }
+        micSel.value = Engine.micId();
+        if (!ins.some(d => d.label)) {
+          const hint = document.createElement('div');
+          hint.style.cssText = 'color:var(--faint);font-size:10px;margin:-2px 0 4px';
+          hint.textContent = tr('set_mic_hint', 'Record once to see device names.');
+          micRow.after(hint);
+        }
+      }).catch(() => {});
+    }
+
+    const note = document.createElement('div');
+    note.style.cssText = 'color:var(--faint);font-size:10.5px;margin-top:10px;line-height:1.5';
+    note.textContent = tr('set_note', 'Projects save as .fab files, sounds included. Export makes a WAV audio file.');
+    box.appendChild(note);
+
+    // Account
+    const acct = document.createElement('div');
+    acct.className = 'frow';
+    acct.style.cssText = 'margin-top:12px;border-top:1px solid var(--line);padding-top:12px';
+    const label = document.createElement('label');
+    label.style.cssText = 'flex:1;width:auto';
+    label.textContent = Auth.isLoggedIn()
+      ? tr('set_signed_in', 'Signed in as {name}', { name: Auth.user })
+      : tr('set_no_account', 'Not signed in');
+    const btn = document.createElement('button');
+    btn.className = 'fbtn';
+    btn.textContent = Auth.isLoggedIn() ? tr('set_manage_acct', 'Account') : tr('auth_login', 'Log in');
+    btn.addEventListener('click', () => { Auth.openAccount(); });
+    acct.append(label, btn);
+    box.appendChild(acct);
+
+    // version + manual update check
+    const ver = document.createElement('div');
+    ver.className = 'frow';
+    ver.style.marginTop = '10px';
+    const vLabel = document.createElement('label');
+    vLabel.style.cssText = 'flex:1;width:auto;color:var(--faint)';
+    if (window.electronAPI && window.electronAPI.checkUpdates) {
+      vLabel.textContent = 'fabu v' + (App.version || '…');
+      const vBtn = document.createElement('button');
+      vBtn.className = 'fbtn';
+      vBtn.textContent = tr('set_check_updates', 'Check for updates');
+      vBtn.addEventListener('click', async () => {
+        vBtn.disabled = true;
+        vBtn.textContent = tr('set_checking', 'Checking…');
+        const r = await App.checkForUpdates();
+        vBtn.disabled = false;
+        vBtn.textContent = tr('set_check_updates', 'Check for updates');
+        if (r === 'latest') toast(tr('set_up_to_date', "You're on the latest version."), 'green');
+        else if (r === 'error') toast(tr('set_check_failed', 'Could not check. Are you online?'), 'red');
+        // 'update' shows the update banner by itself
+      });
+      ver.append(vLabel, vBtn);
+    } else {
+      vLabel.textContent = tr('set_web_version', 'fabu web, always the latest version');
+      ver.appendChild(vLabel);
+    }
+    box.appendChild(ver);
   },
 
   // ---------- Help ----------

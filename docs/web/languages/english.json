@@ -897,7 +897,7 @@
   "export_midi_t": "MIDI file",
   "export_midi_d": "The notes rather than the sound, for another program",
   "samp_cat_mine": "Yours",
-  "loop_new_hint": "Drag a pattern or a .fabloop file here to add it to your Loops!",
+  "loop_new_hint": "Drag a pattern from your song anywhere into this window, or drop a .fabloop file here.",
   "loop_untitled": "My loop",
   "loop_added": "{name} added to your loops",
   "loop_bad_file": "That file is not a loop fabu can read.",
@@ -1043,5 +1043,6 @@
   "hp_loops_sub": "Your own loops, and loops other people have shared.",
   "hp_profile_sub": "How you look to everyone else.",
   "hp_profile_out": "Not signed in.",
-  "hp_settings_sub": "These apply to fabu itself. Settings for one song live inside that song."
+  "hp_settings_sub": "These apply to fabu itself. Settings for one song live inside that song.",
+  "instr_unknown": "Unknown instrument"
 }

@@ -897,7 +897,7 @@
   "export_midi_t": "MIDI-Datei",
   "export_midi_d": "Die Noten statt des Klangs, für ein anderes Programm",
   "samp_cat_mine": "Deine",
-  "loop_new_hint": "Zieh ein Pattern oder eine .fabloop-Datei hierher, um es zu deinen Loops hinzuzufügen!",
+  "loop_new_hint": "Zieh ein Pattern aus deinem Song irgendwo in dieses Fenster, oder leg eine .fabloop-Datei hier ab.",
   "loop_untitled": "Mein Loop",
   "loop_added": "{name} zu deinen Loops hinzugefügt",
   "loop_bad_file": "Diese Datei kann fabu nicht als Loop lesen.",
@@ -1043,5 +1043,6 @@
   "hp_loops_sub": "Deine eigenen Loops und Loops, die andere geteilt haben.",
   "hp_profile_sub": "Wie dich alle anderen sehen.",
   "hp_profile_out": "Nicht angemeldet.",
-  "hp_settings_sub": "Diese gelten für fabu selbst. Einstellungen für einen Song liegen in diesem Song."
+  "hp_settings_sub": "Diese gelten für fabu selbst. Einstellungen für einen Song liegen in diesem Song.",
+  "instr_unknown": "Unbekanntes Instrument"
 }

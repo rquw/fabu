@@ -22,7 +22,11 @@ function instrLabel(k) {
   const inst = (typeof S !== 'undefined' && S && S.instruments && S.instruments[k])
     || (typeof LIB !== 'undefined' && LIB[k]);
   if (inst) return inst.name;
-  return tr('instr_' + k, (typeof INSTRUMENTS !== 'undefined' && INSTRUMENTS[k]) || k);
+  const known = typeof INSTRUMENTS !== 'undefined' && INSTRUMENTS[k];
+  if (known) return tr('instr_' + k, known);
+  // An id we do not have. A loop shared from a newer build can carry one, and
+  // showing "rbass808" to somebody is showing them our variable names.
+  return tr('instr_unknown', 'Unknown instrument');
 }
 // translated drum-row name for a pitch class, or null if it has no name
 const DRUM_LABEL_KEYS = { 0: 'drum_kick', 2: 'drum_snare', 4: 'drum_clap', 6: 'drum_hat', 9: 'drum_tom', 10: 'drum_ophat' };
