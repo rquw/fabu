@@ -520,9 +520,36 @@ const DragGhost = {
       d.style.animationDelay = (fx * 130).toFixed(0) + 'ms';
       frag.appendChild(d);
     }
+    const dust = [...frag.children];
     document.body.appendChild(frag);
-    const dust = [...document.querySelectorAll('.ghost-dust')];
     setTimeout(() => { el.remove(); for (const d of dust) d.remove(); }, 780);
+  },
+
+  // The first release of a drag used to stutter, and the second and third a
+  // little. The browser will not build the layers or compile the keyframes for
+  // an animation it has never run, so it does all of that during the first one.
+  // Running it once on something invisible at startup moves that cost to a
+  // moment when nobody is watching.
+  warm() {
+    if (this._warm) return;
+    this._warm = true;
+    if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const box = document.createElement('div');
+    box.id = 'dragGhostCard';
+    box.style.cssText = 'left:-9999px;top:-9999px;width:40px;height:20px;opacity:0';
+    box.style.setProperty('--gt', 'none');
+    const speck = document.createElement('div');
+    speck.className = 'ghost-dust';
+    speck.style.cssText = 'left:-9999px;top:-9999px;width:3px;height:3px;opacity:0';
+    speck.style.setProperty('--dx', '10px');
+    speck.style.setProperty('--dy', '-10px');
+    document.body.append(box, speck);
+    // a frame between insert and animate, or the two are batched into one style
+    // pass and the layer is still built lazily
+    requestAnimationFrame(() => {
+      box.classList.add('ghost-dissolve');
+      setTimeout(() => { box.remove(); speck.remove(); }, 900);
+    });
   }
 };
 // Shift is the paint modifier, and it should be readable BEFORE you commit to a
@@ -540,9 +567,11 @@ const DragGhost = {
   window.addEventListener('blur', () => set(false));
 })();
 
-// decode the stand-in pixel now, so it is ready before anyone drags anything
-if (document.body) DragGhost.pixel();
-else document.addEventListener('DOMContentLoaded', () => DragGhost.pixel());
+// decode the stand-in pixel now, so it is ready before anyone drags anything,
+// and run the release animation once while it cannot be seen
+function warmDragGhost() { DragGhost.pixel(); setTimeout(() => DragGhost.warm(), 600); }
+if (document.body) warmDragGhost();
+else document.addEventListener('DOMContentLoaded', warmDragGhost);
 
 // dragover is the event that reliably carries coordinates while a drag is live,
 // and the only one that reports the shift key during a drag

@@ -1853,9 +1853,16 @@ input[type="range"].locked { opacity: 0.45; filter: saturate(0.4); }
 /* ---- samples / loops browser ---- */
 .samp-cat { font-size: 10px; font-weight: 800; letter-spacing: 0.5px; text-transform: uppercase; color: var(--faint); margin: 10px 0 5px; }
 .samp-item { justify-content: flex-start; gap: 8px; }
-.samp-item .samp-nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.samp-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.samp-item .samp-nm {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.samp-meta {
+  display: flex; align-items: baseline; gap: 6px; min-width: 0;
+  overflow: hidden; white-space: nowrap;
+}
 .samp-item .samp-inst {
-  flex-shrink: 0; white-space: nowrap; max-width: 80px; overflow: hidden; text-overflow: ellipsis;
+  min-width: 0; overflow: hidden; text-overflow: ellipsis;
   font-size: 10px; color: var(--faint); font-weight: 600;
 }
 .samp-play {
@@ -2119,24 +2126,26 @@ body.shift-held .fx-item:not(.samp-item) { position: relative; overflow: visible
 
 /* ---- the dragged card coming apart on release ---- */
 @keyframes ghostDissolve {
-  0%   { opacity: .95; filter: blur(0px);   transform: var(--gt) scale(1); }
-  35%  { opacity: .55; filter: blur(1.5px); }
-  100% { opacity: 0;   filter: blur(7px);   transform: var(--gt) scale(1.06) translateY(-10px); }
+  0%   { opacity: .95; transform: var(--gt) scale(1) translate3d(0, 0, 0); }
+  40%  { opacity: .5; }
+  100% { opacity: 0;   transform: var(--gt) scale(1.07) translate3d(0, -12px, 0); }
 }
 #dragGhostCard.ghost-dissolve {
   animation: ghostDissolve 0.52s cubic-bezier(.4,0,.7,1) forwards;
   pointer-events: none;
+  will-change: opacity, transform;
 }
 @keyframes ghostDust {
-  0%   { opacity: 0;   transform: translate(0, 0) scale(1); }
+  0%   { opacity: 0;   transform: translate3d(0, 0, 0) scale(1); }
   15%  { opacity: .95; }
-  100% { opacity: 0;   transform: translate(var(--dx), var(--dy)) scale(.3); }
+  100% { opacity: 0;   transform: translate3d(var(--dx), var(--dy), 0) scale(.3); }
 }
 .ghost-dust {
   position: fixed; z-index: 9999; pointer-events: none;
   border-radius: 50%;
   background: var(--accent);
   animation: ghostDust 0.62s cubic-bezier(.25,.6,.4,1) forwards;
+  will-change: opacity, transform;
 }
 .ghost-dust.paint { background: var(--green); }
 
@@ -2282,10 +2291,10 @@ body.shift-held .fx-item:not(.samp-item) { position: relative; overflow: visible
 /* The credit gives way before the loop's own name does: whose loop it is
    matters, but not more than which loop it is. */
 .samp-from {
-  font-size: 9px; color: var(--faint); margin-left: 4px;
-  flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 9px; color: var(--faint); flex: 0 1 auto;
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.samp-item .samp-nm { flex: 1 0 auto; }
+
 
 /* ---------- phones ----------
    fabu is a desktop tool and stays one, but a phone should be able to open a

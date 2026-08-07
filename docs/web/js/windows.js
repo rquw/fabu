@@ -628,7 +628,7 @@ const Windows = {
   toggleSampleBrowser() {
     if (this.isOpen('samples')) { this.close('samples'); return; }
     const w = this.create('samples', tr('samp_title', 'Loops'), 'i-loops',
-      { x: 60, y: 130, width: 250, height: 330 });
+      { x: 60, y: 130, width: 272, height: 330 });
     // The gallery used to be a lone heart in the top bar with nothing to say what
     // it was, and there was no way at all to reach your own profile. Both belong
     // here, next to the loops they are about.
@@ -666,7 +666,9 @@ const Windows = {
           const inst = s.cat === 'fx' ? '' : `<span class="samp-inst">${instrLabel(s.instrument)}</span>`;
           // a loop taken from the gallery keeps the name of whoever wrote it
           const credit = s.from ? `<span class="samp-from">${escapeHtml(tr('loop_by', 'by {name}', { name: s.from }))}</span>` : '';
-          item.innerHTML = `<button class="samp-play" title="${tr('samp_preview', 'Preview')}"><svg class="ic"><use href="#i-play"/></svg></button><span class="samp-nm">${escapeHtml(s.name)}</span>${credit}${inst}`;
+          item.innerHTML = `<button class="samp-play" title="${tr('samp_preview', 'Preview')}"><svg class="ic"><use href="#i-play"/></svg></button>` +
+            `<span class="samp-txt"><span class="samp-nm">${escapeHtml(s.name)}</span>` +
+            `<span class="samp-meta">${inst}${credit}</span></span>`;
           item.addEventListener('dragstart', (e) => {
             e.dataTransfer.setData('text/fabu-sample', s.id);
             e.dataTransfer.effectAllowed = 'copy';
