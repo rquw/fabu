@@ -1024,17 +1024,34 @@ kbd {
   flex: 1 1 0; min-width: 0;
   display: flex; flex-direction: column; align-items: flex-start;
   padding: 26px 24px 24px;
-  height: 246px;
+  height: 250px;
   border-radius: 16px;
-  border: 1px solid var(--line);
-  background: var(--panel);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  /* A surface, not a flat rectangle: light falls from above, so the top edge is
+     a shade lighter than the bottom and carries a hairline highlight. */
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.004) 55%),
+    var(--panel);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 1px 2px rgba(0, 0, 0, 0.3);
   color: var(--text);
   cursor: pointer;
   overflow: hidden;
   text-align: left;
-  transition: transform 0.15s var(--ease), border-color 0.15s var(--ease), background 0.15s var(--ease);
+  transition: transform 0.15s var(--ease), border-color 0.15s var(--ease),
+              box-shadow 0.15s var(--ease), background 0.15s var(--ease);
 }
-.home-go:hover { transform: translateY(-3px); border-color: var(--accent); background: var(--panel2); }
+.home-go:hover {
+  transform: translateY(-3px);
+  border-color: rgba(224, 122, 63, 0.55);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.01) 55%),
+    var(--panel2);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.09),
+    0 10px 26px rgba(0, 0, 0, 0.42);
+}
 .home-go:active { transform: translateY(-1px); }
 .home-go.hidden { display: none; }
 .hc-ic { width: 34px; height: 34px; color: var(--accent); margin-bottom: auto; }
@@ -1051,14 +1068,28 @@ kbd {
 }
 .hc-art-mp { color: #b07bd6; opacity: 0.3; }
 
+/* The one you are meant to press. Light from the top left, deepening toward the
+   bottom right, with the same hairline along the top edge as the others so it
+   sits on the same shelf rather than floating in front of it. */
 .home-go.primary {
-  background: linear-gradient(155deg, #e07a3f 0%, #c25f2c 58%, #a94e22 100%);
-  border-color: transparent; color: #fff;
+  background:
+    linear-gradient(158deg, #ef8f57 0%, #e07a3f 34%, #c8632e 72%, #ae5325 100%);
+  border-color: rgba(255, 255, 255, 0.14);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    0 6px 20px rgba(176, 79, 32, 0.3);
+  color: #fff;
 }
 .home-go.primary .hc-ic { color: #fff; }
 .home-go.primary .hc-sub { color: rgba(255, 255, 255, 0.85); }
 .home-go.primary .hc-art { color: #fff; opacity: 0.26; }
-.home-go.primary:hover { background: linear-gradient(155deg, #ea8850 0%, #cc6a34 58%, #b3562a 100%); }
+.home-go.primary:hover {
+  background: linear-gradient(158deg, #f79a61 0%, #e9854a 34%, #d16d36 72%, #b85c2b 100%);
+  border-color: rgba(255, 255, 255, 0.2);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.34),
+    0 12px 30px rgba(176, 79, 32, 0.42);
+}
 
 .home-example {
   display: inline-flex; align-items: center; gap: 7px; margin-top: 4px;
@@ -1094,8 +1125,11 @@ kbd {
   width: 100%;
   padding: 14px;
   border-radius: 14px;
-  background: var(--panel);
-  border: 1px solid var(--line);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.004) 60%),
+    var(--panel);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
   cursor: pointer;
   text-align: left;
   transition: border-color 0.13s var(--ease), background 0.13s var(--ease);
@@ -1107,7 +1141,12 @@ kbd {
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }
 }
-.home-card:hover { border-color: var(--accent); background: var(--panel2); }
+.home-card:hover {
+  border-color: rgba(224, 122, 63, 0.5);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.008) 60%),
+    var(--panel2);
+}
 .home-card-art {
   width: 52px; height: 52px; flex: 0 0 52px;
   border-radius: 11px;
@@ -2337,9 +2376,9 @@ body.shift-held .fx-item:not(.samp-item) { position: relative; overflow: visible
   flex: 0 0 264px;
   display: flex; flex-direction: column; gap: 8px;
   padding: 34px 22px 22px;
-  border-right: 1px solid var(--line);
-  background: rgba(16, 14, 13, 0.5);
-  backdrop-filter: blur(8px);
+  border-right: 1px solid rgba(255, 255, 255, 0.05);
+  background: linear-gradient(180deg, rgba(12, 11, 10, 0.72), rgba(12, 11, 10, 0.55));
+  backdrop-filter: blur(14px);
 }
 .hn-brand { padding: 0 6px 32px; }
 #homeNav .home-logo { font-size: 40px; letter-spacing: -1.6px; }
@@ -2353,7 +2392,12 @@ body.shift-held .fx-item:not(.samp-item) { position: relative; overflow: visible
   transition: background 0.12s var(--ease), color 0.12s var(--ease);
 }
 .hn-item:hover { background: var(--panel2); color: var(--text); }
-.hn-item.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+.hn-item.on {
+  background: linear-gradient(180deg, rgba(224, 122, 63, 0.2), rgba(224, 122, 63, 0.09));
+  border-color: rgba(224, 122, 63, 0.55);
+  color: var(--accent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07);
+}
 .hn-item .ic { width: 19px; height: 19px; flex-shrink: 0; }
 .hn-item { font-size: 14px; }
 
@@ -2365,7 +2409,14 @@ body.shift-held .fx-item:not(.samp-item) { position: relative; overflow: visible
   color: var(--text); cursor: pointer;
   transition: border-color 0.12s var(--ease), background 0.12s var(--ease);
 }
-.hn-new:hover { border-color: var(--accent); background: var(--panel2); }
+.hn-new {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.005) 60%),
+    var(--panel);
+  border-color: rgba(255, 255, 255, 0.07);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+.hn-new:hover { border-color: rgba(224, 122, 63, 0.5); background: var(--panel2); }
 .hn-new .ic { width: 18px; height: 18px; color: var(--accent); flex-shrink: 0; }
 .hn-new-txt { display: flex; flex-direction: column; min-width: 0; }
 .hn-new-title { font-size: 12.5px; font-weight: 700; }
@@ -2420,7 +2471,11 @@ body.shift-held .fx-item:not(.samp-item) { position: relative; overflow: visible
 
 /* The thumbnail hue is derived from the name, but a free-running hue put
    greens and teals next to a warm orange app. Keep it in fabu's band. */
-.home-card-art { background: linear-gradient(150deg, hsl(var(--h) 64% 38%), hsl(var(--h) 58% 22%)); }
+.home-card-art {
+  background: linear-gradient(152deg, hsl(var(--h) 66% 44%), hsl(var(--h) 60% 24%));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  border-color: transparent;
+}
 .home-card-more {
   flex: 0 0 auto; display: flex; align-items: center; justify-content: center;
   width: 26px; height: 26px; border-radius: 7px; color: var(--faint);
