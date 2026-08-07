@@ -586,7 +586,8 @@ const App = {
         <span class="proj-path" title="${escapeHtml(r.path || '')}">${escapeHtml(this.shortPath(r.path))}</span>
         <button class="proj-more" data-tip="${tr('recent_more', 'More')}"><svg class="ic"><use href="#i-dots"/></svg></button>`;
       row.addEventListener('click', (e) => {
-        if (e.target.closest('.proj-more')) { this.recentMenu(e, r); return; }
+        const more = e.target.closest('.proj-more');
+        if (more) { this.recentMenu({ stopPropagation: () => e.stopPropagation(), currentTarget: more }, r); return; }
         this.openRecent(r.path);
       });
       list.appendChild(row);

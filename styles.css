@@ -1695,16 +1695,8 @@ input[type="range"].locked { opacity: 0.45; filter: saturate(0.4); }
   #topbar { padding: 6px 10px 8px; gap: 8px; }
   #projName { width: 108px; }
 
-  #home { flex-direction: column; align-items: stretch; justify-content: flex-start; overflow-y: auto; }
-  .home-inner { padding: 30px 20px 18px; gap: 24px; }
-  .home-logo { font-size: 46px; }
-  .home-actions { flex-wrap: wrap; }
-  .home-act { flex: 1 1 44%; justify-content: center; }
-  .home-recent-list { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
-
-  #homeLangs { position: static; margin: 6px 0 0; }
-  #homeKofi { position: static; align-self: center; margin: 10px 0 0; }
-  #homeVerWrap { position: static; align-self: center; margin: 8px 0 20px; }
+  /* the home screen's own phone rules live at the end of this file, after the
+     sidebar is defined, or they lose to it on source order */
 }
 
 
@@ -2566,4 +2558,48 @@ body.shift-held .fx-item:not(.samp-item) { position: relative; overflow: visible
 .gal-tab:focus-visible, .fbtn:focus-visible, .samp-item:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
+}
+
+/* ---------- the home screen on a phone ----------
+   Kept at the end on purpose: these have the same specificity as the sidebar
+   rules above, so they only win by coming after them. */
+@media (max-width: 760px) {
+  /* The sidebar becomes a strip of tabs across the top, because 264px of nav
+     next to 110px of content is not a screen. */
+  #home { flex-direction: column; align-items: stretch; justify-content: flex-start; overflow-y: auto; }
+  #homeNav {
+    flex: 0 0 auto; padding: 16px 14px 10px;
+    border-right: none; border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  }
+  .hn-brand { padding: 0 4px 14px; }
+  #homeNav .home-logo { font-size: 30px; }
+  #homeNav .home-tag { display: none; }
+  .hn-items { flex-direction: row; overflow-x: auto; gap: 6px; scrollbar-width: none; }
+  .hn-items::-webkit-scrollbar { display: none; }
+  .hn-item { flex: 0 0 auto; padding: 9px 12px; font-size: 12.5px; }
+  .hn-item span { white-space: nowrap; }
+  .hn-new { margin-top: 10px; padding: 9px 12px; }
+  .hn-new-sub { display: none; }
+  .hn-new-title { font-size: 12px; }
+  #homeNav #homeVerWrap { padding: 6px 4px 0; }
+  #homeNav #homeVer { font-size: 10px; }
+
+  .home-inner { padding: 24px 18px 18px; gap: 22px; }
+  .home-greet { font-size: 30px; }
+  .home-greet-sub { margin-bottom: 18px; }
+  .home-actions { flex-wrap: wrap; gap: 12px; }
+  .home-go { flex: 1 1 45%; min-width: 150px; height: 178px; padding: 18px 16px 16px; }
+  .hc-ic { width: 26px; height: 26px; }
+  .hc-title { font-size: 16px; }
+  .hc-sub { font-size: 12px; min-height: 0; }
+  .home-recent-list { grid-template-columns: 1fr; gap: 10px; }
+  .hp-title { font-size: 26px; }
+  .proj-path { display: none; }
+  .pf-stats { gap: 20px; }
+
+  .home-foot { flex-direction: column; align-items: flex-start; gap: 12px; }
+  .home-foot #homeKofi, .home-foot #homeLangs { margin: 0; align-self: center; }
+  #homeLangs { position: static; margin: 6px 0 0; }
+  #homeKofi { position: static; align-self: center; margin: 10px 0 0; }
+  #homeVerWrap { position: static; align-self: center; margin: 8px 0 20px; }
 }
