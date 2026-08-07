@@ -134,7 +134,7 @@ const Gallery = {
     const w = Windows.create('gallery', tr('gal_title', 'Loop gallery'), 'i-library',
       { x: 200, y: 110, width: 420, height: 460 });
     this.mount(w.body);
-    w.refresh = () => this.refresh();
+    w.refresh = () => { this.box = w.body; this.refresh(); };
     App.syncWindowButtons();
   },
 
@@ -176,11 +176,11 @@ const Gallery = {
     setSort(this.sort);
   },
 
-  // whichever copy is currently on screen
+  // whichever copy was mounted last, as long as it is still in the document
   list() {
+    if (this.box && this.box.isConnected) return this.box.querySelector('#galList');
     const w = Windows.wins.get('gallery');
-    if (w) return w.body.querySelector('#galList');
-    return this.box ? this.box.querySelector('#galList') : null;
+    return w ? w.body.querySelector('#galList') : null;
   },
 
   async refresh() {

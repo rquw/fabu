@@ -521,6 +521,13 @@ const App = {
 
   homePage: 'home',
 
+  // Escape is "back" everywhere else in the app, so it is back here too.
+  homeEscape() {
+    if (!this.homeVisible() || this.homePage === 'home') return false;
+    this.showHomePage('home');
+    return true;
+  },
+
   showHomePage(name) {
     this.homePage = name;
     for (const o of $$('#homeNav .hn-item')) o.classList.toggle('on', o.dataset.nav === name);
@@ -2215,6 +2222,12 @@ const App = {
     window.addEventListener('keydown', (e) => {
       const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName || '');
       const mod = e.metaKey || e.ctrlKey;
+
+      // On the home screen Escape backs out of a sub-page. Checked first
+      // because none of the transport shortcuts below mean anything there.
+      if (e.key === 'Escape' && !typing && !document.querySelector('.modal-back')) {
+        if (this.homeEscape()) { e.preventDefault(); return; }
+      }
 
       // Sustain pedal. Held, not toggled, so it behaves like the real thing.
       if ((e.code === 'ShiftLeft' || e.code === 'ShiftRight') && !mod && !e.altKey && !typing
