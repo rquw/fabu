@@ -944,36 +944,30 @@ kbd {
     var(--bg);
   animation: homeIn 0.24s var(--ease);
 }
-/* slow, softly drifting blurred colour blobs for a living background */
-#home::before, #home::after {
-  content: '';
-  position: absolute;
-  border-radius: 50%;
-  filter: blur(70px);
-  pointer-events: none;
-  z-index: 0;
-  will-change: transform;
-}
+/* One warm bloom out of the top right corner, with concentric arcs sweeping
+   from it. Quiet enough to sit behind text and still be there. */
+#home::before, #home::after { content: ''; position: absolute; pointer-events: none; z-index: 0; }
 #home::before {
-  width: 46vw; height: 46vw; max-width: 620px; max-height: 620px;
-  top: -12vh; right: -6vw;
-  background: radial-gradient(circle, rgba(224, 122, 63, 0.40), transparent 68%);
-  animation: blobDriftA 26s ease-in-out infinite alternate;
+  width: 78vw; height: 78vw; max-width: 1000px; max-height: 1000px;
+  top: -40vh; right: -18vw;
+  border-radius: 50%;
+  filter: blur(90px);
+  background: radial-gradient(circle, rgba(224, 122, 63, 0.42), rgba(224, 122, 63, 0.10) 46%, transparent 70%);
+  animation: bloomBreathe 18s ease-in-out infinite alternate;
 }
 #home::after {
-  width: 44vw; height: 44vw; max-width: 560px; max-height: 560px;
-  bottom: -16vh; left: -6vw;
-  /* warm amber, not teal, because fabu's palette has no green */
-  background: radial-gradient(circle, rgba(216, 138, 74, 0.26), transparent 68%);
-  animation: blobDriftB 32s ease-in-out infinite alternate;
+  width: 120vw; height: 120vw; max-width: 1500px; max-height: 1500px;
+  top: -66vh; right: -30vw;
+  border-radius: 50%;
+  background:
+    repeating-radial-gradient(circle at 50% 50%,
+      transparent 0 62px, rgba(240, 158, 100, 0.055) 62px 63px);
+  mask-image: radial-gradient(circle at 50% 50%, #000 42%, transparent 76%);
+  -webkit-mask-image: radial-gradient(circle at 50% 50%, #000 42%, transparent 76%);
 }
-@keyframes blobDriftA {
-  from { transform: translate(0, 0) scale(1); }
-  to   { transform: translate(-9vw, 10vh) scale(1.18); }
-}
-@keyframes blobDriftB {
-  from { transform: translate(0, 0) scale(1); }
-  to   { transform: translate(8vw, -8vh) scale(1.14); }
+@keyframes bloomBreathe {
+  from { transform: scale(1); opacity: 0.9; }
+  to   { transform: scale(1.1); opacity: 1; }
 }
 .home-inner, #homeLangs, #homeKofi, #homeVerWrap { position: relative; z-index: 1; }
 @media (prefers-reduced-motion: reduce) {
@@ -986,10 +980,10 @@ kbd {
 .home-inner {
   flex: 1;
   min-width: 0;
-  padding: 44px 48px 28px;
+  padding: 46px 52px 26px;
   display: flex;
   flex-direction: column;
-  gap: 30px;
+  gap: 34px;
   overflow-y: auto;
 }
 .home-top {
@@ -998,8 +992,8 @@ kbd {
   align-items: flex-start;
   gap: 8px;
 }
-.home-greet { font-size: 40px; font-weight: 800; letter-spacing: -1px; line-height: 1.1; margin: 0; }
-.home-greet-sub { font-size: 14px; color: var(--dim); margin-bottom: 14px; }
+.home-greet { font-size: 46px; font-weight: 700; letter-spacing: -1.4px; line-height: 1.05; margin: 0; }
+.home-greet-sub { font-size: 15px; color: var(--dim); margin: 10px 0 30px; }
 .home-brand { display: flex; flex-direction: column; gap: 3px; }
 .home-logo {
   font-size: 58px;
@@ -1020,29 +1014,51 @@ kbd {
 }
 .home-tag { font-size: 14px; color: var(--dim); font-weight: 500; margin-left: 3px; }
 
-/* labeled action cards, so every option is clear at a glance, ordered by how
-   often you reach for it (New / Open / Multiplayer), example de-emphasized */
-.home-actions { display: flex; gap: 12px; flex-wrap: wrap; align-self: stretch; }
+/* The four ways in. Tall cards with the icon on top, the sub under the title,
+   and a strip of quiet artwork along the bottom so the row reads as a shelf of
+   things rather than a row of buttons. */
+.home-actions { display: flex; gap: 20px; align-self: stretch; }
 .home-go {
-  display: flex; align-items: center; gap: 13px; text-align: left;
-  width: 230px; padding: 15px 17px;
-  border-radius: 14px;
+  position: relative;
+  flex: 1 1 0; min-width: 0;
+  display: flex; flex-direction: column; align-items: flex-start;
+  padding: 26px 24px 24px;
+  height: 246px;
+  border-radius: 16px;
   border: 1px solid var(--line);
   background: var(--panel);
   color: var(--text);
   cursor: pointer;
-  transition: transform 0.14s var(--ease), background 0.14s var(--ease), border-color 0.14s var(--ease);
+  overflow: hidden;
+  text-align: left;
+  transition: transform 0.15s var(--ease), border-color 0.15s var(--ease), background 0.15s var(--ease);
 }
-.home-go:hover { transform: translateY(-2px); border-color: var(--accent); background: var(--panel2); }
-.home-go:active { transform: translateY(0); }
-.home-go .ic { width: 22px; height: 22px; flex-shrink: 0; color: var(--accent); }
-.hc-txt { display: flex; flex-direction: column; min-width: 0; }
-.hc-title { font-size: 14px; font-weight: 700; }
-.hc-sub { font-size: 11.5px; color: var(--dim); margin-top: 2px; }
-.home-go.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-.home-go.primary .ic { color: #fff; }
-.home-go.primary .hc-sub { color: rgba(255, 255, 255, 0.82); }
-.home-go.primary:hover { background: #eb8b52; }
+.home-go:hover { transform: translateY(-3px); border-color: var(--accent); background: var(--panel2); }
+.home-go:active { transform: translateY(-1px); }
+.home-go.hidden { display: none; }
+.hc-ic { width: 34px; height: 34px; color: var(--accent); margin-bottom: auto; }
+.hc-title { font-size: 20px; font-weight: 700; line-height: 1.2; }
+.hc-sub {
+  font-size: 13.5px; color: var(--dim); margin-top: 7px; line-height: 1.4;
+  min-height: 2.8em; max-width: 15ch;
+}
+
+/* the artwork sits behind the text, bleeding off the bottom edge */
+.hc-art {
+  position: absolute; left: 0; right: 0; bottom: 0; height: 62px;
+  color: var(--accent); opacity: 0.14; pointer-events: none;
+}
+.hc-art-mp { color: #b07bd6; opacity: 0.3; }
+
+.home-go.primary {
+  background: linear-gradient(155deg, #e07a3f 0%, #c25f2c 58%, #a94e22 100%);
+  border-color: transparent; color: #fff;
+}
+.home-go.primary .hc-ic { color: #fff; }
+.home-go.primary .hc-sub { color: rgba(255, 255, 255, 0.85); }
+.home-go.primary .hc-art { color: #fff; opacity: 0.26; }
+.home-go.primary:hover { background: linear-gradient(155deg, #ea8850 0%, #cc6a34 58%, #b3562a 100%); }
+
 .home-example {
   display: inline-flex; align-items: center; gap: 7px; margin-top: 4px;
   background: none; border: none; cursor: pointer;
@@ -1062,8 +1078,8 @@ kbd {
 }
 .home-recent-list {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 16px;
 }
 .home-empty {
   color: var(--faint);
@@ -1073,10 +1089,10 @@ kbd {
 .home-card {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
   width: 100%;
-  padding: 10px;
-  border-radius: 12px;
+  padding: 14px;
+  border-radius: 14px;
   background: var(--panel);
   border: 1px solid var(--line);
   cursor: pointer;
@@ -1092,8 +1108,8 @@ kbd {
 }
 .home-card:hover { border-color: var(--accent); background: var(--panel2); }
 .home-card-art {
-  width: 46px; height: 46px; flex: 0 0 46px;
-  border-radius: 9px;
+  width: 52px; height: 52px; flex: 0 0 52px;
+  border-radius: 11px;
   border: 1px solid var(--line);
   background:
     linear-gradient(150deg, hsl(var(--h) 42% 26%), hsl(var(--h) 38% 17%));
@@ -1102,17 +1118,17 @@ kbd {
   justify-content: center;
   transition: transform 0.14s var(--ease), border-color 0.14s var(--ease);
 }
-.home-card-art .ic { width: 20px; height: 20px; color: rgba(255,255,255,0.88); }
+.home-card-art .ic { width: 22px; height: 22px; color: rgba(255,255,255,0.9); }
 .home-card-text { display: flex; flex-direction: column; min-width: 0; flex: 1; }
 .home-card-name {
-  font-size: 13px;
+  font-size: 14.5px;
   font-weight: 700;
   color: var(--text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.home-card-sub { font-size: 11px; color: var(--faint); }
+.home-card-sub { font-size: 12px; color: var(--faint); margin-top: 2px; }
 
 #homeLangs {
   position: absolute;
@@ -2317,27 +2333,28 @@ body.shift-held .fx-item:not(.samp-item) { position: relative; overflow: visible
    which is how the gallery and profiles ended up unreachable. */
 #homeNav {
   position: relative; z-index: 1;
-  flex: 0 0 232px;
+  flex: 0 0 264px;
   display: flex; flex-direction: column; gap: 8px;
-  padding: 28px 16px 18px;
+  padding: 34px 22px 22px;
   border-right: 1px solid var(--line);
-  background: rgba(20, 18, 16, 0.55);
+  background: rgba(16, 14, 13, 0.5);
   backdrop-filter: blur(8px);
 }
-.hn-brand { padding: 0 8px 18px; }
-#homeNav .home-logo { font-size: 34px; letter-spacing: -1.2px; }
-#homeNav .home-tag { font-size: 11.5px; margin-left: 2px; }
-.hn-items { display: flex; flex-direction: column; gap: 2px; }
+.hn-brand { padding: 0 6px 32px; }
+#homeNav .home-logo { font-size: 40px; letter-spacing: -1.6px; }
+#homeNav .home-tag { font-size: 12.5px; margin-left: 2px; }
+.hn-items { display: flex; flex-direction: column; gap: 4px; }
 .hn-item {
-  display: flex; align-items: center; gap: 11px;
-  padding: 10px 12px; border-radius: 10px;
+  display: flex; align-items: center; gap: 13px;
+  padding: 13px 14px; border-radius: 12px;
   border: 1px solid transparent; background: none; color: var(--dim);
   font-size: 13px; font-weight: 600; text-align: left; cursor: pointer;
   transition: background 0.12s var(--ease), color 0.12s var(--ease);
 }
 .hn-item:hover { background: var(--panel2); color: var(--text); }
 .hn-item.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
-.hn-item .ic { width: 17px; height: 17px; flex-shrink: 0; }
+.hn-item .ic { width: 19px; height: 19px; flex-shrink: 0; }
+.hn-item { font-size: 14px; }
 
 .hn-new {
   margin-top: auto;
@@ -2362,23 +2379,31 @@ body.shift-held .fx-item:not(.samp-item) { position: relative; overflow: visible
 }
 
 /* recents shelf */
-.home-recent-top { display: flex; align-items: baseline; gap: 12px; margin-bottom: 12px; }
-.home-recent-head { margin-bottom: 0; }
-.home-viewall {
-  margin-left: auto; background: none; border: none; cursor: pointer;
-  color: var(--accent); font-size: 11.5px; font-weight: 700;
+.home-recent-top { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+.home-recent-head {
+  margin-bottom: 0; font-size: 17px; font-weight: 700;
+  letter-spacing: 0; text-transform: none; color: var(--text);
 }
+.home-viewall {
+  margin-left: auto; display: inline-flex; align-items: center; gap: 4px;
+  background: none; border: none; cursor: pointer;
+  color: var(--accent); font-size: 13px; font-weight: 600;
+}
+.home-viewall .ic { width: 13px; height: 13px; }
 .home-viewall:hover { text-decoration: underline; }
 .home-viewall.hidden { display: none; }
 
 /* the quiet row along the bottom: example song, languages, ko-fi */
 .home-foot {
-  margin-top: auto; padding-top: 18px;
+  margin-top: auto; padding-top: 20px;
+  border-top: 1px solid var(--line);
   display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
 }
 .home-foot #homeLangs, .home-foot #homeKofi { position: static; margin: 0; }
 .home-foot #homeKofi { margin-left: auto; }
-.home-foot .home-example { margin-top: 0; }
+.home-foot .home-example { margin-top: 0; font-size: 13.5px; color: var(--dim); }
+.home-example .ex-chev { width: 12px; height: 12px; color: var(--accent); }
+.home-foot #homeLangs { margin: 0 auto; }
 
 /* what's new */
 .news-card { max-width: 620px; width: 100%; }
@@ -2395,3 +2420,11 @@ body.shift-held .fx-item:not(.samp-item) { position: relative; overflow: visible
 /* The thumbnail hue is derived from the name, but a free-running hue put
    greens and teals next to a warm orange app. Keep it in fabu's band. */
 .home-card-art { background: linear-gradient(150deg, hsl(var(--h) 64% 38%), hsl(var(--h) 58% 22%)); }
+.home-card-more {
+  flex: 0 0 auto; display: flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; border-radius: 7px; color: var(--faint);
+  transition: background 0.12s var(--ease), color 0.12s var(--ease);
+}
+.home-card-more .ic { width: 17px; height: 17px; }
+.home-card:hover .home-card-more { color: var(--dim); }
+.home-card-more:hover { background: var(--panel3); color: var(--text); }

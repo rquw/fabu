@@ -4,7 +4,7 @@
   "tagline": "mach musik.",
   "new_project": "Neues Projekt",
   "open_a_file": "Öffne eine Datei",
-  "recent_projects": "Letzte Projekte",
+  "recent_projects": "Zuletzt verwendet",
   "no_projects": "Noch keine Projekte. Erstelle ein und speichere es",
   "add_instrument": "Instrument",
   "add_audio": "Audio",
@@ -1027,10 +1027,12 @@
   "nav_profile": "Profil",
   "home_greet": "Willkommen zurück!",
   "home_greet_first": "Willkommen bei fabu.",
-  "home_greet_sub": "Was machst du heute?",
+  "home_greet_sub": "Was erstellst du heute?",
   "home_view_all": "Alle ansehen",
   "home_view_less": "Weniger anzeigen",
   "home_whats_new": "Was ist neu in fabu?",
   "home_whats_new_sub": "Sieh dir die Änderungen an",
-  "news_none": "Keine Versionshinweise in diesem Build."
+  "news_none": "Keine Versionshinweise in diesem Build.",
+  "recent_more": "Mehr",
+  "removed_recent_do": "Aus zuletzt verwendet entfernen"
 }

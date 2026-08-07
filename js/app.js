@@ -476,7 +476,30 @@ const App = {
 
   // ---------- homescreen ----------
 
+  // the little equaliser along the bottom of the New project card
+  drawHomeArt() {
+    const g = document.querySelector('#homeNew .hc-bars');
+    if (!g || g.childNodes.length) return;
+    const n = 46;
+    let d = '';
+    for (let i = 0; i < n; i++) {
+      const x = 4 + i * (232 / n);
+      // a shape that rises toward the middle, with a steady wobble on top
+      const swell = Math.sin((i / n) * Math.PI);
+      const h = 5 + swell * 34 * (0.55 + 0.45 * Math.abs(Math.sin(i * 1.7)));
+      d += `M${x.toFixed(1)} 60V${(60 - h).toFixed(1)}`;
+    }
+    const p = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    p.setAttribute('d', d);
+    p.setAttribute('stroke', 'currentColor');
+    p.setAttribute('stroke-width', '2.6');
+    p.setAttribute('stroke-linecap', 'round');
+    p.setAttribute('fill', 'none');
+    g.appendChild(p);
+  },
+
   wireHome() {
+    this.drawHomeArt();
     // The sidebar. Everything here is a real place you can get to; nothing is a
     // label for something that does not exist yet.
     const NAV = {
@@ -584,9 +607,11 @@ const App = {
     const viewAll = document.getElementById('homeViewAll');
     if (viewAll) {
       const more = all.length > this.RECENT_SHELF;
-      viewAll.classList.toggle('hidden', !more && !this.recentsExpanded);
-      viewAll.textContent = this.recentsExpanded
-        ? tr('home_view_less', 'Show fewer') : tr('home_view_all', 'View all');
+      viewAll.classList.toggle('hidden', !all.length);
+      const label = viewAll.querySelector('span');
+      if (label) label.textContent = this.recentsExpanded
+        ? tr('home_view_less', 'Show fewer')
+        : (more ? tr('home_view_all', 'View all') : tr('nav_projects', 'All projects'));
       viewAll.onclick = () => {
         this.setRecentsExpanded(!this.recentsExpanded);
         for (const o of $$('#homeNav .hn-item'))
@@ -610,9 +635,10 @@ const App = {
       card.className = 'home-card';
       card.style.setProperty('--i', i);
       const hue = 12 + ((r.name.charCodeAt(0) * 47) % 37);
+      const art = ['#i-note', '#i-auto', '#i-loops'][r.name.length % 3];
       card.innerHTML = `
         <div class="home-card-art" style="--h:${hue}">
-          <svg class="ic"><use href="#i-note"/></svg>
+          <svg class="ic"><use href="${art}"/></svg>
           <div class="card-acts">
             <span class="card-act" data-act="listen" data-tip="${this.homePreviewPath === r.path ? tr('recent_stop', 'Stop') : tr('recent_listen', 'Open and play')}"><svg class="ic"><use href="#${this.homePreviewPath === r.path ? 'i-stop' : 'i-play'}"/></svg></span>
             <span class="card-act" data-act="edit" data-tip="${tr('recent_edit', 'Open to edit')}"><svg class="ic"><use href="#i-edit"/></svg></span>
@@ -621,14 +647,17 @@ const App = {
         <div class="home-card-text">
           <div class="home-card-name">${escapeHtml(r.name || 'Untitled')}</div>
           <div class="home-card-sub">${this.agoText(r.at)}</div>
-        </div>`;
+        </div>
+        <span class="home-card-more" data-tip="${tr('recent_more', 'More')}"><svg class="ic"><use href="#i-dots"/></svg></span>`;
       card.addEventListener('click', (e) => {
         const act = e.target.closest && e.target.closest('.card-act');
         if (act && act.dataset.act === 'listen') {
           if (this.homePreviewPath === r.path) this.stopHomePreview();
           else this.previewRecent(r.path);
+          return;
         }
-        else this.openRecent(r.path);
+        if (e.target.closest && e.target.closest('.home-card-more')) { this.recentMenu(e, r); return; }
+        this.openRecent(r.path);
       });
       card.addEventListener('contextmenu', (e) => {
         e.preventDefault();
@@ -637,6 +666,20 @@ const App = {
       });
       box.appendChild(card);
     });
+  },
+
+  // Right-click did this already, which nobody knew, so it is a button now.
+  recentMenu(e, r) {
+    e.stopPropagation();
+    ctxMenu(e, [
+      [tr('recent_edit', 'Open to edit'), () => this.openRecent(r.path)],
+      [this.homePreviewPath === r.path ? tr('recent_stop', 'Stop') : tr('recent_listen', 'Open and play'),
+        () => this.homePreviewPath === r.path ? this.stopHomePreview() : this.previewRecent(r.path)],
+      [tr('removed_recent_do', 'Remove from recents'), () => {
+        this.removeRecent(r.path);
+        toast(tr('removed_recent', 'Removed from recents'));
+      }]
+    ]);
   },
 
   async openRecent(path) {
@@ -720,7 +763,10 @@ const App = {
     names = names.filter(f => f !== 'index.json');
     const out = [];
     for (const f of names) {
-      try { out.push({ file: f, data: await (await fetch('languages/' + f)).json() }); } catch (e) {}
+      try {
+        const bust = (typeof APP_VERSION !== 'undefined' ? APP_VERSION : '') ;
+        out.push({ file: f, data: await (await fetch('languages/' + f + '?v=' + bust)).json() });
+      } catch (e) {}
     }
     return out;
   },
