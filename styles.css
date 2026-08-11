@@ -2725,3 +2725,6 @@ body.shift-held .fx-item:not(.samp-item) { position: relative; overflow: visible
 .gal-play .ic { width: 13px; height: 13px; }
 .gal-play.on { border-color: var(--accent); color: var(--accent); }
 .gal-play.loading { opacity: 0.5; pointer-events: none; }
+/* the keyboard button carries a word, so it is wider than the toggles beside it */
+.pt-toggle.pt-wide { display: inline-flex; align-items: center; gap: 6px; }
+.pt-toggle.pt-wide .ic { width: 13px; height: 13px; }

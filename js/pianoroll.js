@@ -106,6 +106,10 @@ const PianoRoll = {
         <button id="pkScaleOn" class="pt-toggle" data-tip="${tr('tip_scale_show', 'Shade the notes that fit the key')}">${tr('proll_highlight', 'Highlight')}</button>
         <button id="pkSnapScale" class="pt-toggle" data-tip="${tr('tip_scale_snap', 'Pull drawn notes onto the key')}">${tr('proll_tokey', 'To key')}</button>
         <button id="pkChord" class="pt-toggle" data-tip="${tr('tip_chord', 'Click drops a full chord in the key')}">${tr('proll_chord', 'Chord')}</button>
+      </div>
+      <div class="pt-group">
+        <button id="pkKeyboard" class="pt-toggle pt-wide" data-tip="${tr('tip_keys', 'Play and record with your computer keyboard (K)')}">
+          <svg class="ic"><use href="#i-piano"/></svg>${tr('proll_keyboard', 'Play with your keyboard')}</button>
       </div>`;
     tools.innerHTML = `
       <span class="pt-track" style="color:${f.track.color}">${f.track.name}</span>
@@ -150,6 +154,18 @@ const PianoRoll = {
       wireToggle('#pkScaleOn', 'scaleOn');
       wireToggle('#pkSnapScale', 'snapScale');
       wireToggle('#pkChord', 'chordMode');
+      // Opening the keyboard from inside a pattern should play into that
+      // pattern, not into whichever track happened to be selected last.
+      const kb = q('#pkKeyboard');
+      if (kb) {
+        kb.classList.toggle('on', KeysPanel.visible);
+        kb.addEventListener('click', () => {
+          UI.keysTrackId = f.track.id;
+          if (!KeysPanel.visible) KeysPanel.toggle();
+          KeysPanel.refreshTracks();
+          kb.classList.toggle('on', KeysPanel.visible);
+        });
+      }
     }
     q('#pkQuantSel').addEventListener('click', () => this.quantize('sel'));
     q('#pkQuantAll').addEventListener('click', () => this.quantize('all'));

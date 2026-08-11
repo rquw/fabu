@@ -2278,7 +2278,6 @@ const App = {
     $('#btnMixer').addEventListener('click', () => Windows.toggleMixer());
     $('#btnSettings').addEventListener('click', () => Windows.toggleSettings());
     $('#btnHelp').addEventListener('click', () => Windows.toggleHelp());
-    $('#btnKeys').addEventListener('click', () => KeysPanel.toggle());
     $('#btnZoomIn').addEventListener('click', () => Timeline.setZoom(UI.zoom * 1.3));
     $('#btnZoomOut').addEventListener('click', () => Timeline.setZoom(UI.zoom / 1.3));
     $('#btnFx').addEventListener('click', () => Windows.toggleFxBrowser());
@@ -2371,7 +2370,8 @@ const App = {
     $('#btnSamples').classList.toggle('on', Windows.isOpen('samples'));
     $('#btnSettings').classList.toggle('on', Windows.isOpen('settings'));
     $('#btnHelp').classList.toggle('on', Windows.isOpen('help'));
-    $('#btnKeys').classList.toggle('on', KeysPanel.visible);
+    const pk = document.getElementById('pkKeyboard');
+    if (pk) pk.classList.toggle('on', KeysPanel.visible);
   },
 
   // ---------- keyboard: shortcuts + playing notes ----------

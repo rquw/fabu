@@ -264,6 +264,14 @@ const Timeline = {
     this._renderRaf = requestAnimationFrame(() => { this._renderRaf = null; this.render(); });
   },
 
+  // repaint one clip's block without rebuilding the timeline around it
+  redrawClip(clip) {
+    const el = this.lanes.querySelector(`[data-clip-id="${clip.id}"]`);
+    if (!el) return;
+    el.style.width = Math.max(10, clipBeats(clip) * UI.zoom - 2) + 'px';
+    this.drawClipCanvas(clip, el, el.querySelector('canvas'));
+  },
+
   render() {
     if (this._renderRaf) { cancelAnimationFrame(this._renderRaf); this._renderRaf = null; }
     // drop selection entries whose clips no longer exist
@@ -1747,8 +1755,8 @@ const Timeline = {
       if (x > viewR - 80 || x < viewL) {
         this.scroller.scrollLeft = Math.max(0, x - 120);
       }
-      // grow lanes if we run past the end
-      if (x > this.lanes.clientWidth - 200) this.render();
+      // grow lanes if we run past the end (next frame, never from inside render)
+      if (x > this.lanes.clientWidth - 200) this.renderSoon();
       if (typeof Automation !== 'undefined' && Automation.isOpen()) Automation.redraw();
     }
   },

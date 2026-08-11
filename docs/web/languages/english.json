@@ -29,9 +29,8 @@
   "tip_open": "Open project (Cmd O)",
   "tip_save": "Save project (Cmd S)",
   "tip_export": "Export song as WAV (Cmd E)",
-  "tip_keys": "Play with your keyboard (K)",
+  "tip_keys": "Play and record with your computer keyboard (K)",
   "tip_mixer": "Mixer and EQ (X)",
-  "lbl_keys": "Keys",
   "lbl_mixer": "Mixer",
   "lbl_fx": "Effects",
   "lbl_loops": "Loops",
@@ -186,7 +185,6 @@
   "toast_add_instr_first": "Add an instrument track first",
   "toast_recording_notes": "Recording notes",
   "toast_recorded_notes": "Recorded {n} notes",
-  "toast_take_new_lane": "Take added on a new lane so it does not overlap",
   "hint_take_added": "Take added. Double-click it to edit the notes.",
   "toast_nothing_recorded": "Nothing recorded",
   "toast_mic_denied": "Microphone access denied",
@@ -304,7 +302,7 @@
   "tip_auto_track": "Track",
   "tip_auto_param": "Parameter to automate",
   "tip_auto_clear": "Remove all keyframes",
-  "tip_auto_dot": "Automate this over time",
+  "tip_auto_dot": "Show this as a lane under the track",
   "toast_auto_cleared": "Keyframes cleared",
   "autosave_saving": "Saving…",
   "autosave_saved": "Saved",
@@ -1072,5 +1070,9 @@
   "autom_title_pl": "Automations",
   "exit_save_home": "Save and go home",
   "exit_discard_home": "Go home without saving",
-  "saved_home": "Back to home"
+  "saved_home": "Back to home",
+  "toast_take_merged": "Added {n} notes to {name}",
+  "word_pattern": "the pattern",
+  "proll_keyboard": "Play with your keyboard",
+  "toast_autom_lane": "{name} lane added under {track}"
 }

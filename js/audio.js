@@ -1405,7 +1405,11 @@ const Engine = {
     this.liveKeys.set(key, v);
     // capture into the running note recording
     if (this.midiRec && UI.playing && trackId === this.midiRec.trackId) {
-      this.midiRec.held.set(key, { pitch, beat: this.currentBeat(), vel });
+      const h = { pitch, beat: this.currentBeat(), vel };
+      this.midiRec.held.set(key, h);
+      // Put the note down straight away and let it lengthen under your fingers,
+      // rather than having it appear out of nowhere when you let go.
+      this.startLiveNote(key, h);
     }
   },
 
@@ -1418,7 +1422,7 @@ const Engine = {
       if (this.liveKeys.has(key)) this.pedalHeld.add(key);
       if (this.midiRec) {
         const h = this.midiRec.held.get(key);
-        if (h) { this.midiRec.held.delete(key); this.commitRecNote(h, this.currentBeat()); }
+        if (h) { this.midiRec.held.delete(key); this.commitRecNote(h, this.currentBeat(), key); }
       }
       return;
     }
@@ -1427,7 +1431,7 @@ const Engine = {
       const h = this.midiRec.held.get(key);
       if (h) {
         this.midiRec.held.delete(key);
-        this.commitRecNote(h, this.currentBeat());
+        this.commitRecNote(h, this.currentBeat(), key);
       }
     }
   },
@@ -1479,7 +1483,11 @@ const Engine = {
     const track = KeysPanel.targetTrack();
     if (!track) { toast(tr('toast_add_instr_first', 'Add an instrument track first'), 'red'); return; }
     const startBeat = snapBeat(UI.playhead, S.snap);
-    this.midiRec = { trackId: track.id, clip: null, startBeat, held: new Map() };
+    const into = track.clips.find(c => c.kind === 'midi'
+      && startBeat >= c.start - 1e-6 && startBeat < c.start + clipBeats(c) - 1e-6);
+    if (into) Undo.push('Record notes');
+    this.midiRec = { trackId: track.id, clip: into || null, intoExisting: !!into,
+                     startBeat, held: new Map(), live: new Map() };
     KeysPanel.syncRecButton();
     const begin = (at) => {
       if (!this.midiRec) return; // cancelled during count-in
@@ -1491,10 +1499,11 @@ const Engine = {
     else begin();
   },
 
-  commitRecNote(h, endBeat) {
+  // the clip a take is being recorded into, made on demand
+  recClip() {
     const mr = this.midiRec;
     const track = getTrack(mr.trackId);
-    if (!track) return;
+    if (!track) return null;
     if (!mr.clip) {
       Undo.push('Record notes');
       mr.clip = {
@@ -1503,39 +1512,95 @@ const Engine = {
       };
       track.clips.push(mr.clip);
     }
-    // record exactly what was played, no quantizing (quantize by hand later if you want)
-    const rel = Math.max(0, h.beat - mr.clip.start);
+    return mr.clip;
+  },
+
+  // Draw the note the moment the key goes down, then stretch it every frame
+  // until the key comes up. This is the part that makes recording feel live.
+  startLiveNote(key, h) {
+    const clip = this.recClip();
+    if (!clip) return;
+    const note = { id: uid('note'), pitch: h.pitch,
+                   start: Math.max(0, h.beat - clip.start), length: 0.05, vel: h.vel ?? 0.9 };
+    clip.notes.push(note);
+    this.midiRec.live.set(key, { note, clip });
+    Timeline.renderSoon();
+    if (typeof PianoRoll !== 'undefined' && PianoRoll.isOpen()) PianoRoll.redraw();
+    this.startLiveGrow();
+  },
+
+  startLiveGrow() {
+    if (this._growRaf) return;
+    const tick = () => {
+      const mr = this.midiRec;
+      if (!mr || !mr.live.size) { this._growRaf = null; return; }
+      const now = this.currentBeat();
+      let clip = null;
+      for (const { note, clip: c } of mr.live.values()) {
+        note.length = Math.max(0.05, now - (c.start + note.start));
+        clip = c;
+      }
+      if (clip) {
+        const want = Math.max(clip.length, Math.ceil(now - clip.start));
+        // growing the clip changes the timeline's layout, so that needs a real
+        // render; otherwise only the one block it lives in has to be repainted
+        if (want !== clip.length) { clip.length = want; Timeline.renderSoon(); }
+        else Timeline.redrawClip(clip);
+      }
+      if (typeof PianoRoll !== 'undefined' && PianoRoll.isOpen()) PianoRoll.redraw();
+      this._growRaf = requestAnimationFrame(tick);
+    };
+    this._growRaf = requestAnimationFrame(tick);
+  },
+
+  commitRecNote(h, endBeat, key) {
+    const mr = this.midiRec;
+    if (!mr) return;
     const len = Math.max(0.05, endBeat - h.beat);
-    mr.clip.notes.push({ id: uid('note'), pitch: h.pitch, start: rel, length: len, vel: h.vel ?? 0.9 });
-    mr.clip.length = Math.max(mr.clip.length, Math.ceil(rel + len));
+    // the note is already on screen from startLiveNote; this settles its length
+    const liveKey = key != null ? key : [...mr.live.keys()].find(k => mr.live.get(k).note.pitch === h.pitch);
+    const live = liveKey != null ? mr.live.get(liveKey) : null;
+    if (live) {
+      live.note.length = len;
+      live.clip.length = Math.max(live.clip.length, Math.ceil(live.note.start + len));
+      mr.live.delete(liveKey);
+    } else {
+      // no live note (recording started mid-hold): record it exactly as played
+      const clip = this.recClip();
+      if (!clip) return;
+      const rel = Math.max(0, h.beat - clip.start);
+      clip.notes.push({ id: uid('note'), pitch: h.pitch, start: rel, length: len, vel: h.vel ?? 0.9 });
+      clip.length = Math.max(clip.length, Math.ceil(rel + len));
+    }
     Timeline.render();
+    if (typeof PianoRoll !== 'undefined' && PianoRoll.isOpen()) PianoRoll.redraw();
   },
 
   finishMidiRecord() {
     const mr = this.midiRec;
     if (!mr) return;
     const now = this.currentBeat();
-    for (const h of mr.held.values()) this.commitRecNote(h, now); // close held notes
+    for (const [k, h] of mr.held) this.commitRecNote(h, now, k);   // close held notes
     mr.held.clear();
+    mr.live.clear();
+    if (this._growRaf) { cancelAnimationFrame(this._growRaf); this._growRaf = null; }
     this.midiRec = null;
     KeysPanel.syncRecButton();
     if (mr.clip) {
-      // if the take overlaps clips already on the track, move it to its own lane
-      // (keeps the take exactly where it was played, without clobbering them)
       const track = getTrack(mr.trackId);
       const takeEnd = mr.clip.start + mr.clip.length;
-      const overlaps = track && track.clips.some(c => c !== mr.clip &&
-        c.start < takeEnd - 1e-6 && c.start + clipBeats(c) > mr.clip.start + 1e-6);
-      if (overlaps) {
+      const neighbour = !mr.intoExisting && track && track.clips.find(c => c !== mr.clip &&
+        c.kind === 'midi' && c.start < takeEnd - 1e-6 && c.start + clipBeats(c) > mr.clip.start + 1e-6);
+      if (neighbour) {
+        for (const n of mr.clip.notes) {
+          n.start = Math.max(0, n.start + mr.clip.start - neighbour.start);
+          neighbour.notes.push(n);
+          neighbour.length = Math.max(neighbour.length, Math.ceil(n.start + n.length));
+        }
         track.clips.splice(track.clips.indexOf(mr.clip), 1);
-        const nt = makeTrack('midi');
-        nt.instrument = track.instrument;
-        nt.name = track.name + ' take';
-        nt.clips.push(mr.clip);
-        S.tracks.push(nt);
-        this.rebuildTracks();
-        KeysPanel.refreshTracks();
-        toast(tr('toast_take_new_lane', 'Take added on a new lane so it does not overlap'), 'green');
+        mr.clip = neighbour;
+        toast(tr('toast_take_merged', 'Added {n} notes to {name}',
+          { n: mr.clip.notes.length, name: neighbour.name || tr('word_pattern', 'the pattern') }), 'green');
       } else {
         toast(tr('toast_recorded_notes', 'Recorded {n} notes', { n: mr.clip.notes.length }), 'green');
       }

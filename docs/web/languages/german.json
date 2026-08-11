@@ -29,9 +29,8 @@
   "tip_open": "Projekt öffnen (Cmd O)",
   "tip_save": "Projekt speichern (Cmd S)",
   "tip_export": "Song als .WAV exportieren (Cmd E)",
-  "tip_keys": "Mit der Tastatur spielen (K)",
+  "tip_keys": "Mit der Computertastatur spielen und aufnehmen (K)",
   "tip_mixer": "Mixer und EQ (X)",
-  "lbl_keys": "Tasten",
   "lbl_mixer": "Mixer",
   "lbl_fx": "Effekte",
   "lbl_loops": "Loops",
@@ -186,7 +185,6 @@
   "toast_add_instr_first": "Füge zuerst eine Instrumentspur hinzu",
   "toast_recording_notes": "Nehme Noten auf",
   "toast_recorded_notes": "{n} Noten aufgenommen",
-  "toast_take_new_lane": "Take auf einer neuen Spur, damit nichts überlappt",
   "hint_take_added": "Aufnahme hinzugefügt. Doppelklick zum Bearbeiten der Noten.",
   "toast_nothing_recorded": "Nichts aufgenommen",
   "toast_mic_denied": "Mikrofonzugriff verweigert",
@@ -304,7 +302,7 @@
   "tip_auto_track": "Spur",
   "tip_auto_param": "Zu automatisierender Parameter",
   "tip_auto_clear": "Alle Keyframes entfernen",
-  "tip_auto_dot": "Über die Zeit automatisieren",
+  "tip_auto_dot": "Als Spur unter der Spur anzeigen",
   "toast_auto_cleared": "Keyframes gelöscht",
   "autosave_saving": "Speichere…",
   "autosave_saved": "Gespeichert",
@@ -1072,5 +1070,9 @@
   "autom_title_pl": "Automationen",
   "exit_save_home": "Speichern und zum Start",
   "exit_discard_home": "Zum Start ohne zu speichern",
-  "saved_home": "Zurück zum Start"
+  "saved_home": "Zurück zum Start",
+  "toast_take_merged": "{n} Noten zu {name} hinzugefügt",
+  "word_pattern": "das Pattern",
+  "proll_keyboard": "Mit der Tastatur spielen",
+  "toast_autom_lane": "{name}-Spur unter {track} hinzugefügt"
 }

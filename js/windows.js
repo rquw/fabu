@@ -202,8 +202,12 @@ const Windows = {
     const has = track.autom && track.autom[param] && track.autom[param].length;
     b.className = 'auto-dot' + (has ? ' on' : '');
     b.textContent = 'A';
-    b.dataset.tip = tr('tip_auto_dot', 'Automate this over time');
-    b.addEventListener('click', () => Automation.open(track.id, param));
+    b.dataset.tip = tr('tip_auto_dot', 'Show this as a lane under the track');
+    b.addEventListener('click', () => {
+      Timeline.toggleAutomLane(track.id, param, true);
+      toast(tr('toast_autom_lane', '{name} lane added under {track}',
+        { name: Automation.paramLabel(param), track: track.name }), 'green');
+    });
     return b;
   },
 
