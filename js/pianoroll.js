@@ -108,6 +108,11 @@ const PianoRoll = {
         <button id="pkChord" class="pt-toggle" data-tip="${tr('tip_chord', 'Click drops a full chord in the key')}">${tr('proll_chord', 'Chord')}</button>
       </div>
       <div class="pt-group">
+        <button id="pkOctDown" class="pt-toggle" data-tip="${tr('proll_lower_tip', 'Show lower notes')}">&minus;</button>
+        <span class="pt-oct" id="pkOctLabel"></span>
+        <button id="pkOctUp" class="pt-toggle" data-tip="${tr('proll_higher_tip', 'Show higher notes')}">+</button>
+      </div>
+      <div class="pt-group">
         <button id="pkKeyboard" class="pt-toggle pt-wide" data-tip="${tr('tip_keys', 'Play and record with your computer keyboard (K)')}">
           <svg class="ic"><use href="#i-piano"/></svg>${tr('proll_keyboard', 'Play with your keyboard')}</button>
       </div>`;
@@ -156,6 +161,10 @@ const PianoRoll = {
       wireToggle('#pkChord', 'chordMode');
       // Opening the keyboard from inside a pattern should play into that
       // pattern, not into whichever track happened to be selected last.
+      const od = q('#pkOctDown'), ou = q('#pkOctUp');
+      if (od) od.addEventListener('click', () => this.scrollPitch(12));   // lower
+      if (ou) ou.addEventListener('click', () => this.scrollPitch(-12));  // higher
+      this.showOctave();
       const kb = q('#pkKeyboard');
       if (kb) {
         kb.classList.toggle('on', KeysPanel.visible);
@@ -648,6 +657,26 @@ const PianoRoll = {
 
   // ---------- interaction ----------
 
+  // the octave currently at the top of the grid, so the buttons say where
+  // pressing them will take you
+  showOctave() {
+    const el = document.getElementById('pkOctLabel');
+    if (el) el.textContent = noteName(this.topPitch).replace(/[#]/, '');
+  },
+
+  // Move the visible pitch window. Everything that scrolls goes through here
+  // so the limits are decided once.
+  scrollPitch(rows) {
+    if (this._rowMap || !rows) return;      // drum lanes are a fixed set
+    const rowsVisible = Math.floor(this.gridH() / this.rowH);
+    const minTop = Math.min(84, 12 + rowsVisible);
+    const want = clamp(this.topPitch - rows, minTop, 120);
+    if (want === this.topPitch) return;
+    this.topPitch = want;
+    this.scheduleRedraw();
+    this.showOctave();
+  },
+
   bindGrid() {
     const gc = this.gridCv;
 
@@ -664,11 +693,38 @@ const PianoRoll = {
       const rows = Math.trunc(this._scrollAcc / this.rowH);
       if (!rows) return;
       this._scrollAcc -= rows * this.rowH;
-      const rowsVisible = Math.floor(this.gridH() / this.rowH);
-      const minTop = Math.min(84, 12 + rowsVisible); // keep the lowest keys reachable
-      this.topPitch = clamp(this.topPitch - rows, minTop, 120);
-      this.scheduleRedraw();
+      this.scrollPitch(rows);
     }, { passive: false });
+
+    // A mouse wheel was the only way to reach another octave, which means
+    // there was no way at all on a phone or a tablet. Dragging the piano keys
+    // up and down moves the range, which is the gesture the keys look like
+    // they should have, and it cannot be confused with drawing a note.
+    const keys = this.keysCv;
+    if (keys) {
+      let dragging = false, lastY = 0, acc = 0, moved = 0;
+      keys.addEventListener('mousedown', (e) => {
+        dragging = true; lastY = e.clientY; acc = 0; moved = 0;
+        const move = (ev) => {
+          if (!dragging) return;
+          const dy = ev.clientY - lastY;
+          lastY = ev.clientY;
+          moved += Math.abs(dy);
+          acc += dy;
+          const rows = Math.trunc(acc / this.rowH);
+          if (!rows) return;
+          acc -= rows * this.rowH;
+          this.scrollPitch(-rows);
+        };
+        const up = () => {
+          dragging = false;
+          window.removeEventListener('mousemove', move);
+          window.removeEventListener('mouseup', up);
+        };
+        window.addEventListener('mousemove', move);
+        window.addEventListener('mouseup', up);
+      });
+    }
 
     gc.addEventListener('contextmenu', (e) => {
       e.preventDefault();

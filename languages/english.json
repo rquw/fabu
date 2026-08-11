@@ -1074,5 +1074,7 @@
   "toast_take_merged": "Added {n} notes to {name}",
   "word_pattern": "the pattern",
   "proll_keyboard": "Play with your keyboard",
-  "toast_autom_lane": "{name} lane added under {track}"
+  "toast_autom_lane": "{name} lane added under {track}",
+  "proll_lower_tip": "Show lower notes",
+  "proll_higher_tip": "Show higher notes"
 }

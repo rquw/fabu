@@ -1074,5 +1074,7 @@
   "toast_take_merged": "{n} Noten zu {name} hinzugefügt",
   "word_pattern": "das Pattern",
   "proll_keyboard": "Mit der Tastatur spielen",
-  "toast_autom_lane": "{name}-Spur unter {track} hinzugefügt"
+  "toast_autom_lane": "{name}-Spur unter {track} hinzugefügt",
+  "proll_lower_tip": "Tiefere Noten anzeigen",
+  "proll_higher_tip": "Höhere Noten anzeigen"
 }

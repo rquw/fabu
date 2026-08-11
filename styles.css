@@ -2886,3 +2886,11 @@ html, body { overflow-x: hidden; max-width: 100%; }
 @media (min-width: 761px) and (max-width: 1180px) {
   :root { --heads-w: 176px; }
 }
+/* which octave is at the top of the grid, between the two octave buttons */
+.pt-oct {
+  min-width: 30px; text-align: center;
+  font-size: 11px; font-weight: 700; color: var(--dim);
+  font-variant-numeric: tabular-nums;
+}
+/* the keys column is a handle for moving through the octaves */
+.proll-keys { cursor: ns-resize; }
