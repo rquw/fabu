@@ -584,7 +584,7 @@ const App = {
     ];
 
     const drums  = track('Drums',  'drumkit',  drumClips,  { swing: 0.18, vol: 0.9 });
-    const bass   = track('Bass',   'sub',      bassClips,  { vol: 0.85 });
+    const bass   = track('Bass',   'bass',     bassClips,  { vol: 0.85 });
     const chords = track('Chords', 'rupright', chordClips, { swing: 0.18, vol: 0.8 });
     const pad    = track('Pad',    'pad',      padClips,   { vol: 0.5 });
     const mel    = track('Melody', 'rvibes',   melClips,   { vol: 0.8 });
