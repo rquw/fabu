@@ -2708,3 +2708,16 @@ body.shift-held .fx-item:not(.samp-item) { position: relative; overflow: visible
   transition: color 0.12s var(--ease), text-decoration-color 0.12s var(--ease);
 }
 .modal-link:hover { color: var(--accent); text-decoration-color: var(--accent); }
+
+/* ---- the loop editor ---- */
+/* .modal-card forces every text input to full width with a bottom margin,
+   which is right for a stacked form and wrong inside this label row. */
+.loop-field input[type="text"] { width: auto; margin-bottom: 0; }
+.loop-field { margin-top: 10px; }
+.loop-field > span { flex: 0 0 62px; }
+
+/* the two ways of sending a loop somewhere, side by side and equal */
+.loop-send { display: flex; gap: 8px; margin-top: 16px; }
+.loop-send .fbtn { flex: 1; justify-content: center; }
+/* leaving, and the one destructive thing, kept apart from each other */
+.modal-btns.loop-end { justify-content: space-between; margin-top: 8px; }

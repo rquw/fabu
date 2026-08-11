@@ -600,7 +600,7 @@
   "metro_wood": "Holzblock",
   "metro_beep": "Sanfter Piep",
   "metro_set": "Metronom-Sound: {name}",
-  "recent_listen": "Öffnen und abspielen",
+  "recent_listen": "Vorhören",
   "recent_edit": "Zum Bearbeiten öffnen",
   "mix_mute": "M",
   "mix_solo": "S",
@@ -704,7 +704,7 @@
   "mp_ban_for_hours": "für {n} Stunden",
   "mp_ban_until_host": "bis der Host es wieder erlaubt",
   "mp_player_tip": "Shift-Klick zum Auswählen, Rechtsklick für Optionen",
-  "recent_stop": "Stopp",
+  "recent_stop": "Vorhören stoppen",
   "tip_loop": "Abschnitt wiederholen (L). Shift-Ziehen im Lineal setzt ihn.",
   "toast_loop_on": "Wiederholt Takt {a} bis {b}",
   "toast_loop_off": "Wiederholung aus",
@@ -1070,5 +1070,8 @@
   "saved_sub": "{name} liegt in deinem fabu-Projektordner.",
   "saved_open": "Projektordner öffnen",
   "saved_exit": "Beenden",
-  "autom_title_pl": "Automationen"
+  "autom_title_pl": "Automationen",
+  "exit_save_home": "Speichern und zum Start",
+  "exit_discard_home": "Zum Start ohne zu speichern",
+  "saved_home": "Zurück zum Start"
 }

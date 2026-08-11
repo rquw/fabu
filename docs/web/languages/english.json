@@ -600,7 +600,7 @@
   "metro_wood": "Woodblock",
   "metro_beep": "Soft beep",
   "metro_set": "Metronome sound: {name}",
-  "recent_listen": "Open and play",
+  "recent_listen": "Preview",
   "recent_edit": "Open to edit",
   "mix_mute": "M",
   "mix_solo": "S",
@@ -704,7 +704,7 @@
   "mp_ban_for_hours": "for {n} hours",
   "mp_ban_until_host": "until the host allows it again",
   "mp_player_tip": "Shift-click to select, right-click for options",
-  "recent_stop": "Stop",
+  "recent_stop": "Stop preview",
   "tip_loop": "Repeat a section (L). Shift-drag the ruler to set it.",
   "toast_loop_on": "Repeating bar {a} to {b}",
   "toast_loop_off": "Repeat off",
@@ -1070,5 +1070,8 @@
   "saved_sub": "{name} is in your fabu projects folder.",
   "saved_open": "Open project folder",
   "saved_exit": "Exit",
-  "autom_title_pl": "Automations"
+  "autom_title_pl": "Automations",
+  "exit_save_home": "Save and go home",
+  "exit_discard_home": "Go home without saving",
+  "saved_home": "Back to home"
 }

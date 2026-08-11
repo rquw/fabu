@@ -791,9 +791,11 @@ const Windows = {
         <label class="loop-field"><span>${tr('loop_instr', 'Plays on')}</span>
           <select id="loopInstr">${opts}</select></label>
         <div class="loop-meta" id="loopMeta"></div>
-        <div class="modal-btns" style="flex-wrap:wrap">
+        <div class="loop-send">
           <button id="loopShare" class="fbtn">${tr('loop_share', 'Share as file')}</button>
           <button id="loopPublish" class="fbtn">${tr('loop_publish', 'Put in the gallery')}</button>
+        </div>
+        <div class="modal-btns loop-end">
           <button id="loopDelete" class="fbtn danger-outline">${tr('loop_delete', 'Delete')}</button>
           <button id="loopDone" class="fbtn accent">${tr('loop_done', 'Done')}</button>
         </div>

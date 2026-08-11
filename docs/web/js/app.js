@@ -218,8 +218,10 @@ const App = {
         <div class="modal-title">${tr('exit_title', 'Unsaved changes')}</div>
         <div class="modal-sub">${tr('exit_sub', 'Your project has changes that are not saved to a file.')}</div>
         <div class="modal-btns" style="flex-direction:column;align-items:stretch">
-          <button id="exSave" class="fbtn accent">${tr('exit_save', 'Save and exit')}</button>
-          <button id="exDiscard" class="fbtn danger">${tr('exit_discard', 'Exit without saving')}</button>
+          <button id="exSave" class="fbtn accent">${kind === 'close'
+            ? tr('exit_save', 'Save and exit') : tr('exit_save_home', 'Save and go home')}</button>
+          <button id="exDiscard" class="fbtn danger">${kind === 'close'
+            ? tr('exit_discard', 'Exit without saving') : tr('exit_discard_home', 'Go home without saving')}</button>
           <button id="exStay" class="fbtn">${tr('exit_stay', 'Stay')}</button>
         </div>
       </div>`;
@@ -235,8 +237,8 @@ const App = {
     wrap.querySelector('#exSave').addEventListener('click', async () => {
       const ok = await this.save();
       if (!ok) return;                       // cancelled at the name prompt: stay
-      if (kind === 'close' && window.electronAPI && window.electronAPI.revealPath) {
-        this.showSavedStep(wrap, done);
+      if (window.electronAPI && window.electronAPI.revealPath) {
+        this.showSavedStep(wrap, done, kind);
         return;
       }
       done();
@@ -248,7 +250,7 @@ const App = {
 
   // The last screen before the app closes: it says where the project went, and
   // offers to show you rather than making you go and find it.
-  showSavedStep(wrap, exit) {
+  showSavedStep(wrap, exit, kind) {
     const name = (this.currentPath || '').split(/[\\/]/).pop() || this.projectFileName('.fab');
     wrap.innerHTML = `
       <div class="modal-card">
@@ -256,7 +258,8 @@ const App = {
         <div class="modal-sub">${tr('saved_sub', '{name} is in your fabu projects folder.', { name: escapeHtml(name) })}</div>
         <div class="modal-btns" style="flex-direction:column;align-items:stretch">
           <button id="savedOpen" class="fbtn">${tr('saved_open', 'Open project folder')}</button>
-          <button id="savedExit" class="fbtn accent">${tr('saved_exit', 'Exit')}</button>
+          <button id="savedExit" class="fbtn accent">${kind === 'close'
+            ? tr('saved_exit', 'Exit') : tr('saved_home', 'Back to home')}</button>
         </div>
       </div>`;
     wrap.querySelector('#savedOpen').addEventListener('click', () => {
@@ -818,7 +821,7 @@ const App = {
         <div class="home-card-art" style="--h:${hue}">
           <svg class="ic"><use href="${art}"/></svg>
           <div class="card-acts">
-            <span class="card-act" data-act="listen" data-tip="${this.homePreviewPath === r.path ? tr('recent_stop', 'Stop') : tr('recent_listen', 'Open and play')}"><svg class="ic"><use href="#${this.homePreviewPath === r.path ? 'i-stop' : 'i-play'}"/></svg></span>
+            <span class="card-act" data-act="listen" data-tip="${this.homePreviewPath === r.path ? tr('recent_stop', 'Stop') : tr('recent_listen', 'Preview')}"><svg class="ic"><use href="#${this.homePreviewPath === r.path ? 'i-stop' : 'i-play'}"/></svg></span>
             <span class="card-act" data-act="edit" data-tip="${tr('recent_edit', 'Open to edit')}"><svg class="ic"><use href="#i-edit"/></svg></span>
           </div>
         </div>
@@ -851,7 +854,7 @@ const App = {
     e.stopPropagation();
     ctxMenu(e, [
       [tr('recent_edit', 'Open to edit'), () => this.openRecent(r.path)],
-      [this.homePreviewPath === r.path ? tr('recent_stop', 'Stop') : tr('recent_listen', 'Open and play'),
+      [this.homePreviewPath === r.path ? tr('recent_stop', 'Stop') : tr('recent_listen', 'Preview'),
         () => this.homePreviewPath === r.path ? this.stopHomePreview() : this.previewRecent(r.path)],
       [tr('removed_recent_do', 'Remove from recents'), () => {
         this.removeRecent(r.path);
