@@ -35,11 +35,17 @@ function setupAutoUpdate() {
   });
   updater.on('update-downloaded', () => {
     // don't restart yet: let the user pick "now" or "in a minute" so they can save
-    pendingRestart = () => { quitOk = true; try { updater.quitAndInstall(false, true); } catch (e) { /* ignore */ } };
+    pendingRestart = () => {
+      quitOk = true;
+      // false = show the installer, true = start fabu again afterwards
+      try { updater.quitAndInstall(false, true); }
+      catch (e) { if (win) win.webContents.send('update-error', String(e && e.message)); }
+    };
     if (win) win.webContents.send('update-downloaded');
   });
   updater.on('error', () => {
     if (win) win.webContents.send('update-error', 'err');
+    shell.openExternal('https://rquw.github.io/fabu/').catch(() => {});
   });
   updater.checkForUpdates().catch(() => {});
   // keep checking through a long session so a fresh release is noticed promptly
@@ -228,7 +234,18 @@ ipcMain.on('install-update', () => {
     // macOS can't use electron-updater unsigned, so we swap the .app ourselves
     applyUpdateMac().catch(fail);
   } else if (process.platform === 'win32') {
-    applyUpdateWin().catch(fail);
+    if (updater) {
+      // electron-updater sequences quit-then-install itself, which is the
+      // part the manual spawn could never get right. update-downloaded sets
+      // pendingRestart to quitAndInstall.
+      updater.downloadUpdate().catch((e) => {
+        // if it will not, fall back to fetching the installer ourselves so
+        // there is at least a verified copy in Downloads to run by hand
+        applyUpdateWin().catch(fail);
+      });
+    } else {
+      applyUpdateWin().catch(fail);
+    }
   } else {
     if (!updater) { fail(new Error('no updater')); return; }
     updater.downloadUpdate().catch(fail);
