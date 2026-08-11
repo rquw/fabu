@@ -2721,3 +2721,7 @@ body.shift-held .fx-item:not(.samp-item) { position: relative; overflow: visible
 .loop-send .fbtn { flex: 1; justify-content: center; }
 /* leaving, and the one destructive thing, kept apart from each other */
 .modal-btns.loop-end { justify-content: space-between; margin-top: 8px; }
+.gal-play { padding: 5px 8px; display: flex; align-items: center; }
+.gal-play .ic { width: 13px; height: 13px; }
+.gal-play.on { border-color: var(--accent); color: var(--accent); }
+.gal-play.loading { opacity: 0.5; pointer-events: none; }

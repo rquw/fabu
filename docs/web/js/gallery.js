@@ -122,6 +122,22 @@ const Gallery = {
 
   // ---------- browsing ----------
 
+  heard: new Map(),      // loop id -> parsed loop, so a second listen is instant
+  playingId: null,
+  playingEl: null,
+
+  stopPreview() {
+    clearTimeout(this._playTimer);
+    if (typeof Engine !== 'undefined') Engine.stopAudition();
+    if (this.playingEl && this.playingEl.isConnected) {
+      this.playingEl.classList.remove('on');
+      const u = this.playingEl.querySelector('use');
+      if (u) u.setAttribute('href', '#i-play');
+    }
+    this.playingId = null;
+    this.playingEl = null;
+  },
+
   sort: 'new',
   cat: '',
   query: '',
@@ -186,6 +202,7 @@ const Gallery = {
   async refresh() {
     const list = this.list();
     if (!list) return;
+    this.stopPreview();
     list.innerHTML = `<div class="gal-note">${tr('gal_loading', 'Loading…')}</div>`;
 
     // Your own loops live in this browser, not on the server, so this tab needs
@@ -284,6 +301,8 @@ const Gallery = {
         </div>
       </div>
       <div class="gal-acts">
+        <button class="gal-play fbtn" data-tip="${tr('samp_preview', 'Preview')}">
+          <svg class="ic"><use href="#i-play"/></svg></button>
         <button class="gal-like${r.liked ? ' on' : ''}" data-tip="${tr('gal_like', 'Like')}">
           <svg class="ic"><use href="#i-heart"/></svg><span>${r.likes}</span></button>
         <button class="gal-add fbtn accent" data-tip="${tr('gal_add_tip', 'Put it in your loops')}">${tr('gal_add', 'Add')}</button>
@@ -291,6 +310,34 @@ const Gallery = {
       </div>`;
 
     el.querySelector('.gal-author').addEventListener('click', () => this.openProfile(r.author));
+
+    const play = el.querySelector('.gal-play');
+    play.addEventListener('click', async () => {
+      if (this.playingId === r.id) { this.stopPreview(); return; }
+      this.stopPreview();
+      let loop = this.heard.get(r.id);
+      if (!loop) {
+        play.classList.add('loading');
+        try {
+          const text = await this.rpc('fabu_loop_get', { lid: r.id });
+          loop = text && MyLoops.parseFile(text);
+          if (loop) this.heard.set(r.id, loop);
+        } catch (e) { /* reported below */ }
+        play.classList.remove('loading');
+        if (!loop) { toast(tr('gal_gone', 'That loop is no longer there.'), 'red'); return; }
+      }
+      this.playingId = r.id;
+      this.playingEl = play;
+      play.classList.add('on');
+      play.querySelector('use').setAttribute('href', '#i-stop');
+      Engine.auditionSample({ id: 'gal' + r.id, name: loop.name, instrument: loop.instrument,
+                              length: loop.length, notes: loop.notes, sustain: loop.sustain });
+      // audition stops itself at the end of the loop, so the button has to
+      // come back on its own or it sits there saying stop over silence
+      clearTimeout(this._playTimer);
+      const beats = Math.max(1, loop.length || 4);
+      this._playTimer = setTimeout(() => this.stopPreview(), (beats * 60 / (S.bpm || 120)) * 1000 + 300);
+    });
 
     el.querySelector('.gal-like').addEventListener('click', async () => {
       const t = await this.needToken();

@@ -890,10 +890,6 @@ const Windows = {
       mkCheck(tr('set_metro', 'Metronome while playing'), S.metronome,
         tr('tip_set_metro', 'Click on every beat (M)'),
         (v) => { App.setMetronome(v); w.refresh(); });
-      const sigRow = document.createElement('div');
-      sigRow.className = 'set-note';
-      sigRow.textContent = tr('set_timesig_moved', 'Time signature is on the bar counter in the top bar. Click it.');
-      box.appendChild(sigRow);
     }
 
     head(tr('set_sec_app', 'fabu'));
