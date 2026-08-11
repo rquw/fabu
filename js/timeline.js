@@ -361,7 +361,8 @@ const Timeline = {
         ? tr('autom_expand', 'Show the automation') : tr('autom_collapse', 'Fold the automation away')}">
         <svg class="ic"><use href="#i-chev"/></svg>
       </button>
-      <span class="ah-title">${tr('autom_title', 'Automation')}</span>
+      <span class="ah-title">${n === 1
+        ? tr('autom_title', 'Automation') : tr('autom_title_pl', 'Automations')}</span>
       <span class="ah-count">${n}</span>`;
     const fold = () => {
       track.autoCollapsed = !track.autoCollapsed;

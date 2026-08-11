@@ -1069,5 +1069,6 @@
   "saved_title": "Saved",
   "saved_sub": "{name} is in your fabu projects folder.",
   "saved_open": "Open project folder",
-  "saved_exit": "Exit"
+  "saved_exit": "Exit",
+  "autom_title_pl": "Automations"
 }

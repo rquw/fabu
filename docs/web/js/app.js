@@ -1861,11 +1861,11 @@ const App = {
           <div class="modal-title">${tr('savename_title', 'Name your project')}</div>
           <div class="modal-sub">${tr('savename_sub', 'It goes in your fabu projects folder.')}</div>
           <input id="saveNameIn" type="text" maxlength="60" spellcheck="false">
+          <button id="saveNameBrowse" class="modal-link">${tr('savename_browse', 'Choose a different folder instead')}</button>
           <div class="modal-btns">
             <button id="saveNameNo" class="fbtn">${tr('cancel', 'Cancel')}</button>
             <button id="saveNameGo" class="fbtn accent">${tr('savename_go', 'Save')}</button>
           </div>
-          <button id="saveNameBrowse" class="auth-inline" style="margin-top:10px">${tr('savename_browse', 'Choose a different folder instead')}</button>
         </div>`;
       document.body.appendChild(wrap);
       const input = wrap.querySelector('#saveNameIn');

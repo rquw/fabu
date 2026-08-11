@@ -1069,5 +1069,6 @@
   "saved_title": "Gespeichert",
   "saved_sub": "{name} liegt in deinem fabu-Projektordner.",
   "saved_open": "Projektordner öffnen",
-  "saved_exit": "Beenden"
+  "saved_exit": "Beenden",
+  "autom_title_pl": "Automationen"
 }
