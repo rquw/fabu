@@ -2894,3 +2894,25 @@ html, body { overflow-x: hidden; max-width: 100%; }
 }
 /* the keys column is a handle for moving through the octaves */
 .proll-keys { cursor: ns-resize; }
+
+/* the feedback button, beside support fabu */
+.home-feedback {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 7px 13px; border-radius: 999px;
+  border: 1px solid var(--line); background: var(--panel);
+  color: var(--dim); font-size: 12px; font-weight: 600; cursor: pointer;
+  transition: border-color 0.12s var(--ease), color 0.12s var(--ease), background 0.12s var(--ease);
+}
+.home-feedback:hover { border-color: var(--accent); color: var(--accent); background: var(--panel2); }
+.home-feedback .ic { width: 14px; height: 14px; }
+.home-foot .home-feedback { margin-left: auto; }
+.home-foot #homeKofi { margin-left: 10px; }
+
+#fbModal .modal-card { max-width: 460px; width: 100%; }
+#fbModal textarea {
+  width: 100%; resize: vertical; min-height: 110px;
+  background: var(--panel2); border: 1px solid var(--line); border-radius: 8px;
+  color: var(--text); padding: 9px 11px; outline: none; margin-bottom: 8px;
+  font-size: 13px; font-family: inherit; line-height: 1.5;
+}
+#fbModal textarea:focus, #fbModal input:focus { border-color: var(--accent); }

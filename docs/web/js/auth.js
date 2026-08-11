@@ -162,7 +162,9 @@ const Auth = {
                   pEl.focus();
                 });
             } else if (exists === true) {
-              setErr(tr('auth_wrong_pw', 'Wrong password.'));
+              const wait = await this.cooldown(u);
+              if (wait > 0) setErr(tr('auth_cooldown', 'Too many tries. Wait {n} seconds and try again.', { n: wait }));
+              else setErr(tr('auth_wrong_pw', 'Wrong password.'));
             } else {
               setErr(tr('auth_bad', 'Wrong username or password.'));
             }
@@ -176,6 +178,12 @@ const Auth = {
     go.addEventListener('click', submit);
     pEl.addEventListener('keydown', (e) => { if (e.key === 'Enter') submit(); });
     setTimeout(() => uEl.focus(), 50);
+  },
+
+  // seconds this account must wait before another attempt is answered
+  async cooldown(u) {
+    try { const n = await this.rpc('fabu_login_cooldown', { u }); return +n || 0; }
+    catch (e) { return 0; }
   },
 
   register(u, p) { return this.rpc('fabu_register', { u, p }); },

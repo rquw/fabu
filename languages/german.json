@@ -1076,5 +1076,15 @@
   "proll_keyboard": "Mit der Tastatur spielen",
   "toast_autom_lane": "{name}-Spur unter {track} hinzugefügt",
   "proll_lower_tip": "Tiefere Noten anzeigen",
-  "proll_higher_tip": "Höhere Noten anzeigen"
+  "proll_higher_tip": "Höhere Noten anzeigen",
+  "feedback_btn": "Feedback",
+  "feedback_title": "Sag mir, was du denkst",
+  "feedback_sub": "Was gut ist, was kaputt ist, was fehlt. Es geht direkt an mich.",
+  "feedback_ph": "Schreib einfach los",
+  "feedback_contact": "E-Mail oder Discord, falls du eine Antwort willst (optional)",
+  "feedback_send": "Senden",
+  "feedback_thanks": "Gesendet. Danke, wirklich.",
+  "feedback_refused": "Das ging nicht durch. Zu lang, oder gerade zu viele.",
+  "auth_cooldown": "Zu viele Versuche. Warte {n} Sekunden und probier es nochmal.",
+  "toast_pattern_max": "Ein Pattern geht maximal zwei Minuten. Nimm danach ein weiteres."
 }

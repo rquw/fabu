@@ -302,6 +302,13 @@ function audioClipBeats(clip) {
   return (clipDurSec(clip) / (clip.speed || 1)) * (S.bpm / 60);
 }
 
+// The longest a single pattern may be, in beats. Two minutes of music at the
+// project's tempo, so it means the same thing at 60bpm as at 200.
+const MAX_PATTERN_MINUTES = 2;
+function maxPatternBeats() {
+  return Math.max(8, Math.round(MAX_PATTERN_MINUTES * (S && S.bpm ? S.bpm : 120)));
+}
+
 function clipBeats(clip) {
   if (clip.kind === 'group') return clip.length;
   // a pattern's speed stretches/squashes how much timeline it takes up

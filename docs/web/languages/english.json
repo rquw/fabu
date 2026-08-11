@@ -1076,5 +1076,15 @@
   "proll_keyboard": "Play with your keyboard",
   "toast_autom_lane": "{name} lane added under {track}",
   "proll_lower_tip": "Show lower notes",
-  "proll_higher_tip": "Show higher notes"
+  "proll_higher_tip": "Show higher notes",
+  "feedback_btn": "Feedback",
+  "feedback_title": "Tell me what you think",
+  "feedback_sub": "What is good, what is broken, what is missing. It goes straight to me.",
+  "feedback_ph": "Type away",
+  "feedback_contact": "Email or Discord, if you want a reply (optional)",
+  "feedback_send": "Send",
+  "feedback_thanks": "Sent. Thank you, genuinely.",
+  "feedback_refused": "That did not go through. Too long, or too many just now.",
+  "auth_cooldown": "Too many tries. Wait {n} seconds and try again.",
+  "toast_pattern_max": "A pattern tops out at two minutes. Use another one after it."
 }

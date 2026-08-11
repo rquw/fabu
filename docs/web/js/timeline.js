@@ -1425,7 +1425,8 @@ const Timeline = {
 
       if (mode === 'right') {
         if (clip.kind === 'midi') {
-          clip.length = Math.max(S.snap || 0.25, snapBeat(orig.length + dxBeats, S.snap));
+          clip.length = clamp(snapBeat(orig.length + dxBeats, S.snap),
+                              S.snap || 0.25, maxPatternBeats());
           if (!group.length) {   // don't grow into the next clip on this track
             const { right } = this.laneBounds(getClip(clip.id).track, clip, orig.start, orig.start + orig.length);
             if (right !== Infinity) clip.length = Math.min(clip.length, Math.max(S.snap || 0.25, right - clip.start));
@@ -1487,6 +1488,12 @@ const Timeline = {
         }
       }
       applyGroup();
+      if (mode === 'right' && clip.kind === 'midi'
+          && clip.length >= maxPatternBeats() - 1e-6 && !this._toldMaxLen) {
+        this._toldMaxLen = true;
+        toast(tr('toast_pattern_max', 'A pattern tops out at two minutes. Use another one after it.'));
+        setTimeout(() => { this._toldMaxLen = false; }, 4000);
+      }
       if (mode === 'move') nudgeTilt(ev.clientX);
       if (S.snap && !coached) {
         const key = (mode === 'right' ? clip.start + clipBeats(clip) : clip.start).toFixed(3);

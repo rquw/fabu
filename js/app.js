@@ -545,6 +545,7 @@ const App = {
     }
     $('#homeViewAll').addEventListener('click', () => this.showHomePage('projects'));
     $('#homeWhatsNew').addEventListener('click', () => this.openWhatsNew());
+    $('#homeFeedback').addEventListener('click', () => this.openFeedback());
 
     $('#homeNew').addEventListener('click', () => { this.stopHomePreview(); this.newProject(false); this.hideHome(); });
     $('#homeDemo').addEventListener('click', () => { this.stopHomePreview(); this.loadDemo(); this.hideHome(); });
@@ -552,6 +553,52 @@ const App = {
     $('#homeContinue').addEventListener('click', () => { this.stopHomePreview(); this.continueSession(); });
     $('#homeMp').addEventListener('click', () => { this.stopHomePreview(); MP.openMenu(); });
     $('#logo').addEventListener('click', () => this.goHome());
+  },
+
+  // ---------- feedback ----------
+  // Deliberately open to everyone, signed in or not: the people most likely to
+  // have something worth hearing are the ones who could not get started.
+  openFeedback() {
+    const old = document.getElementById('fbModal');
+    if (old) old.remove();
+    const wrap = document.createElement('div');
+    wrap.id = 'fbModal';
+    wrap.className = 'modal-back';
+    wrap.innerHTML = `
+      <div class="modal-card">
+        <div class="modal-title">${tr('feedback_title', 'Tell me what you think')}</div>
+        <div class="modal-sub">${tr('feedback_sub', 'What is good, what is broken, what is missing. It goes straight to me.')}</div>
+        <textarea id="fbMsg" maxlength="4000" rows="6" spellcheck="true"
+          placeholder="${tr('feedback_ph', 'Type away')}"></textarea>
+        <input id="fbContact" type="text" maxlength="200"
+          placeholder="${tr('feedback_contact', 'Email or Discord, if you want a reply (optional)')}">
+        <div id="fbErr" class="auth-err"></div>
+        <div class="modal-btns">
+          <button id="fbNo" class="fbtn">${tr('cancel', 'Cancel')}</button>
+          <button id="fbGo" class="fbtn accent">${tr('feedback_send', 'Send')}</button>
+        </div>
+      </div>`;
+    document.body.appendChild(wrap);
+    const close = () => wrap.remove();
+    wrap.addEventListener('mousedown', (e) => { if (e.target === wrap) close(); });
+    wrap.querySelector('#fbNo').addEventListener('click', close);
+    const go = wrap.querySelector('#fbGo');
+    const err = wrap.querySelector('#fbErr');
+    go.addEventListener('click', async () => {
+      const msg = wrap.querySelector('#fbMsg').value.trim();
+      if (!msg) { wrap.querySelector('#fbMsg').focus(); return; }
+      go.disabled = true; err.style.color = ''; err.textContent = tr('auth_working', 'Working…');
+      try {
+        const ok = await Auth.rpc('fabu_feedback_send', {
+          msg, contact: wrap.querySelector('#fbContact').value.trim(),
+          who: (Auth.user || ''), app: (this.version || '')
+        });
+        if (ok === true) { close(); toast(tr('feedback_thanks', 'Sent. Thank you, genuinely.'), 'green'); return; }
+        err.textContent = tr('feedback_refused', 'That did not go through. Too long, or too many just now.');
+      } catch (e) { err.textContent = tr('auth_offline', 'Cannot reach the server.'); }
+      go.disabled = false;
+    });
+    setTimeout(() => wrap.querySelector('#fbMsg').focus(), 50);
   },
 
   // ---------- the greeting ----------

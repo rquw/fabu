@@ -614,7 +614,7 @@ const MyLoops = {
       id: uid('myloop'),
       name: (clip.name || tr('loop_untitled', 'My loop')).slice(0, 40),
       instrument: (track && track.instrument) || 'rpiano',
-      length: Math.max(1, clip.length || 4),
+      length: clamp(clip.length || 4, 1, maxPatternBeats()),
       notes: clip.notes.map(n => ({
         pitch: n.pitch, start: +(n.start - first).toFixed(4),
         length: n.length, vel: n.vel ?? 0.85
@@ -664,12 +664,15 @@ const MyLoops = {
         vel: clamp(+n.vel || 0.85, 0.05, 1)
       }));
     if (!clean.length) return null;
+    // nobody writes a hundred thousand notes into one loop, but a file can
+    // claim to, and drawing it would wedge the app
+    if (clean.length > 4000) clean.length = 4000;
     const instr = (typeof INSTRUMENTS !== 'undefined' && INSTRUMENTS[d.instrument]) ? d.instrument : 'rpiano';
     return {
       id: uid('myloop'),
       name: String(d.name || tr('loop_untitled', 'My loop')).slice(0, 40),
       instrument: instr,
-      length: Math.max(1, +d.length || 4),
+      length: clamp(+d.length || 4, 1, maxPatternBeats()),   // a file from a stranger
       notes: clean,
       sustain: Array.isArray(d.sustain) ? d.sustain : undefined,
       made: Date.now()

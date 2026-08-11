@@ -1559,7 +1559,8 @@ const Engine = {
         const want = Math.max(clip.length, Math.ceil(now - clip.start));
         // growing the clip changes the timeline's layout, so that needs a real
         // render; otherwise only the one block it lives in has to be repainted
-        if (want !== clip.length) { clip.length = want; Timeline.renderSoon(); }
+        const capped = Math.min(want, maxPatternBeats());
+        if (capped !== clip.length) { clip.length = capped; Timeline.renderSoon(); }
         else Timeline.redrawClip(clip);
       }
       if (typeof PianoRoll !== 'undefined' && PianoRoll.isOpen()) PianoRoll.redraw();
@@ -1571,13 +1572,16 @@ const Engine = {
   commitRecNote(h, endBeat, key) {
     const mr = this.midiRec;
     if (!mr) return;
+    // a pattern has a ceiling, and a take that reaches it stops rather than
+    // stacking every further note on the last beat
+    if (mr.clip && (h.beat - mr.clip.start) >= maxPatternBeats()) return;
     const len = Math.max(0.05, endBeat - h.beat);
     // the note is already on screen from startLiveNote; this settles its length
     const liveKey = key != null ? key : [...mr.live.keys()].find(k => mr.live.get(k).note.pitch === h.pitch);
     const live = liveKey != null ? mr.live.get(liveKey) : null;
     if (live) {
       live.note.length = len;
-      live.clip.length = Math.max(live.clip.length, Math.ceil(live.note.start + len));
+      live.clip.length = Math.min(maxPatternBeats(), Math.max(live.clip.length, Math.ceil(live.note.start + len)));
       mr.live.delete(liveKey);
     } else {
       // no live note (recording started mid-hold): record it exactly as played
@@ -1585,7 +1589,7 @@ const Engine = {
       if (!clip) return;
       const rel = Math.max(0, h.beat - clip.start);
       clip.notes.push({ id: uid('note'), pitch: h.pitch, start: rel, length: len, vel: h.vel ?? 0.9 });
-      clip.length = Math.max(clip.length, Math.ceil(rel + len));
+      clip.length = Math.min(maxPatternBeats(), Math.max(clip.length, Math.ceil(rel + len)));
     }
     Timeline.render();
     if (typeof PianoRoll !== 'undefined' && PianoRoll.isOpen()) PianoRoll.redraw();
@@ -1612,7 +1616,7 @@ const Engine = {
         for (const n of mr.clip.notes) {
           n.start = Math.max(0, n.start + mr.clip.start - neighbour.start);
           neighbour.notes.push(n);
-          neighbour.length = Math.max(neighbour.length, Math.ceil(n.start + n.length));
+          neighbour.length = Math.min(maxPatternBeats(), Math.max(neighbour.length, Math.ceil(n.start + n.length)));
         }
         track.clips.splice(track.clips.indexOf(mr.clip), 1);
         mr.clip = neighbour;
