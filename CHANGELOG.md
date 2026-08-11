@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.2.5
 
 **fabu works on a phone and an iPad now.**
 It really did not before. The page could scroll sideways by eight pixels, which was enough to slide the whole app left and take the close button of whatever you had open off the edge of the screen, which is why the piano roll was a room with no door. Windows are proper sheets on a touch screen: pinned to the bottom, full width, with a grab bar, a close button you can actually hit, and a dimmed backdrop you tap to get out of. Nothing opens bigger than the screen any more.
