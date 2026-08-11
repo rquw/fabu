@@ -1044,5 +1044,12 @@
   "hp_profile_sub": "Wie dich alle anderen sehen.",
   "hp_profile_out": "Nicht angemeldet.",
   "hp_settings_sub": "Diese gelten für fabu selbst. Einstellungen für einen Song liegen in diesem Song.",
-  "instr_unknown": "Unbekanntes Instrument"
+  "instr_unknown": "Unbekanntes Instrument",
+  "mix_autom": "A",
+  "tip_autom_lanes": "Zeig unter dieser Spur, wie sich ein Wert über die Zeit ändert",
+  "autom_hide": "Diese Spur ausblenden",
+  "autom_empty": "Klick, um einen Punkt zu setzen",
+  "autom_del_point": "Diesen Punkt entfernen",
+  "autom_curve": "Kurvenform",
+  "autom_clear": "Diese Spur leeren"
 }

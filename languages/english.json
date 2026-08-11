@@ -1044,5 +1044,12 @@
   "hp_profile_sub": "How you look to everyone else.",
   "hp_profile_out": "Not signed in.",
   "hp_settings_sub": "These apply to fabu itself. Settings for one song live inside that song.",
-  "instr_unknown": "Unknown instrument"
+  "instr_unknown": "Unknown instrument",
+  "mix_autom": "A",
+  "tip_autom_lanes": "Show a value changing over time under this track",
+  "autom_hide": "Hide this lane",
+  "autom_empty": "Click to add a point",
+  "autom_del_point": "Remove this point",
+  "autom_curve": "Curve shape",
+  "autom_clear": "Clear this lane"
 }

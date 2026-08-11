@@ -2,6 +2,31 @@
 'use strict';
 
 const TRACK_H = 84;
+// One automation lane's height. Tall enough that a curve reads at a glance,
+// short enough that opening three of them does not push the song off screen.
+const AUTOM_H = 52;
+
+// Tracks used to be a fixed height each, so a track's position was its index
+// times that. With automation lanes underneath them a track is as tall as it
+// needs to be, and everything that used to multiply by TRACK_H asks here.
+function autoLanes(track) { return (track && track.autoLanes) || []; }
+function trackHeight(track) { return TRACK_H + autoLanes(track).length * AUTOM_H; }
+function trackTop(idx) {
+  let y = 0;
+  for (let i = 0; i < idx && i < S.tracks.length; i++) y += trackHeight(S.tracks[i]);
+  return y;
+}
+function tracksHeight() { return trackTop(S.tracks.length); }
+// which track a y offset inside the lanes column falls in
+function trackAtY(y) {
+  let acc = 0;
+  for (let i = 0; i < S.tracks.length; i++) {
+    const h = trackHeight(S.tracks[i]);
+    if (y < acc + h) return i;
+    acc += h;
+  }
+  return Math.max(0, S.tracks.length - 1);
+}
 
 // grouped, readable instrument picker (replaces the long flat dropdown)
 const INSTR_CATS = [
@@ -106,7 +131,7 @@ const Timeline = {
       if (!(e.target === this.lanes || e.target.classList.contains('lane'))) return;
       const rect = this.lanes.getBoundingClientRect();
       const x0 = e.clientX - rect.left, y0 = e.clientY - rect.top;
-      const idx = Math.floor(y0 / TRACK_H);
+      const idx = trackAtY(y0);
       if (!e.shiftKey) App.selectClip(null);
       if (S.tracks[idx]) App.selectTrack(S.tracks[idx].id);
       const preSel = new Set(UI.selClipIds);
@@ -124,7 +149,7 @@ const Timeline = {
         box.style.cssText = `display:block;left:${L}px;top:${Tp}px;width:${R - L}px;height:${B - Tp}px`;
         const hits = [];
         S.tracks.forEach((t, ti) => {
-          const laneY = ti * TRACK_H;
+          const laneY = trackTop(ti);
           if (laneY >= B || laneY + TRACK_H <= Tp) return;
           for (const c of t.clips) {
             const cx = c.start * UI.zoom, cw = Math.max(10, clipBeats(c) * UI.zoom);
@@ -145,7 +170,7 @@ const Timeline = {
     // double-click empty lane on an instrument track = new pattern clip
     this.lanes.addEventListener('dblclick', (e) => {
       if (!e.target.classList.contains('lane')) return;
-      const idx = Math.floor((e.clientY - this.lanes.getBoundingClientRect().top) / TRACK_H);
+      const idx = trackAtY(e.clientY - this.lanes.getBoundingClientRect().top);
       const track = S.tracks[idx];
       if (!track) return;
       const beat = snapBeat(this.xToBeat(e.clientX), S.snap || 1);
@@ -271,13 +296,15 @@ const Timeline = {
         if (c.start > viewTo || c.start + clipBeats(c) < viewFrom) continue;   // off screen
         lane.appendChild(this.buildClip(c, t));
       }
+      // the automation lanes belong to this track and sit under it
+      for (const param of autoLanes(t)) this.lanes.appendChild(this.buildAutomLane(t, param, width));
     }
 
     // brand-new/empty project: gentle "double-click to add a pattern" nudge
     if (clipCount === 0 && firstMidiIdx >= 0) {
       const hint = document.createElement('div');
       hint.className = 'empty-hint';
-      hint.style.top = (firstMidiIdx * TRACK_H + TRACK_H / 2 - 18) + 'px';
+      hint.style.top = (trackTop(firstMidiIdx) + TRACK_H / 2 - 18) + 'px';
       hint.textContent = tr('empty_hint', 'Double-click here to add a pattern');
       this.lanes.appendChild(hint);
     }
@@ -285,12 +312,235 @@ const Timeline = {
     // extra bottom room so the track-headers column can scroll far enough to
     // fully reveal its "add track" slot past the sticky ruler + h-scrollbar
     // (the CSS padding-bottom is eaten by border-box on an explicit height)
-    this.lanes.style.height = (S.tracks.length * TRACK_H + 90) + 'px';
-    $('#playhead').style.height = (S.tracks.length * TRACK_H + 30) + 'px';
+    this.lanes.style.height = (tracksHeight() + 90) + 'px';
+    $('#playhead').style.height = (tracksHeight() + 30) + 'px';
     this.renderHeads();
     this.drawRuler();
     this.updatePlayhead();
     if (typeof Sync !== 'undefined') { Sync.renderCursors(); Sync.renderRemotePlayheads(); Sync.updateLockVisuals(); }
+  },
+
+  // ---------- automation lanes ----------
+  // The curve used to live in a floating window, which meant you could not see
+  // what a track was doing without going and opening it. It belongs under the
+  // track it applies to, at the same zoom, so a fade reads as a shape you can
+  // point at rather than something you have to remember.
+
+  // RANGES holds [min, max] pairs, and a point is { beat, v, c }: v for the
+  // value, c for the curve shape. Same shapes the engine and the old editor
+  // already use, so a lane edited here sounds the same as one edited there.
+  automRange(param) {
+    const r = Automation.RANGES[param] || [0, 1];
+    return { min: r[0], max: r[1] };
+  },
+
+  buildAutomLane(track, param, width) {
+    const el = document.createElement('div');
+    el.className = 'autom-lane';
+    el.dataset.trackId = track.id;
+    el.dataset.param = param;
+    el.style.width = width + 'px';
+    el.style.height = AUTOM_H + 'px';
+
+    const label = document.createElement('div');
+    label.className = 'al-label';
+    label.innerHTML = `<span class="al-name">${escapeHtml(Automation.paramLabel(param))}</span>` +
+      `<button class="al-close" data-tip="${tr('autom_hide', 'Hide this lane')}">&times;</button>`;
+    label.querySelector('.al-close').addEventListener('mousedown', (e) => {
+      e.stopPropagation();
+      this.toggleAutomLane(track.id, param, false);
+    });
+    el.appendChild(label);
+
+    const cv = document.createElement('canvas');
+    cv.className = 'al-canvas';
+    el.appendChild(cv);
+    this.drawAutomLane(track, param, cv, width);
+    this.wireAutomLane(el, cv, track, param);
+    return el;
+  },
+
+  drawAutomLane(track, param, cv, width) {
+    const dpr = window.devicePixelRatio || 1;
+    // the same 65,535 device-pixel ceiling the clip canvases ran into: past it
+    // the canvas silently fails to allocate and the lane just goes blank
+    const w = Math.min(width, Math.floor(32000 / dpr));
+    const h = AUTOM_H;
+    cv.width = Math.max(1, Math.round(w * dpr));
+    cv.height = Math.round(h * dpr);
+    cv.style.width = w + 'px';
+    cv.style.height = h + 'px';
+    const g = cv.getContext('2d');
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    g.clearRect(0, 0, w, h);
+
+    const { min, max } = this.automRange(param);
+    const pad = 7;
+    const yOf = (v) => {
+      const f = (v - min) / (max - min || 1);
+      return h - pad - clamp(f, 0, 1) * (h - pad * 2);
+    };
+    const xOf = (b) => b * UI.zoom;
+
+    // a middle line, so "louder than it started" is readable without counting
+    g.strokeStyle = 'rgba(255,255,255,0.07)';
+    g.lineWidth = 1;
+    g.beginPath(); g.moveTo(0, Math.round(yOf((min + max) / 2)) + 0.5);
+    g.lineTo(w, Math.round(yOf((min + max) / 2)) + 0.5); g.stroke();
+
+    const pts = (track.autom && track.autom[param]) || [];
+    const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#e07a3f';
+
+    // Sample the real curve rather than joining the points with straight lines,
+    // so an eased point looks on screen like what it sounds like.
+    g.beginPath();
+    const step = Math.max(1, Math.round(1 / (UI.zoom / 8)));
+    let started = false;
+    for (let px = 0; px <= w; px += step) {
+      const b = px / UI.zoom;
+      const v = automValueAt(track, param, b);
+      if (v == null) continue;
+      const y = yOf(v);
+      if (!started) { g.moveTo(px, y); started = true; } else g.lineTo(px, y);
+    }
+    if (started) {
+      g.strokeStyle = accent;
+      g.lineWidth = 2;
+      g.lineJoin = 'round';
+      g.stroke();
+      // a wash under the line, which is what makes a rise read as a rise
+      g.lineTo(w, h); g.lineTo(0, h); g.closePath();
+      g.fillStyle = accent.startsWith('#')
+        ? accent + '22'
+        : 'rgba(224,122,63,0.13)';
+      g.fill();
+    }
+
+    for (const p of pts) {
+      const x = xOf(p.beat), y = yOf(p.v);
+      if (x < -8 || x > w + 8) continue;
+      g.beginPath(); g.arc(x, y, 4, 0, Math.PI * 2);
+      g.fillStyle = accent; g.fill();
+      g.strokeStyle = 'rgba(0,0,0,0.55)'; g.lineWidth = 1.5; g.stroke();
+    }
+
+    if (!pts.length) {
+      g.fillStyle = 'rgba(255,255,255,0.3)';
+      g.font = '11px system-ui, sans-serif';
+      g.fillText(tr('autom_empty', 'Click to add a point'), 78, h / 2 + 4);
+    }
+  },
+
+  // click adds a point, drag moves one, right-click removes it
+  wireAutomLane(el, cv, track, param) {
+    const { min, max } = this.automRange(param);
+    const pad = 7;
+    const valueAtY = (y) => {
+      const f = 1 - clamp((y - pad) / (AUTOM_H - pad * 2), 0, 1);
+      return min + f * (max - min);
+    };
+    const hit = (bx, by) => {
+      const pts = (track.autom && track.autom[param]) || [];
+      for (let i = pts.length - 1; i >= 0; i--) {
+        const x = pts[i].beat * UI.zoom;
+        const f = (pts[i].v - min) / (max - min || 1);
+        const y = AUTOM_H - pad - clamp(f, 0, 1) * (AUTOM_H - pad * 2);
+        if (Math.abs(x - bx) < 7 && Math.abs(y - by) < 9) return i;
+      }
+      return -1;
+    };
+    const local = (e) => {
+      const r = cv.getBoundingClientRect();
+      return { x: e.clientX - r.left, y: e.clientY - r.top };
+    };
+
+    cv.addEventListener('contextmenu', (e) => {
+      e.preventDefault(); e.stopPropagation();
+      const { x, y } = local(e);
+      const i = hit(x, y);
+      const pts = track.autom && track.autom[param];
+      if (i < 0 || !pts) return;
+      ctxMenu({ currentTarget: cv, stopPropagation() {} }, [
+        [tr('autom_del_point', 'Remove this point'), () => {
+          Undo.push('Automation');
+          pts.splice(i, 1);
+          UI.dirty = UI.fileDirty = true;
+          Engine.rescheduleAutomation(track);
+          this.render();
+        }],
+        [tr('autom_curve', 'Curve shape'), () => Automation.open(track.id, param)],
+        [tr('autom_clear', 'Clear this lane'), () => {
+          Undo.push('Automation');
+          track.autom[param] = [];
+          UI.dirty = UI.fileDirty = true;
+          Engine.rescheduleAutomation(track);
+          this.render();
+        }]
+      ]);
+    });
+
+    cv.addEventListener('mousedown', (e) => {
+      if (e.button !== 0) return;
+      e.stopPropagation();               // not a clip drag, not a track select
+      App.selectTrack(track.id);
+      const { x, y } = local(e);
+      if (!track.autom) track.autom = {};
+      if (!track.autom[param]) track.autom[param] = [];
+      const pts = track.autom[param];
+
+      Undo.push('Automation');
+      let i = hit(x, y);
+      if (i < 0) {
+        // a fresh point where you clicked, kept in beat order
+        const beat = Math.max(0, snapBeat(x / UI.zoom, S.snap));
+        pts.push({ beat, v: valueAtY(y) });
+        pts.sort((a, b) => a.beat - b.beat);
+        i = pts.findIndex(p => p.beat === beat);
+      }
+
+      const move = (ev) => {
+        const l = local(ev);
+        const p = pts[i];
+        if (!p) return;
+        p.beat = Math.max(0, snapBeat(l.x / UI.zoom, S.snap));
+        p.v = valueAtY(l.y);
+        pts.sort((a, b) => a.beat - b.beat);
+        i = pts.indexOf(p);
+        this.drawAutomLane(track, param, cv, parseFloat(el.style.width));
+      };
+      const up = () => {
+        window.removeEventListener('mousemove', move);
+        window.removeEventListener('mouseup', up);
+        UI.dirty = UI.fileDirty = true;
+        Engine.rescheduleAutomation(track);
+      };
+      window.addEventListener('mousemove', move);
+      window.addEventListener('mouseup', up);
+      this.drawAutomLane(track, param, cv, parseFloat(el.style.width));
+    });
+  },
+
+  // show or hide a param's lane under a track
+  toggleAutomLane(trackId, param, on) {
+    const t = getTrack(trackId);
+    if (!t) return;
+    if (!t.autoLanes) t.autoLanes = [];
+    const i = t.autoLanes.indexOf(param);
+    const want = on == null ? i < 0 : on;
+    if (want && i < 0) t.autoLanes.push(param);
+    else if (!want && i >= 0) t.autoLanes.splice(i, 1);
+    UI.dirty = UI.fileDirty = true;
+    this.render();
+  },
+
+  // the menu behind the track header's automation button
+  openAutomMenu(e, track) {
+    const open = autoLanes(track);
+    const items = Engine.AUTOM_PARAMS.map(p => [
+      (open.includes(p) ? '\u2713 ' : '   ') + Automation.paramLabel(p),
+      () => this.toggleAutomLane(track.id, p)
+    ]);
+    ctxMenu(e, items);
   },
 
   drawRuler() {
@@ -364,6 +614,7 @@ const Timeline = {
     for (const t of S.tracks) {
       const el = document.createElement('div');
       el.className = 'thead' + (t.id === UI.selTrackId ? ' sel' : '');
+      el.style.height = trackHeight(t) + 'px';
       el.dataset.trackId = t.id;
 
       const top = document.createElement('div');
@@ -430,7 +681,12 @@ const Timeline = {
       sBtn.textContent = tr('mix_solo', 'S');
       sBtn.dataset.tip = tr('tip_solo', 'Solo this track');
       sBtn.addEventListener('click', () => App.toggleSolo(t));
-      mid.append(mBtn, sBtn);
+      const aBtn = document.createElement('button');
+      aBtn.className = 'ms-btn autom' + (autoLanes(t).length ? ' on' : '');
+      aBtn.textContent = tr('mix_autom', 'A');
+      aBtn.dataset.tip = tr('tip_autom_lanes', 'Show a value changing over time under this track');
+      aBtn.addEventListener('click', (e) => { e.stopPropagation(); this.openAutomMenu(e, t); });
+      mid.append(mBtn, sBtn, aBtn);
 
       const volRow = document.createElement('div');
       volRow.className = 'thead-vol';
@@ -1145,10 +1401,10 @@ const Timeline = {
         if (!group.length) {
           const N = S.tracks.length;
           const py = ev.clientY - this.lanes.getBoundingClientRect().top;
-          const laneF = py / TRACK_H;
+          const laneF = trackAtY(py) + 0.5;
           const nb = Math.round(laneF);                 // nearest track boundary
-          const nearBoundary = Math.abs(laneF - nb) * TRACK_H < 18;
-          if (nearBoundary && nb >= 0 && nb <= N && py > -40 && py < N * TRACK_H + 60) {
+          const nearBoundary = Math.abs(py - trackTop(nb)) < 18;
+          if (nearBoundary && nb >= 0 && nb <= N && py > -40 && py < tracksHeight() + 60) {
             // hovering a gap between/around tracks -> offer to make a new track here
             this._clipInsertAt = nb;
             this.showTrackInsert(nb);
@@ -1267,7 +1523,7 @@ const Timeline = {
       this.lanes.appendChild(el);
     }
     el.style.display = 'flex';
-    el.style.top = (idx * TRACK_H) + 'px';
+    el.style.top = trackTop(idx) + 'px';
     el.style.width = Math.max(this.scroller.scrollWidth, this.scroller.clientWidth) + 'px';
   },
   hideTrackInsert() {
@@ -1308,7 +1564,7 @@ const Timeline = {
       e.preventDefault();
       e.dataTransfer.dropEffect = 'copy';
       const beat = snapBeat(this.xToBeat(e.clientX), S.snap);
-      const laneIdx = clamp(Math.floor((e.clientY - this.lanes.getBoundingClientRect().top) / TRACK_H), 0, Math.max(0, S.tracks.length - 1));
+      const laneIdx = trackAtY(e.clientY - this.lanes.getBoundingClientRect().top);
       const samp = types.includes('text/fabu-sample') ? (typeof Windows !== 'undefined' && Windows._dragSample) : null;
       // files aren't readable during dragover, but their names/types are, so
       // the ghost can say MIDI instead of promising an audio file
@@ -1322,7 +1578,7 @@ const Timeline = {
       ghost.className = 'preview';
       ghost.style.display = 'block';
       ghost.style.left = (beat * UI.zoom) + 'px';
-      ghost.style.top = (laneIdx * TRACK_H + 2) + 'px';
+      ghost.style.top = (trackTop(laneIdx) + 2) + 'px';
       ghost.style.width = Math.max(24, lenB * UI.zoom - 2) + 'px';
       ghost.style.height = (TRACK_H - 6) + 'px';
       ghost.innerHTML = `<span class="dp-name">${samp ? samp.name : (isMidi ? tr('drop_midi', 'MIDI') : tr('drop_audio', 'Audio'))}</span>`;
@@ -1337,7 +1593,7 @@ const Timeline = {
       e.preventDefault();
       ghost.style.display = 'none'; ghost.className = ''; ghost.innerHTML = '';
       const beat = snapBeat(this.xToBeat(e.clientX), S.snap);
-      const laneIdx = Math.floor((e.clientY - this.lanes.getBoundingClientRect().top) / TRACK_H);
+      const laneIdx = trackAtY(e.clientY - this.lanes.getBoundingClientRect().top);
       // a loop from the Samples browser
       const sampleId = e.dataTransfer.getData('text/fabu-sample');
       if (sampleId) { App.addSampleToProject(sampleId, beat, S.tracks[laneIdx] ? laneIdx : null); return; }

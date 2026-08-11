@@ -2656,3 +2656,31 @@ body.shift-held .fx-item:not(.samp-item) { position: relative; overflow: visible
   #pageHome, .home-page, .proj-row, .gal-card { animation: none; }
   #home::before { animation: none; }
 }
+
+/* ---------- automation lanes under a track ----------
+   The curve used to be in a floating window, so you could not see what a track
+   was doing without going to look. It sits under the track it belongs to now,
+   at the same zoom as the clips. */
+.autom-lane {
+  position: relative;
+  border-bottom: 1px solid var(--line);
+  background: rgba(0, 0, 0, 0.22);
+}
+.al-canvas { display: block; position: absolute; inset: 0; cursor: crosshair; }
+.al-label {
+  position: sticky; left: 0; z-index: 2;
+  display: inline-flex; align-items: center; gap: 5px;
+  margin: 5px 0 0 6px; padding: 2px 5px 2px 7px;
+  border-radius: 6px;
+  background: rgba(18, 16, 14, 0.86);
+  border: 1px solid var(--line);
+  font-size: 9.5px; font-weight: 700; letter-spacing: 0.04em;
+  text-transform: uppercase; color: var(--dim);
+  pointer-events: auto;
+}
+.al-close {
+  background: none; border: 0; padding: 0 1px; cursor: pointer; line-height: 1;
+  color: var(--faint); font-size: 13px;
+}
+.al-close:hover { color: var(--red); }
+.ms-btn.autom.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
