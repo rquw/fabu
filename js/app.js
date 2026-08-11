@@ -2527,6 +2527,7 @@ const KeysPanel = {
   },
 
   init() {
+    this.readLayout();
     // controls steal keyboard focus, which then swallows the note keys until you
     // click back into the app; blur them so playing keeps working right away.
     const blurSoon = (el) => setTimeout(() => { if (el && el.blur) el.blur(); }, 0);
@@ -2594,15 +2595,38 @@ const KeysPanel = {
     toast(tr('toast_octave', 'Octave {n}', { n: UI.keysOctave }));
   },
 
+  // What is actually printed on the physical key at this position. Which note
+  // a key plays is decided by where the key IS, so the mapping already worked
+  // on any layout; the labels did not. They were a fixed QWERTZ row, which is
+  // wrong on QWERTY and very wrong on AZERTY. The browser knows the real ones.
+  layout: null,
+  US_LABELS: {
+    KeyA: 'A', KeyS: 'S', KeyD: 'D', KeyF: 'F', KeyG: 'G', KeyH: 'H', KeyJ: 'J',
+    KeyK: 'K', KeyL: 'L', Semicolon: ';', Quote: "'",
+    KeyW: 'W', KeyE: 'E', KeyT: 'T', KeyY: 'Y', KeyU: 'U', KeyO: 'O', KeyP: 'P'
+  },
+  keyLabel(code) {
+    const v = this.layout && this.layout.get(code);
+    return String(v || this.US_LABELS[code] || '').toUpperCase();
+  },
+  // read the layout once, then redraw the keys with the right letters on them
+  async readLayout() {
+    try {
+      if (!navigator.keyboard || !navigator.keyboard.getLayoutMap) return;
+      this.layout = await navigator.keyboard.getLayoutMap();
+      if (this.visible) this.build();
+    } catch (e) { /* not supported: the US labels are the fallback */ }
+  },
+
   // build 1.5 visual octaves matching the computer-key mapping
   build() {
     const box = $('#pianoKeys');
     box.innerHTML = '';
     const whiteDegs = [0, 2, 4, 5, 7, 9, 11, 12, 14, 16, 17];
-    const whiteLabels = ['A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L', 'Ö', 'Ä'];
-    const blackInfo = [ // degree, after which white index, QWERTZ label
-      [1, 0, 'W'], [3, 1, 'E'], [6, 3, 'T'], [8, 4, 'Z'], [10, 5, 'U'], [13, 7, 'O'], [15, 8, 'P']
-    ];
+    const whiteLabels = Object.keys(WHITE_CODES).map(c => this.keyLabel(c));
+    const blackInfo = [ // degree, and which white key it sits after
+      [1, 0], [3, 1], [6, 3], [8, 4], [10, 5], [13, 7], [15, 8]
+    ].map(([deg, after], i) => [deg, after, this.keyLabel(Object.keys(BLACK_CODES)[i])]);
     const base = (UI.keysOctave + 1) * 12;
 
     whiteDegs.forEach((deg, i) => {

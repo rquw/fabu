@@ -240,8 +240,9 @@ ipcMain.on('install-update', () => {
 // small daily annoyance, so the bounds are kept in userData and restored.
 const WIN_STATE = () => path.join(app.getPath('userData'), 'window-state.json');
 
+// no saved state means this is the first time fabu has been opened here
 function readWindowState() {
-  const def = { width: 1440, height: 900 };
+  const def = { width: 1440, height: 900, firstRun: true };
   let s;
   try { s = JSON.parse(fs.readFileSync(WIN_STATE(), 'utf8')); } catch (e) { return def; }
   if (!s || !s.width || !s.height) return def;
@@ -299,7 +300,7 @@ function createWindow() {
       nodeIntegration: false
     }
   });
-  if (st.maximized) win.maximize();
+  if (st.maximized || st.firstRun) win.maximize();
   if (st.fullscreen) win.setFullScreen(true);
   trackWindowState(win);
 

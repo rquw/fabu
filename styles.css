@@ -2728,3 +2728,161 @@ body.shift-held .fx-item:not(.samp-item) { position: relative; overflow: visible
 /* the keyboard button carries a word, so it is wider than the toggles beside it */
 .pt-toggle.pt-wide { display: inline-flex; align-items: center; gap: 6px; }
 .pt-toggle.pt-wide .ic { width: 13px; height: 13px; }
+
+
+/* ==========================================================================
+   Touch screens: phones and tablets
+   ========================================================================== */
+
+/* The page itself must never scroll sideways. Eight pixels of overflow from one
+   toolbar group was enough to let the whole app slide left, taking the close
+   button of whatever was open off the edge of the screen with it. Everything
+   that scrolls horizontally in fabu does so inside its own box. */
+html, body { overflow-x: hidden; max-width: 100%; }
+
+@media (pointer: coarse) {
+  /* Apple's guidance is 44px and it is right; 24px close buttons are a coin
+     toss with a thumb. */
+  .fwin-close { width: 40px; height: 40px; }
+  .fwin-close .ic { width: 18px; height: 18px; }
+  .tbtn { min-height: 38px; }
+  .fbtn { min-height: 38px; }
+  .ms-btn { min-width: 30px; min-height: 30px; }
+  .gal-tab, .hn-item { min-height: 40px; }
+  .samp-item, .fx-item, .gal-card, .proj-row, .home-card { min-height: 44px; }
+  .al-del, .home-card-more, .proj-more, .gal-more { min-width: 34px; min-height: 34px; }
+}
+
+/* ---- tablets: a real screen, but fingers ---- */
+@media (min-width: 761px) and (max-width: 1180px) and (pointer: coarse) {
+  :root { --heads-w: 180px; }
+  #topbar { flex-wrap: wrap; height: auto; row-gap: 6px; padding-bottom: 8px; }
+  #topbar .tb-group { flex: 0 0 auto; }
+  /* a floating window on a tablet is fine, it just needs to be reachable */
+  .fwin { max-height: 78vh; }
+  .fwin-body { overscroll-behavior: contain; }
+}
+
+/* ---- phones ---- */
+@media (max-width: 760px) {
+  /* A sheet is only useful if you can see all of it and get out of it. The
+     piano roll sets its own height, so the sheet has to out-rank that. */
+  .fwin {
+    top: auto !important; bottom: 0 !important;
+    left: 0 !important; right: 0 !important;
+    width: 100% !important; max-width: 100% !important;
+    height: auto !important; max-height: 82vh !important;
+    border-radius: 16px 16px 0 0;
+  }
+  .fwin-head {
+    position: sticky; top: 0; z-index: 4;
+    padding: 12px 14px;
+    background: var(--panel);
+    border-radius: 16px 16px 0 0;
+  }
+  /* a grab bar, so a sheet reads as a sheet */
+  .fwin-head::before {
+    content: ''; position: absolute; top: 5px; left: 50%;
+    width: 36px; height: 4px; margin-left: -18px;
+    border-radius: 99px; background: var(--line);
+  }
+  .fwin-title { font-size: 14px; font-weight: 700; }
+  .fwin-body {
+    max-height: calc(82vh - 58px) !important;
+    overflow-y: auto; overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+  .fwin-rz { display: none; }
+
+  /* Backdrop behind an open sheet: tapping it closes, and it stops the
+     timeline underneath reacting to taps meant for the sheet. */
+  #sheetBack {
+    position: fixed; inset: 0; z-index: 999;
+    background: rgba(8, 7, 6, 0.55);
+    backdrop-filter: blur(2px);
+  }
+
+  /* the piano roll is the thing people could not get out of */
+  .proll-tools { padding: 8px 10px; gap: 6px; }
+  .proll-tools .pt-group { flex-wrap: wrap; }
+  .proll-tools .pt-track { width: 100%; }
+  .pt-toggle, .pt-btn, .pt-seg { min-height: 34px; padding: 6px 10px; }
+  .proll-tools select { min-height: 34px; }
+
+  /* the track header column, which had been eating a third of the screen */
+  :root { --heads-w: 118px; }
+  .thead { padding: 6px; }
+  .thead-top { gap: 4px; }
+  .thead .tname { font-size: 11.5px; }
+
+  /* modals get room to breathe and never run off the bottom */
+  .modal-card { max-width: calc(100vw - 20px); max-height: 86vh; overflow-y: auto; }
+}
+
+@media (max-width: 760px) {
+  /* A sheet comes up from the bottom edge. The desktop animation nudges a
+     window down eight pixels and back, which on a bottom sheet is the wrong
+     direction and leaves it hanging over the edge if it never finishes. */
+  .fwin { animation: sheetIn 0.2s var(--ease) both; }
+  @keyframes sheetIn {
+    from { transform: translateY(14px); opacity: 0; }
+    to   { transform: translateY(0); opacity: 1; }
+  }
+  .fwin.fwin-closing { animation: sheetOut 0.16s var(--ease) forwards; }
+  @keyframes sheetOut {
+    from { transform: translateY(0); opacity: 1; }
+    to   { transform: translateY(16px); opacity: 0; }
+  }
+  #sheetBack { animation: backIn 0.2s var(--ease) both; }
+  @keyframes backIn { from { opacity: 0; } to { opacity: 1; } }
+}
+@media (max-width: 760px) and (prefers-reduced-motion: reduce) {
+  .fwin, #sheetBack { animation: none; }
+}
+
+@media (max-width: 760px) {
+  /* The piano roll's tools were wrapping onto five rows and taking half the
+     sheet, leaving a sliver for the notes. One row that scrolls sideways keeps
+     every control reachable and gives the grid the space it needs. */
+  .proll-tools {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+    padding: 7px 10px;
+  }
+  .proll-tools::-webkit-scrollbar { display: none; }
+  .proll-tools .pt-group { flex-wrap: nowrap; flex: 0 0 auto; }
+  .proll-tools .pt-track { display: none; }   /* the sheet title already says it */
+  .proll-tools .pt-spacer { display: none; }
+  .pt-toggle.pt-wide { white-space: nowrap; }
+
+  /* and the grid gets whatever is left, never less than this */
+  .proll-wrap, .proll-scroll { min-height: 220px; }
+}
+
+@media (max-width: 760px) {
+  /* The instrument picker was squeezed to a chevron by the mute/solo/automation
+     buttons sharing its row. It gets its own line. */
+  .thead-mid { flex-wrap: wrap; row-gap: 4px; }
+  .thead-mid .tinst-btn { flex: 1 1 100%; min-width: 0; }
+  .thead select { max-width: 100%; }
+  .thead-mid .ms-btn { flex: 0 0 auto; }
+
+  /* A toolbar group that refuses to wrap will run off the edge no matter how
+     many rows the bar itself is allowed. */
+  #topbar .tb-group { flex-wrap: wrap; row-gap: 5px; }
+  #topbar .tb-field { flex-wrap: nowrap; }
+  #topbar > * { max-width: 100%; }
+}
+
+/* A narrow window is a narrow window whether it is an iPad or a laptop with
+   the app on half the screen. The bar wraps rather than running off the edge. */
+@media (max-width: 1180px) {
+  #topbar { flex-wrap: wrap; height: auto; row-gap: 6px; padding-bottom: 8px; }
+  #topbar .tb-group { flex: 0 0 auto; }
+  #topbar .tb-sep { display: none; }
+}
+@media (min-width: 761px) and (max-width: 1180px) {
+  :root { --heads-w: 176px; }
+}

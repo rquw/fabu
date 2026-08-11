@@ -58,8 +58,14 @@ const Windows = {
 
   create(id, title, iconId, opts = {}) {
     this.close(id);
-    const { x = 120, y = 90, width = null, height = null } =
+    let { x = 120, y = 90, width = null, height = null } =
       this.loadGeo(id, { x: opts.x ?? 120, y: opts.y ?? 90, width: opts.width ?? null, height: opts.height ?? null });
+    // Saved geometry was clamped to the screen; the defaults never were, so a
+    // window with a comfortable desktop size opened wider than an iPad or a
+    // half-screen laptop window and hung off the edge.
+    const vw = window.innerWidth || 1280, vh = window.innerHeight || 800;
+    if (width) width = Math.min(width, vw - 16);
+    if (height) height = Math.min(height, vh - 90);
     const el = document.createElement('div');
     el.className = 'fwin';
     el.style.left = x + 'px';
@@ -80,7 +86,7 @@ const Windows = {
       <div class="fwin-body"></div>`;
     (overHome ? document.body : $('#workspace')).appendChild(el);
 
-    el.addEventListener('mousedown', () => this.raise(el));
+    el.addEventListener('mousedown', () => { this.raise(el); this.syncSheetBackdrop(); });
     el.querySelector('.fwin-close').addEventListener('click', () => this.close(id));
 
     // drag by header
@@ -108,7 +114,39 @@ const Windows = {
     const rec = { el, body: el.querySelector('.fwin-body'), refresh: null };
     this._bindResize(el, rec, id);
     this.wins.set(id, rec);
+    this.keepOnScreen(el);
+    // Most windows fill their body after create() returns, so the first
+    // measurement is of an empty box. Measure again once the caller has put
+    // its content in, which is what decides how tall the window really is.
+    setTimeout(() => { if (this.wins.get(id) === rec) this.keepOnScreen(el); }, 0);
+    // A new window belongs in front, and it needs a z-index of its own from
+    // the start: the phone backdrop sits directly under the topmost sheet and
+    // works that out from their z-indexes, so a window without one is a
+    // window the backdrop can cover.
+    this.raise(el);
+    this.syncSheetBackdrop();
     return rec;
+  },
+
+  // Windows are positioned inside the workspace, which starts below the top
+  // bar, so their coordinates are not the screen's. Rather than translating
+  // between the two, put the window where it wants to go and then measure it
+  // and nudge it back until it is actually on screen.
+  keepOnScreen(el) {
+    const vw = window.innerWidth, vh = window.innerHeight;
+    if (!vw || !vh) return;                       // headless: nothing to fit into
+    if (el.classList.contains('fwin-sheet')) return;
+    let r = el.getBoundingClientRect();
+    if (r.height > vh - 20) {
+      el.style.height = (vh - 20) + 'px';
+      el.style.maxHeight = (vh - 20) + 'px';
+      r = el.getBoundingClientRect();
+    }
+    if (r.width > vw - 16) { el.style.width = (vw - 16) + 'px'; r = el.getBoundingClientRect(); }
+    const dx = r.right > vw - 8 ? (vw - 8 - r.right) : (r.left < 8 ? 8 - r.left : 0);
+    const dy = r.bottom > vh - 8 ? (vh - 8 - r.bottom) : (r.top < 8 ? 8 - r.top : 0);
+    if (dx) el.style.left = (el.offsetLeft + dx) + 'px';
+    if (dy) el.style.top = (el.offsetTop + dy) + 'px';
   },
 
   // drag the right edge, bottom edge, or corner to resize a window
@@ -158,9 +196,43 @@ const Windows = {
       }
     }
     App.syncWindowButtons();
+    this.syncSheetBackdrop();
   },
 
   isOpen(id) { return this.wins.has(id); },
+
+  // On a phone a window is a sheet over the whole screen, and a sheet needs
+  // something behind it: somewhere to tap to get out, and a shield so taps
+  // meant for the sheet do not land on the timeline underneath. On a desktop
+  // windows sit beside your work and must not dim it, so there is none.
+  phone() { return window.matchMedia && matchMedia('(max-width: 760px)').matches; },
+
+  syncSheetBackdrop() {
+    let b = document.getElementById('sheetBack');
+    const want = this.phone() && this.wins.size > 0;
+    if (!want) { if (b) b.remove(); return; }
+    if (!b) {
+      b = document.createElement('div');
+      b.id = 'sheetBack';
+      b.addEventListener('click', () => this.closeTopSheet());
+      document.body.appendChild(b);
+    }
+    // always directly under the topmost sheet
+    let top = 0;
+    for (const w2 of this.wins.values()) top = Math.max(top, parseInt(w2.el.style.zIndex || '0', 10));
+    b.style.zIndex = Math.max(1, top - 1);
+  },
+
+  // the most recently raised window, which is the one a tap outside means
+  closeTopSheet() {
+    let id = null, top = -1;
+    for (const [k, w2] of this.wins) {
+      const z = parseInt(w2.el.style.zIndex || '0', 10);
+      if (z >= top) { top = z; id = k; }
+    }
+    if (id) this.close(id);
+  },
+
 
   refreshAll() {
     for (const w of this.wins.values()) if (w.refresh) w.refresh();
