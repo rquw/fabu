@@ -505,6 +505,7 @@ const App = {
 
   wireHome() {
     this.drawHomeArt();
+    this.watchGreeting();
     // The sidebar. Everything here is a real place you can get to; nothing is a
     // label for something that does not exist yet.
     // Every sidebar entry is a page in this screen. Nothing here opens a small
@@ -522,6 +523,77 @@ const App = {
     $('#homeContinue').addEventListener('click', () => { this.stopHomePreview(); this.continueSession(); });
     $('#homeMp').addEventListener('click', () => { this.stopHomePreview(); MP.openMenu(); });
     $('#logo').addEventListener('click', () => this.goHome());
+  },
+
+  // ---------- the greeting ----------
+  // Six in the morning and half past midnight are not the same moment, and a
+  // screen that says the same thing at both is a screen nobody reads twice.
+
+  // Each band starts at its hour and runs until the next one starts.
+  GREET_BANDS: [
+    { from: 0,  key: 'late',      fb: 'Still up?' },
+    { from: 5,  key: 'early',     fb: 'Good morning' },
+    { from: 9,  key: 'morning',   fb: 'Good morning' },
+    { from: 12, key: 'afternoon', fb: 'Good afternoon' },
+    { from: 17, key: 'evening',   fb: 'Good evening' },
+    { from: 22, key: 'night',     fb: 'Good evening' }
+  ],
+  // two lines per band, so it has some life without ever changing under you
+  // mid-session: the choice is keyed to the date, not to the render
+  GREET_SUBS: {
+    late:      [['Some of the best ideas turn up at this hour.', 'greet_sub_late1'],
+                ['The quiet is good for this.', 'greet_sub_late2']],
+    early:     [['Early music production?', 'greet_sub_early1'],
+                ['You are up before everyone else.', 'greet_sub_early2']],
+    morning:   [['What will you create today?', 'greet_sub_morning1'],
+                ['A good hour to start something.', 'greet_sub_morning2']],
+    afternoon: [['What will you create today?', 'greet_sub_afternoon1'],
+                ['Pick up where you left off, or start fresh.', 'greet_sub_afternoon2']],
+    evening:   [['Time to make something.', 'greet_sub_evening1'],
+                ['The evening is yours.', 'greet_sub_evening2']],
+    night:     [['Winding down, or just getting going?', 'greet_sub_night1'],
+                ['Headphones on.', 'greet_sub_night2']]
+  },
+
+  greetBand(d) {
+    const h = (d || new Date()).getHours();
+    let band = this.GREET_BANDS[0];
+    for (const b of this.GREET_BANDS) if (h >= b.from) band = b;
+    return band;
+  },
+
+  renderGreeting(hasProjects) {
+    const greet = document.getElementById('homeGreet');
+    const sub = document.querySelector('.home-greet-sub');
+    const now = new Date();
+    const band = this.greetBand(now);
+    this._greetBand = band.key;
+
+    // The very first time, "good evening" to somebody who has never opened the
+    // app is a stranger being familiar. Say hello properly instead.
+    if (greet) {
+      greet.textContent = hasProjects
+        ? tr('greet_' + band.key, band.fb)
+        : tr('home_greet_first', 'Welcome to fabu.');
+    }
+    if (sub) {
+      const opts = this.GREET_SUBS[band.key] || this.GREET_SUBS.morning;
+      // the day of the year picks the line, so it is steady all day and
+      // different tomorrow rather than flickering on every redraw
+      const day = Math.floor((now - new Date(now.getFullYear(), 0, 0)) / 86400000);
+      const [fb, key] = opts[day % opts.length];
+      sub.textContent = tr(key, fb);
+    }
+  },
+
+  // Leaving fabu open past a boundary should not leave it saying good evening
+  // at three in the morning. Cheap because it only redraws when the band moves.
+  watchGreeting() {
+    setInterval(() => {
+      if (!this.homeVisible() || this.homePage !== 'home') return;
+      if (this.greetBand().key === this._greetBand) return;
+      this.renderGreeting(this.getRecents().length > 0);
+    }, 60000);
   },
 
   homePage: 'home',
@@ -701,10 +773,7 @@ const App = {
           o.classList.toggle('on', o.dataset.nav === (this.recentsExpanded ? 'projects' : 'home'));
       };
     }
-    // "Welcome back" is wrong the first time somebody opens it.
-    const greet = document.getElementById('homeGreet');
-    if (greet) greet.textContent = all.length
-      ? tr('home_greet', 'Welcome back!') : tr('home_greet_first', 'Welcome to fabu.');
+    this.renderGreeting(all.length > 0);
     box.innerHTML = '';
     if (!list.length) {
       const el = document.createElement('div');
