@@ -2199,29 +2199,6 @@ body.shift-held .fx-item:not(.samp-item) { position: relative; overflow: visible
 .curve-ico { display: inline-flex; margin-right: 7px; vertical-align: -3px; color: var(--accent); }
 #curveMenu .ctx-item { display: flex; align-items: center; }
 
-/* the next-chord hint in the piano roll toolbar */
-.chord-sug {
-  display: flex; align-items: center; gap: 6px;
-  white-space: nowrap; flex: 0 0 auto;
-  margin-left: 4px; padding: 3px 8px; border-radius: 999px;
-  background: var(--panel2); border: 1px solid var(--line);
-  cursor: pointer; user-select: none;
-  transition: border-color .12s, background .12s;
-}
-.chord-sug:hover { border-color: var(--accent); background: var(--panel3); }
-.chord-sug.hidden { display: none; }
-.cs-next { font-size: 9.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); }
-.cs-name { font-size: 13px; font-weight: 800; color: var(--accent); font-variant-numeric: tabular-nums; }
-.cs-key {
-  white-space: nowrap;
-  font-size: 9px; font-weight: 700; padding: 1px 5px; border-radius: 4px;
-  background: var(--panel3); border: 1px solid var(--line); color: var(--dim);
-}
-.cs-alt { font-size: 9.5px; color: var(--faint); }
-.cs-lbl { font-size: 9.5px; color: var(--faint); margin-right: 2px; }
-.cs-alt { display: flex; align-items: center; gap: 4px; }
-.cs-alt.hidden { display: none; }
-
 /* a rejoin the room refused because of who else is on that connection */
 /* Two buttons and a reason do not fit one line at this width, so the row is
    allowed to wrap rather than squeezing the name down to nothing. */
@@ -2341,7 +2318,7 @@ body.shift-held .fx-item:not(.samp-item) { position: relative; overflow: visible
 
   /* A toolbar group is one nowrap unit, and one unit is wider than a phone, so
      the group has to be allowed to break inside itself too. */
-  .proll-tools .pt-group, .chord-sug { flex-wrap: wrap; }
+  .proll-tools .pt-group { flex-wrap: wrap; }
   .proll-tools { gap: 6px; }
   .fwin-head { padding: 12px 12px; }      /* a drag handle you can actually hit */
 
@@ -2678,9 +2655,45 @@ body.shift-held .fx-item:not(.samp-item) { position: relative; overflow: visible
   text-transform: uppercase; color: var(--dim);
   pointer-events: auto;
 }
-.al-close {
-  background: none; border: 0; padding: 0 1px; cursor: pointer; line-height: 1;
-  color: var(--faint); font-size: 13px;
+.al-del {
+  display: flex; align-items: center; background: none; border: 0;
+  padding: 0 1px; cursor: pointer; line-height: 1; color: var(--faint);
 }
-.al-close:hover { color: var(--red); }
+.al-del .ic { width: 11px; height: 11px; }
+.al-del:hover { color: var(--red); }
 .ms-btn.autom.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+
+/* the strip between a track's patterns and its automation */
+.autom-head {
+  position: relative;
+  display: flex; align-items: center; gap: 7px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--line);
+  background: rgba(0, 0, 0, 0.34);
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.12s var(--ease);
+}
+.autom-head:hover { background: rgba(0, 0, 0, 0.46); }
+.ah-fold {
+  display: flex; align-items: center; justify-content: center;
+  background: none; border: 0; padding: 0; cursor: pointer; color: var(--dim);
+}
+/* the chevron points down when open and right when folded, so it reads as
+   "this is what folds away" rather than as decoration */
+.ah-fold .ic { width: 12px; height: 12px; transform: rotate(90deg); transition: transform 0.15s var(--ease); }
+.autom-head.collapsed .ah-fold .ic { transform: rotate(0deg); }
+.autom-head:hover .ah-fold { color: var(--accent); }
+.ah-title {
+  position: sticky; left: 30px;
+  font-size: 9.5px; font-weight: 800; letter-spacing: 0.09em;
+  text-transform: uppercase; color: var(--faint);
+}
+.ah-count {
+  position: sticky; left: 96px;
+  min-width: 14px; text-align: center;
+  font-size: 9px; font-weight: 700; color: var(--dim);
+  background: var(--panel2); border: 1px solid var(--line);
+  border-radius: 999px; padding: 0 4px;
+}
+@media (prefers-reduced-motion: reduce) { .ah-fold .ic { transition: none; } }

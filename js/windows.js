@@ -898,10 +898,6 @@ const Windows = {
     mkCheck(tr('set_eco', 'Reduce CPU load (weaker computers)'), Engine.ecoMode(),
       tr('tip_eco', 'Turns off the room reverb and limits voices so playback stays smooth.'),
       (v) => { Engine.setEco(v); toast(tr(v ? 'toast_eco_on' : 'toast_eco_off', 'CPU saver ' + (v ? 'on' : 'off'))); });
-    mkCheck(tr('set_chord_hints', 'Suggest the next chord in the piano roll'), ChordSuggest.enabled(),
-      tr('tip_chord_hints', 'Shows the chord that usually follows what you have written. Tab adds it.'),
-      (v) => { ChordSuggest.setEnabled(v); if (PianoRoll.isOpen()) PianoRoll.redraw();
-               toast(tr(v ? 'toast_chord_hints_on' : 'toast_chord_hints_off', 'Chord suggestions ' + (v ? 'on' : 'off'))); });
     mkCheck(tr('set_scrub', 'Scrub while dragging the playhead'), Engine.scrubOn(),
       tr('tip_scrub', 'Hear the notes under the playhead as you drag it (when stopped).'),
       (v) => { Engine.setScrub(v); toast(tr(v ? 'toast_scrub_on' : 'toast_scrub_off', 'Scrubbing ' + (v ? 'on' : 'off'))); });

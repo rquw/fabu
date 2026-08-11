@@ -5,12 +5,20 @@ const TRACK_H = 84;
 // One automation lane's height. Tall enough that a curve reads at a glance,
 // short enough that opening three of them does not push the song off screen.
 const AUTOM_H = 52;
+// The strip that separates a track's patterns from its automation, and holds
+// the switch that folds the automation away.
+const AUTOM_HEAD_H = 22;
 
 // Tracks used to be a fixed height each, so a track's position was its index
 // times that. With automation lanes underneath them a track is as tall as it
 // needs to be, and everything that used to multiply by TRACK_H asks here.
 function autoLanes(track) { return (track && track.autoLanes) || []; }
-function trackHeight(track) { return TRACK_H + autoLanes(track).length * AUTOM_H; }
+function automOpen(track) { return autoLanes(track).length > 0 && !track.autoCollapsed; }
+function trackHeight(track) {
+  const n = autoLanes(track).length;
+  if (!n) return TRACK_H;
+  return TRACK_H + AUTOM_HEAD_H + (track.autoCollapsed ? 0 : n * AUTOM_H);
+}
 function trackTop(idx) {
   let y = 0;
   for (let i = 0; i < idx && i < S.tracks.length; i++) y += trackHeight(S.tracks[i]);
@@ -296,8 +304,14 @@ const Timeline = {
         if (c.start > viewTo || c.start + clipBeats(c) < viewFrom) continue;   // off screen
         lane.appendChild(this.buildClip(c, t));
       }
-      // the automation lanes belong to this track and sit under it
-      for (const param of autoLanes(t)) this.lanes.appendChild(this.buildAutomLane(t, param, width));
+      // the automation lanes belong to this track and sit under it, behind a
+      // header that says so and can fold them away
+      if (autoLanes(t).length) {
+        this.lanes.appendChild(this.buildAutomHead(t, width));
+        if (!t.autoCollapsed) {
+          for (const param of autoLanes(t)) this.lanes.appendChild(this.buildAutomLane(t, param, width));
+        }
+      }
     }
 
     // brand-new/empty project: gentle "double-click to add a pattern" nudge
@@ -334,6 +348,32 @@ const Timeline = {
     return { min: r[0], max: r[1] };
   },
 
+  // The strip between the patterns and the curves. Without it the lanes read as
+  // more track rather than as something belonging to the track above them.
+  buildAutomHead(track, width) {
+    const el = document.createElement('div');
+    el.className = 'autom-head' + (track.autoCollapsed ? ' collapsed' : '');
+    el.style.width = width + 'px';
+    el.style.height = AUTOM_HEAD_H + 'px';
+    const n = autoLanes(track).length;
+    el.innerHTML = `
+      <button class="ah-fold" data-tip="${track.autoCollapsed
+        ? tr('autom_expand', 'Show the automation') : tr('autom_collapse', 'Fold the automation away')}">
+        <svg class="ic"><use href="#i-chev"/></svg>
+      </button>
+      <span class="ah-title">${tr('autom_title', 'Automation')}</span>
+      <span class="ah-count">${n}</span>`;
+    const fold = () => {
+      track.autoCollapsed = !track.autoCollapsed;
+      UI.dirty = UI.fileDirty = true;
+      this.render();
+    };
+    el.querySelector('.ah-fold').addEventListener('click', (e) => { e.stopPropagation(); fold(); });
+    // the whole strip folds, since a 16px chevron is a small thing to hit
+    el.addEventListener('click', fold);
+    return el;
+  },
+
   buildAutomLane(track, param, width) {
     const el = document.createElement('div');
     el.className = 'autom-lane';
@@ -345,10 +385,11 @@ const Timeline = {
     const label = document.createElement('div');
     label.className = 'al-label';
     label.innerHTML = `<span class="al-name">${escapeHtml(Automation.paramLabel(param))}</span>` +
-      `<button class="al-close" data-tip="${tr('autom_hide', 'Hide this lane')}">&times;</button>`;
-    label.querySelector('.al-close').addEventListener('mousedown', (e) => {
+      `<button class="al-del" data-tip="${tr('autom_delete', 'Delete this automation')}">` +
+      `<svg class="ic"><use href="#i-trash"/></svg></button>`;
+    label.querySelector('.al-del').addEventListener('mousedown', (e) => {
       e.stopPropagation();
-      this.toggleAutomLane(track.id, param, false);
+      this.deleteAutomLane(track, param);
     });
     el.appendChild(label);
 
@@ -520,6 +561,20 @@ const Timeline = {
     });
   },
 
+  // Remove the automation, not just the view of it. Undo has it if that was
+  // the wrong call.
+  deleteAutomLane(track, param) {
+    const had = track.autom && track.autom[param] && track.autom[param].length;
+    Undo.push('Automation');
+    if (track.autom) delete track.autom[param];
+    const i = (track.autoLanes || []).indexOf(param);
+    if (i >= 0) track.autoLanes.splice(i, 1);
+    UI.dirty = UI.fileDirty = true;
+    Engine.rescheduleAutomation(track);
+    this.render();
+    if (had) toast(tr('toast_autom_deleted', '{name} automation deleted', { name: Automation.paramLabel(param) }));
+  },
+
   // show or hide a param's lane under a track
   toggleAutomLane(trackId, param, on) {
     const t = getTrack(trackId);
@@ -527,7 +582,7 @@ const Timeline = {
     if (!t.autoLanes) t.autoLanes = [];
     const i = t.autoLanes.indexOf(param);
     const want = on == null ? i < 0 : on;
-    if (want && i < 0) t.autoLanes.push(param);
+    if (want && i < 0) { t.autoLanes.push(param); t.autoCollapsed = false; }
     else if (!want && i >= 0) t.autoLanes.splice(i, 1);
     UI.dirty = UI.fileDirty = true;
     this.render();

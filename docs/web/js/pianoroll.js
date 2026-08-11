@@ -106,14 +106,7 @@ const PianoRoll = {
         <button id="pkScaleOn" class="pt-toggle" data-tip="${tr('tip_scale_show', 'Shade the notes that fit the key')}">${tr('proll_highlight', 'Highlight')}</button>
         <button id="pkSnapScale" class="pt-toggle" data-tip="${tr('tip_scale_snap', 'Pull drawn notes onto the key')}">${tr('proll_tokey', 'To key')}</button>
         <button id="pkChord" class="pt-toggle" data-tip="${tr('tip_chord', 'Click drops a full chord in the key')}">${tr('proll_chord', 'Chord')}</button>
-      </div>` + `
-      <div id="pkSuggest" class="chord-sug hidden" data-tip="${tr('tip_chord_sug', 'The chord that usually comes next. Tab to add it.')}">
-        <span class="cs-next">${tr('chord_next', 'Next')}</span>
-        <span class="cs-name"></span>
-        <kbd class="cs-key">Tab</kbd><span class="cs-lbl">${tr('chord_add', 'add')}</span>
-        <span class="cs-alt"><kbd class="cs-key">Shift Tab</kbd><span class="cs-lbl">${tr('chord_other', 'other')}</span></span>
-      </div>
-`;
+      </div>`;
     tools.innerHTML = `
       <span class="pt-track" style="color:${f.track.color}">${f.track.name}</span>
       ${keyGroup}
@@ -157,11 +150,6 @@ const PianoRoll = {
       wireToggle('#pkScaleOn', 'scaleOn');
       wireToggle('#pkSnapScale', 'snapScale');
       wireToggle('#pkChord', 'chordMode');
-    this._sugEl = q('#pkSuggest');
-    if (this._sugEl) {
-      this._sugEl.addEventListener('click', () => this.acceptSuggestion());
-      this._sugEl.addEventListener('contextmenu', (e) => { e.preventDefault(); this.cycleSuggestion(); });
-    }
     }
     q('#pkQuantSel').addEventListener('click', () => this.quantize('sel'));
     q('#pkQuantAll').addEventListener('click', () => this.quantize('all'));
@@ -475,7 +463,6 @@ const PianoRoll = {
 
     this.drawVel(W);
     this.drawRuler(W);
-    this.refreshSuggestion();
     if (this.inner) this.inner.style.width = W + 'px';
     if (this.playEl) this.playEl.style.height = (this.RULER_H + H + this.VEL_H) + 'px';
     this.syncPlayhead();
@@ -901,85 +888,6 @@ const PianoRoll = {
   // and it never does anything on its own.
 
   // group notes that start together into chords, in time order
-  chordGroups() {
-    const f = this.clip();
-    if (!f) return [];
-    const by = new Map();
-    for (const n of f.clip.notes) {
-      const k = Math.round(n.start * 16) / 16;
-      if (!by.has(k)) by.set(k, []);
-      by.get(k).push(n);
-    }
-    return [...by.entries()].sort((a, b) => a[0] - b[0])
-      .map(([start, notes]) => ({ start, notes, len: Math.max(...notes.map(n => n.length)) }));
-  },
-
-  // Work out the suggestion without showing it, so the same logic serves the
-  // hint, the preview and Tab.
-  computeSuggestion() {
-    const f = this.clip();
-    if (!f || this._rowMap) return null;                    // meaningless on drums
-    if (!ChordSuggest.enabled() || !ChordSuggest.usable(this.keyScale)) return null;
-    const groups = this.chordGroups().filter(g => g.notes.length >= 2);
-    const last = groups[groups.length - 1];
-    let prevDegree = null, at = 0, octaveRoot = 60 + this.keyRoot, len = 1;
-    if (last) {
-      prevDegree = ChordSuggest.degreeOf(last.notes.map(n => n.pitch), this.keyRoot, this.keyScale);
-      if (prevDegree == null) return null;                  // not a chord we understand
-      at = last.start + last.len;
-      len = last.len;
-      octaveRoot = Math.min(...last.notes.map(n => n.pitch));
-      octaveRoot -= ((octaveRoot - this.keyRoot) % 12 + 12) % 12;   // the key's root below it
-    } else {
-      const all = this.chordGroups();
-      if (all.length) return null;                          // notes, but no chords yet
-    }
-    if (at > f.clip.length - 0.25) return null;             // no room left in the pattern
-    const opts = ChordSuggest.optionsFor(prevDegree, this.keyScale);
-    const idx = (this._sugIdx || 0) % opts.length;
-    const chord = ChordSuggest.chordAt(opts[idx], this.keyRoot, this.keyScale, octaveRoot);
-    return { chord, at, len, options: opts, idx };
-  },
-
-  refreshSuggestion() {
-    this._sug = this.computeSuggestion();
-    const el = this._sugEl;
-    if (!el) return;
-    if (!this._sug) { el.classList.add('hidden'); return; }
-    el.classList.remove('hidden');
-    el.querySelector('.cs-name').textContent = this._sug.chord.name;
-    // The roman numeral is real information for anyone who wants it, just not
-    // the first thing a beginner should have to read.
-    el.dataset.tip = tr('tip_chord_sug', 'The chord that usually comes next. Tab to add it.')
-      + ' (' + this._sug.chord.roman + ')';
-    el.querySelector('.cs-alt').classList.toggle('hidden', this._sug.options.length < 2);
-  },
-
-  acceptSuggestion() {
-    const s = this._sug;
-    const f = this.clip();
-    if (!s || !f) return false;
-    Undo.push('Add chord');
-    for (const pitch of s.chord.pitches) {
-      f.clip.notes.push({ id: uid('note'), pitch: clamp(pitch, 0, 127),
-                          start: s.at, length: Math.max(0.25, s.len), vel: 0.8 });
-    }
-    if (s.at + s.len > f.clip.length) f.clip.length = s.at + s.len;
-    this._sugIdx = 0;
-    this.redraw();
-    Timeline.drawClip(this.clipId);
-    if (UI.playing) Engine.liveEdit();
-    toast(tr('chord_added', 'Added {roman}', { roman: s.chord.roman }), 'green');
-    return true;
-  },
-
-  cycleSuggestion() {
-    if (!this._sug) return false;
-    this._sugIdx = (this._sugIdx || 0) + 1;
-    this.redraw();
-    return true;
-  },
-
   // Nudge timing and loudness a little. Perfectly gridded notes at one velocity
   // are the main thing that makes a pattern sound programmed, and a real player
   // is never exactly on the beat or exactly as loud twice.
