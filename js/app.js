@@ -41,6 +41,8 @@ const App = {
         if (!UI.fileDirty) { window.electronAPI.confirmClose(); return; }
         this.confirmExit('close');
       });
+      // main starts out assuming nothing is unsaved; make that true on the way in
+      if (window.electronAPI.setDirty) window.electronAPI.setDirty(UI.fileDirty);
     }
     // one-click update: fabu downloads the new version itself and swaps over
     if (window.electronAPI && window.electronAPI.onUpdateReady) {
@@ -222,6 +224,9 @@ const App = {
         </div>
       </div>`;
     document.body.appendChild(wrap);
+    if (kind === 'close' && window.electronAPI && window.electronAPI.cancelClose) {
+      window.electronAPI.cancelClose();
+    }
     const done = () => {
       wrap.remove();
       if (kind === 'close') window.electronAPI.confirmClose();

@@ -12,6 +12,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   libraryRead: () => ipcRenderer.invoke('library-read'),
   onConfirmClose: (cb) => ipcRenderer.on('confirm-close', cb),
   confirmClose: () => ipcRenderer.send('close-confirmed'),
+  cancelClose: () => ipcRenderer.send('close-cancelled'),
+  setDirty: (dirty) => ipcRenderer.send('set-dirty', dirty),
   onUpdateReady: (cb) => ipcRenderer.on('update-ready', (e, version) => cb(version)),
   onUpdateProgress: (cb) => ipcRenderer.on('update-progress', (e, pct) => cb(pct)),
   onUpdateError: (cb) => ipcRenderer.on('update-error', (e, msg) => cb(msg)),

@@ -128,7 +128,17 @@ const UI = {
   keysTrackId: null,
   clipboard: null,      // { type:'clip'|'notes', data }
   dirty: false,         // changed since last autosave (autosave clears this)
-  fileDirty: false      // changed since last save to a FILE (only a real save/new/load clears this)
+  _fileDirty: false,    // changed since last save to a FILE (only a real save/new/load clears this)
+  get fileDirty() { return this._fileDirty; },
+  set fileDirty(v) {
+    v = !!v;
+    if (v === this._fileDirty) return;
+    this._fileDirty = v;
+    // so the desktop app can close straight away when there is nothing to ask
+    if (window.electronAPI && window.electronAPI.setDirty) {
+      try { window.electronAPI.setDirty(v); } catch (e) {}
+    }
+  }
 };
 
 // Decoded audio lives here, referenced by sampleId from clips.

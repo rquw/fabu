@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, session, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, session, shell, Menu } = require('electron');
 const fs = require('fs');
 const path = require('path');
 
@@ -291,6 +291,7 @@ function createWindow() {
     minHeight: 620,
     title: 'fabu',
     backgroundColor: '#15130f',
+    autoHideMenuBar: true,
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -316,23 +317,58 @@ function createWindow() {
     return { action: 'deny' };
   });
 
-  // ask the renderer before really closing (unsaved changes dialog)
+  // Closing used to take a round trip through the renderer every single time,
+  // even with nothing to ask about: main told the renderer to check, the
+  // renderer answered, and only then did anything happen. If the renderer was
+  // busy drawing or rendering audio, that gap is the "it does not close
+  // straight away" everybody notices. The renderer now keeps main informed of
+  // whether there is anything unsaved, so the common case never asks at all.
   win.on('close', (e) => {
     if (quitOk) return;
     e.preventDefault();
+    if (!rendererDirty) { beginQuit(); return; }
     win.webContents.send('confirm-close');
+    // A renderer that is wedged must not make the app unclosable. If it has not
+    // answered by now it is not going to, and an unsaved project is recoverable
+    // from the autosave anyway.
+    clearTimeout(closeTimer);
+    closeTimer = setTimeout(() => { if (!quitOk) beginQuit(); }, 3000);
   });
 }
 
 let quitOk = false;
-ipcMain.on('close-confirmed', () => {
+let rendererDirty = false;
+let closeTimer = null;
+
+// Hide first, then quit. Teardown is not instant (audio devices, the GPU
+// process, the update checker), and a window that sits there through it looks
+// like the app has hung.
+function beginQuit() {
+  if (quitOk) return;
   quitOk = true;
+  clearTimeout(closeTimer);
+  try { if (win && !win.isDestroyed()) win.hide(); } catch (e) {}
   app.quit();
-});
+}
+
+ipcMain.on('close-confirmed', () => beginQuit());
+ipcMain.on('close-cancelled', () => { clearTimeout(closeTimer); });
+ipcMain.on('set-dirty', (e, dirty) => { rendererDirty = !!dirty; });
 
 ipcMain.handle('get-version', () => app.getVersion());
 
+// Windows and Linux get Electron's default File/Edit/View/Window/Help bar
+// unless you say otherwise, and none of it does anything fabu needs: every
+// command already has a button. On macOS the menu bar belongs to the system,
+// not to the window, and removing it would take the standard Cmd shortcuts
+// (copy, paste, quit, hide) with it, so it stays there.
+function setupMenu() {
+  if (process.platform === 'darwin') return;
+  Menu.setApplicationMenu(null);
+}
+
 app.whenReady().then(() => {
+  setupMenu();
   // Allow microphone access for voice recording
   session.defaultSession.setPermissionRequestHandler((wc, permission, cb) => {
     cb(permission === 'media');
