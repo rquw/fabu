@@ -2612,3 +2612,39 @@ body.shift-held .fx-item:not(.samp-item) { position: relative; overflow: visible
   #homeKofi { position: static; align-self: center; margin: 10px 0 0; }
   #homeVerWrap { position: static; align-self: center; margin: 8px 0 20px; }
 }
+
+/* ---------- movement between home pages ----------
+   Switching pages was an instant swap, which reads as a redraw rather than as
+   going somewhere. A short rise and fade is enough to say the page changed. */
+@keyframes pageIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+#pageHome, .home-page { animation: pageIn 0.22s var(--ease) both; }
+
+/* Rows and cards arrive in order rather than all at once. The delay is capped
+   so a list of eighty projects does not take four seconds to appear. */
+@keyframes rowIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.proj-row, .gal-card {
+  animation: rowIn 0.24s var(--ease) both;
+  animation-delay: calc(var(--i, 0) * 22ms);
+}
+
+.gal-tab {
+  transition: background 0.12s var(--ease), color 0.12s var(--ease),
+              border-color 0.12s var(--ease);
+}
+.home-viewall { transition: color 0.12s var(--ease); }
+.samp-links .fbtn, .pf-btns .fbtn { transition: border-color 0.12s var(--ease), background 0.12s var(--ease); }
+
+/* The tab strip's selected item used to jump. It slides. */
+.gal-tab.on { transition: background 0.16s var(--ease), color 0.16s var(--ease); }
+
+/* Nothing above is load bearing, so all of it goes when motion is turned down. */
+@media (prefers-reduced-motion: reduce) {
+  #pageHome, .home-page, .proj-row, .gal-card { animation: none; }
+  #home::before { animation: none; }
+}

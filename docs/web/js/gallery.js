@@ -197,7 +197,11 @@ const Gallery = {
         return;
       }
       list.innerHTML = '';
-      for (const l of mine.slice().reverse()) list.appendChild(this.mineCard(l));
+      mine.slice().reverse().forEach((l, i) => {
+        const el = this.mineCard(l);
+        el.style.setProperty('--i', Math.min(i, 14));
+        list.appendChild(el);
+      });
       return;
     }
 
@@ -226,7 +230,11 @@ const Gallery = {
       return;
     }
     list.innerHTML = '';
-    for (const r of rows) list.appendChild(this.card(r));
+    rows.forEach((r, i) => {
+      const el = this.card(r);
+      el.style.setProperty('--i', Math.min(i, 14));
+      list.appendChild(el);
+    });
   },
 
   // one of your own loops: play it, publish it, edit it

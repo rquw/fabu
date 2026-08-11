@@ -532,14 +532,21 @@ const App = {
     this.homePage = name;
     for (const o of $$('#homeNav .hn-item')) o.classList.toggle('on', o.dataset.nav === name);
     const home = $('#pageHome'), other = $('#pageOther');
+    const replay = (el) => {
+      el.style.animation = 'none';
+      void el.offsetWidth;          // forces the style to settle before it is re-applied
+      el.style.animation = '';
+    };
     if (name === 'home') {
       home.classList.remove('hidden');
       other.classList.add('hidden');
       this.renderRecents();
+      replay(home);
       return;
     }
     home.classList.add('hidden');
     other.classList.remove('hidden');
+    replay(other);
     const title = $('#hpTitle'), sub = $('#hpSub'), body = $('#hpBody');
     body.innerHTML = '';
     body.className = 'hp-body hp-' + name;
@@ -575,9 +582,11 @@ const App = {
     }
     const list = document.createElement('div');
     list.className = 'proj-list';
-    for (const r of all) {
+    all.forEach((r, i) => {
       const row = document.createElement('div');
       row.className = 'proj-row';
+      // capped, so eighty projects do not take four seconds to finish arriving
+      row.style.setProperty('--i', Math.min(i, 14));
       const hue = 12 + ((r.name.charCodeAt(0) * 47) % 37);
       row.innerHTML = `
         <span class="proj-dot" style="background:hsl(${hue} 62% 42%)"></span>
@@ -591,7 +600,7 @@ const App = {
         this.openRecent(r.path);
       });
       list.appendChild(row);
-    }
+    });
     box.appendChild(list);
   },
 
