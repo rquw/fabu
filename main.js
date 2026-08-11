@@ -300,7 +300,18 @@ function createWindow() {
       nodeIntegration: false
     }
   });
-  if (st.maximized || st.firstRun) win.maximize();
+  if (st.maximized) win.maximize();
+  // First launch fills the display. Deliberately by sizing to the work area
+  // rather than calling maximize(): on macOS that turns into real fullscreen,
+  // which takes over a Space and hides the menu bar, and nobody asked for
+  // that. This is just a big window, and dragging it smaller sticks.
+  else if (st.firstRun) {
+    try {
+      const { screen } = require('electron');
+      const a = screen.getPrimaryDisplay().workArea;
+      win.setBounds({ x: a.x + 12, y: a.y + 12, width: a.width - 24, height: a.height - 24 });
+    } catch (e) { win.maximize(); }
+  }
   if (st.fullscreen) win.setFullScreen(true);
   trackWindowState(win);
 
