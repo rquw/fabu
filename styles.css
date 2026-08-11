@@ -2918,3 +2918,14 @@ html, body { overflow-x: hidden; max-width: 100%; }
 #fbModal textarea:focus, #fbModal input:focus { border-color: var(--accent); }
 .samp-item.playing { border-color: var(--accent); }
 .samp-item.playing .samp-play { color: var(--accent); }
+
+/* A card with nothing behind it stays in the row and goes quiet, so the shape
+   of the screen does not change depending on whether you have work to resume. */
+.home-go.disabled {
+  opacity: 0.42;
+  cursor: default;
+  pointer-events: none;
+  box-shadow: none;
+}
+.home-go.disabled .hc-ic { color: var(--faint); }
+.home-go.disabled .hc-art { opacity: 0.06; }

@@ -199,6 +199,14 @@ const Timeline = {
       }
     });
 
+    // Tell a scroll we caused from one the user did. Only the second kind
+    // should stop the playhead being followed.
+    this.scroller.addEventListener('scroll', () => {
+      if (this._following) return;
+      if (this._followLeft != null && Math.abs(this.scroller.scrollLeft - this._followLeft) < 2) return;
+      if (UI.playing) this._userScrolled = true;
+    });
+
     this.initDropZone();
     this.startPlayheadLoop();
   },
@@ -1756,11 +1764,15 @@ const Timeline = {
     }
 
     if (UI.playing) {
-      // keep the playhead in view
       const viewL = this.scroller.scrollLeft;
       const viewR = viewL + this.scroller.clientWidth;
-      if (x > viewR - 80 || x < viewL) {
+      const inView = x >= viewL && x <= viewR - 80;
+      if (this._userScrolled && inView) this._userScrolled = false;  // it caught up
+      if (!this._userScrolled && !inView) {
+        this._following = true;
         this.scroller.scrollLeft = Math.max(0, x - 120);
+        this._followLeft = this.scroller.scrollLeft;
+        this._following = false;
       }
       // grow lanes if we run past the end (next frame, never from inside render)
       if (x > this.lanes.clientWidth - 200) this.renderSoon();

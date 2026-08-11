@@ -1086,5 +1086,6 @@
   "feedback_thanks": "Sent. Thank you, genuinely.",
   "feedback_refused": "That did not go through. Too long, or too many just now.",
   "auth_cooldown": "Too many tries. Wait {n} seconds and try again.",
-  "toast_pattern_max": "A pattern tops out at two minutes. Use another one after it."
+  "toast_pattern_max": "A pattern tops out at two minutes. Use another one after it.",
+  "hc_continue_none": "Nothing open yet"
 }

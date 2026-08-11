@@ -322,7 +322,16 @@ const App = {
     } catch (e) { /* ignore */ }
     this._autosaveData = data && data.length > 40 ? data : null;
     const btn = $('#homeContinue');
-    if (btn) btn.classList.toggle('hidden', !this._autosaveData);
+    if (btn) {
+      const has = !!this._autosaveData;
+      btn.classList.remove('hidden');
+      btn.classList.toggle('disabled', !has);
+      btn.disabled = !has;
+      const sub = btn.querySelector('.hc-sub');
+      if (sub) sub.textContent = has
+        ? tr('hc_continue_sub', 'Pick up where you left off')
+        : tr('hc_continue_none', 'Nothing open yet');
+    }
   },
 
   async continueSession() {
@@ -462,56 +471,66 @@ const App = {
     const track = (name, instrument, clips, extra) =>
       Object.assign(makeTrack('midi'), { name, instrument, clips }, extra || {});
 
+    // Bars are grouped into four-bar blocks rather than one clip each. Every
+    // clip carrying an effect builds its own effect chain when it plays, so a
+    // hundred and fifteen one-bar clips meant a hundred-odd delay lines and
+    // filters standing up at once, which is what made playback stutter. Same
+    // music, a quarter of the blocks.
+    const BLOCK = 4;                      // bars per clip
+    const BL = BLOCK * 4;                 // beats per clip
+    // shift a bar's notes to their place inside the block
+    const at = (notes, barInBlock) => notes.map(n => Object.assign({}, n, { start: n.start + barInBlock * 4 }));
+    // build one clip per four bars, skipping bars the caller says are silent
+    const blocks = (name, fromBar, toBar, barNotes, fx, skip) => {
+      const outClips = [];
+      for (let b0 = fromBar; b0 < toBar; b0 += BLOCK) {
+        let notes = [];
+        for (let i = 0; i < BLOCK && b0 + i < toBar; i++) {
+          const bar = b0 + i;
+          if (skip && skip(bar)) continue;
+          notes = notes.concat(at(barNotes(bar), i));
+        }
+        if (notes.length) outClips.push(clip(name, b0 * 4, BL, notes, fx));
+      }
+      return outClips;
+    };
+
     // ---- drums ----
     // A half-time backbeat: kick on 1 and the "and" of 3, snare on 3 only, so
     // it leans back instead of marching. Hats in straight eighths, with the
     // track's swing doing the rest.
-    const drumBar = (fill) => {
+    const drumBar = (bar) => {
       const n = [];
-      n.push(N(36, 0, 0.4, 0.95), N(36, 2.5, 0.4, 0.8));      // kick
-      n.push(N(38, 2, 0.4, 0.9));                              // snare
-      for (let i = 0; i < 8; i++) {
-        // the offbeat hats are quieter, which is what stops it sounding typed in
-        n.push(N(42, i * 0.5, 0.2, i % 2 ? 0.32 : 0.5));
-      }
-      if (fill) { n.push(N(38, 3.25, 0.2, 0.5), N(38, 3.5, 0.2, 0.65), N(38, 3.75, 0.2, 0.85)); }
+      n.push(N(36, 0, 0.4, 0.95), N(36, 2.5, 0.4, 0.8));
+      n.push(N(38, 2, 0.4, 0.9));
+      for (let i = 0; i < 8; i++) n.push(N(42, i * 0.5, 0.2, i % 2 ? 0.32 : 0.5));
+      if ((bar + 1) % 8 === 0) n.push(N(38, 3.25, 0.2, 0.5), N(38, 3.5, 0.2, 0.65), N(38, 3.75, 0.2, 0.85));
       return n;
     };
-    const drumClips = [];
-    for (let bar = 4; bar < 32; bar++) {
-      if (bar >= 24 && bar < 28) continue;                     // the break: drums drop out
-      drumClips.push(clip('Beat', bar * 4, 4, drumBar((bar + 1) % 8 === 0),
-        // a gentle low pass all the way through is most of the lo-fi sound
-        bar === 4 ? [['dampen', { freq: 6500 }]] : [['dampen', { freq: 9000 }]]));
-    }
+    const drumClips = blocks('Beat', 4, 32, drumBar,
+      [['dampen', { freq: 9000 }]], (bar) => bar >= 24 && bar < 28);
 
     // ---- bass ----
     // Root on the downbeat, fifth on the and-of-three. Long notes, no busyness.
     const bassRoots = [45, 50, 43, 48];
-    const bassClips = [];
-    for (let bar = 4; bar < 32; bar++) {
-      if (bar >= 24 && bar < 26) continue;
-      const r = bassRoots[bar % 4];
-      bassClips.push(clip('Bass', bar * 4, 4,
-        [N(r, 0, 2.2, 0.9), N(r + 7, 2.5, 1.2, 0.72)]));
-    }
+    const bassClips = blocks('Bass', 4, 32,
+      (bar) => { const r = bassRoots[bar % 4]; return [N(r, 0, 2.2, 0.9), N(r + 7, 2.5, 1.2, 0.72)]; },
+      null, (bar) => bar >= 24 && bar < 26);
 
     // ---- chords ----
-    // Upright piano, played slightly broken rather than as a block, and a touch
+    // Upright piano, broken slightly rather than played as a block, and a touch
     // late on the second half of the bar.
-    const chordClips = [];
-    for (let bar = 0; bar < 32; bar++) {
-      if (bar >= 24 && bar < 26) continue;
+    const chordBar = (bar) => {
       const ch = this.DEMO_CHORDS[bar % 4];
-      const notes = [];
-      ch.forEach((p, i) => notes.push(N(p, i * 0.035, 2.0, 0.62 - i * 0.03)));
-      ch.forEach((p, i) => notes.push(N(p, 2.5 + i * 0.03, 1.4, 0.5 - i * 0.03)));
-      chordClips.push(clip('Chords', bar * 4, 4, notes,
-        bar < 4 ? [['reverb', { amt: 0.5 }]] : [['reverb', { amt: 0.28 }]]));
-    }
+      const n = [];
+      ch.forEach((pt, i) => n.push(N(pt, i * 0.035, 2.0, 0.62 - i * 0.03)));
+      ch.forEach((pt, i) => n.push(N(pt, 2.5 + i * 0.03, 1.4, 0.5 - i * 0.03)));
+      return n;
+    };
+    const chordClips = blocks('Chords', 0, 32, chordBar,
+      [['reverb', { amt: 0.3 }]], (bar) => bar >= 24 && bar < 26);
 
     // ---- melody, on vibes ----
-    // The tune. Four bars, answered by a variation, so it asks and answers.
     const melA = [
       N(76, 0, 0.9, 0.8), N(74, 1, 0.5, 0.7), N(72, 1.5, 1.4, 0.78),
       N(69, 3.25, 0.6, 0.62),
@@ -525,55 +544,42 @@ const App = {
     ];
     const melClips = [
       clip('Melody', 0, 8, melA, [['reverb', { amt: 0.55 }]]),
-      clip('Melody', 32, 8, melA, [['reverb', { amt: 0.3 }]]),
-      clip('Answer', 40, 8, melB, [['reverb', { amt: 0.3 }]]),
-      clip('Melody', 64, 8, melA, [['reverb', { amt: 0.3 }], ['echo', { time: 0.36, fb: 0.3, mix: 0.28 }]]),
-      clip('Answer', 72, 8, melB, [['reverb', { amt: 0.3 }], ['echo', { time: 0.36, fb: 0.3, mix: 0.28 }]]),
-      clip('Melody', 112, 8, melA, [['reverb', { amt: 0.6 }]])
+      clip('Melody', 32, 16, melA.concat(at(melB, 2)), [['reverb', { amt: 0.3 }]]),
+      clip('Melody', 64, 16, melA.concat(at(melB, 2)),
+        [['reverb', { amt: 0.3 }], ['echo', { time: 0.36, fb: 0.3, mix: 0.28 }]]),
+      clip('Outro', 112, 8, melA, [['reverb', { amt: 0.6 }]])
     ];
 
     // ---- pluck arpeggio, from the lift onwards ----
-    const arpBar = () => {
-      const ch = [57, 60, 64, 67];
+    const arpBar = (bar) => {
+      const ch = this.DEMO_CHORDS[bar % 4];
       const n = [];
-      const order = [0, 1, 2, 3, 2, 1, 2, 3];
-      order.forEach((k, i) => n.push(N(ch[k] + 12, i * 0.5, 0.42, 0.34 + (i % 2 ? 0 : 0.08))));
+      [0, 1, 2, 3, 2, 1, 2, 3].forEach((k, i) => n.push(N(ch[k] + 12, i * 0.5, 0.42, 0.32 + (i % 2 ? 0 : 0.08))));
       return n;
     };
-    const arpClips = [];
-    for (let bar = 12; bar < 24; bar++) {
-      const ch = this.DEMO_CHORDS[bar % 4];
-      const n = [];
-      const order = [0, 1, 2, 3, 2, 1, 2, 3];
-      order.forEach((k, i) => n.push(N(ch[k] + 12, i * 0.5, 0.42, 0.32 + (i % 2 ? 0 : 0.08))));
-      arpClips.push(clip('Arp', bar * 4, 4, n, [['echo', { time: 0.357, fb: 0.28, mix: 0.3 }]]));
-    }
-    for (let bar = 28; bar < 32; bar++) {
-      const ch = this.DEMO_CHORDS[bar % 4];
-      const n = [];
-      [0, 1, 2, 3, 2, 1, 2, 3].forEach((k, i) => n.push(N(ch[k] + 12, i * 0.5, 0.42, 0.3)));
-      arpClips.push(clip('Arp', bar * 4, 4, n, [['echo', { time: 0.357, fb: 0.28, mix: 0.3 }]]));
-    }
+    const arpClips = blocks('Arp', 12, 24, arpBar, [['echo', { time: 0.357, fb: 0.28, mix: 0.3 }]])
+      .concat(blocks('Arp', 28, 32, arpBar, [['echo', { time: 0.357, fb: 0.28, mix: 0.3 }]]));
 
     // ---- pad, holding the whole thing together ----
     const padClips = [];
-    for (let bar = 8; bar < 32; bar += 2) {
-      if (bar >= 24 && bar < 26) continue;
-      const ch = this.DEMO_CHORDS[bar % 4];
-      padClips.push(clip('Pad', bar * 4, 8,
-        ch.map((p, i) => N(p - 12, 0, 7.6, 0.3 - i * 0.04)),
+    for (let bar = 8; bar < 32; bar += 8) {
+      const n = [];
+      for (let i = 0; i < 8; i += 2) {
+        if (bar + i >= 24 && bar + i < 26) continue;
+        const ch = this.DEMO_CHORDS[(bar + i) % 4];
+        ch.forEach((pt, k) => n.push(N(pt - 12, i * 4, 7.6, 0.3 - k * 0.04)));
+      }
+      if (n.length) padClips.push(clip('Pad', bar * 4, 32, n,
         [['reverb', { amt: 0.6 }], ['lowcut', { freq: 120 }]]));
     }
 
     // ---- a sax line over the chorus ----
     const saxClips = [
-      clip('Sax', 64, 8, [
+      clip('Sax', 64, 16, [
         N(69, 0.5, 1.6, 0.72), N(72, 2.25, 0.7, 0.66), N(71, 3, 1.2, 0.7),
-        N(67, 4.5, 1.4, 0.68), N(69, 6.25, 1.6, 0.74)
-      ], [['reverb', { amt: 0.4 }]]),
-      clip('Sax', 72, 8, [
-        N(76, 0.5, 1.4, 0.76), N(74, 2, 0.6, 0.66), N(72, 2.75, 2.0, 0.72),
-        N(69, 5.5, 2.2, 0.7)
+        N(67, 4.5, 1.4, 0.68), N(69, 6.25, 1.6, 0.74),
+        N(76, 8.5, 1.4, 0.76), N(74, 10, 0.6, 0.66), N(72, 10.75, 2.0, 0.72),
+        N(69, 13.5, 2.2, 0.7)
       ], [['reverb', { amt: 0.4 }]])
     ];
 

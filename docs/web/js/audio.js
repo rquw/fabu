@@ -1144,6 +1144,9 @@ const Engine = {
   },
 
   play(atTime) {
+    // a fresh press means follow the playhead again, even if the view was
+    // dragged elsewhere during the last pass
+    if (typeof Timeline !== 'undefined') Timeline._userScrolled = false;
     this.ensureCtx();
     this.ctx.resume();
     if (UI.playing) return;
@@ -1974,6 +1977,7 @@ const Engine = {
       const chain = this.buildChain(oc, master, track);
       chain.gain.gain.value = track.volume;   // bounce at the track's real volume, ignore mute/solo
       this.scheduleAutomation(oc, chain, track, startBeat, lead, spb);
+      this.scheduleSidechain(chain, track, startBeat, lead, spb);
       for (const it of items) {
         if (it.track.id !== tid) continue;
         const c = it.clip;
@@ -1983,7 +1987,7 @@ const Engine = {
           const sp = c.speed || 1;
           for (const n of c.notes) {
             if (n.start >= c.length) continue;
-            const time = lead + (offBeat + n.start / sp) * spb;
+            const time = lead + (this.swingBeat(c.start + n.start / sp, track.swing) - startBeat) * spb;
             const durB = Math.min(n.length, c.length - n.start) / sp;
             const v = this.makeVoice(oc, clipDest, track.instrument, n.pitch + (c.pitch || 0) + (c.detune || 0) / 100, time, (n.vel ?? 0.9) * (c.gain ?? 1));
             v.stop(time + durB * spb);
@@ -2036,13 +2040,14 @@ const Engine = {
       const chain = this.buildChain(oc, master, t);
       chain.gain.gain.value = t.volume;       // ignore mute/solo for stems
       this.scheduleAutomation(oc, chain, t, 0, lead, spb);
+      this.scheduleSidechain(chain, t, 0, lead, spb);
       for (const c of t.clips) {
         if (c.kind === 'midi') {
           const clipDest = this.clipFxDest(oc, chain.input, c, rev.pre, offFx);
           const sp = c.speed || 1;
           for (const n of c.notes) {
             if (n.start >= c.length) continue;
-            const time = lead + (c.start + n.start / sp) * spb;
+            const time = lead + this.swingBeat(c.start + n.start / sp, t.swing) * spb;
             const durB = Math.min(n.length, c.length - n.start) / sp;
             const v = this.makeVoice(oc, clipDest, t.instrument, n.pitch + (c.pitch || 0) + (c.detune || 0) / 100, time, (n.vel ?? 0.9) * (c.gain ?? 1));
             v.stop(time + durB * spb);
@@ -2091,13 +2096,14 @@ const Engine = {
       if (!this.audible(t)) continue;
       const chain = this.buildChain(oc, master, t);
       this.scheduleAutomation(oc, chain, t, 0, lead, spb);
+      this.scheduleSidechain(chain, t, 0, lead, spb);
       for (const c of t.clips) {
         if (c.kind === 'midi') {
           const clipDest = this.clipFxDest(oc, chain.input, c, rev.pre, offFx);
           const sp = c.speed || 1;
           for (const n of c.notes) {
             if (n.start >= c.length) continue;
-            const time = lead + (c.start + n.start / sp) * spb;
+            const time = lead + this.swingBeat(c.start + n.start / sp, t.swing) * spb;
             const durB = Math.min(n.length, c.length - n.start) / sp;
             const v = this.makeVoice(oc, clipDest, t.instrument, n.pitch + (c.pitch || 0) + (c.detune || 0) / 100, time, (n.vel ?? 0.9) * (c.gain ?? 1));
             v.stop(time + durB * spb);
