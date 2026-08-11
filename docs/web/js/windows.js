@@ -145,7 +145,18 @@ const Windows = {
 
   close(id) {
     const w = this.wins.get(id);
-    if (w) { w.el.remove(); this.wins.delete(id); }
+    this.wins.delete(id);
+    if (w) {
+      const el = w.el;
+      const reduced = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+      if (reduced) el.remove();
+      else {
+        el.classList.add('fwin-closing');
+        // the reference is captured, so reopening during the fade removes the
+        // old element and leaves the new one alone
+        setTimeout(() => el.remove(), 130);
+      }
+    }
     App.syncWindowButtons();
   },
 
