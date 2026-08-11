@@ -1466,12 +1466,19 @@ const Engine = {
 
   recordPedal(down) {
     const rec = this.midiRec;
-    if (!rec || !rec.clip) return;
-    const beat = this.currentBeat() - rec.clip.start;
+    if (!rec) return;
+    if (!rec.clip) { (rec.pendingPedal = rec.pendingPedal || []).push({ at: this.currentBeat(), on: down }); return; }
+    this.writePedal(rec.clip, this.currentBeat(), down);
+  },
+
+  writePedal(clip, absBeat, down) {
+    const beat = absBeat - clip.start;
     if (beat < 0) return;
-    if (!rec.clip.sustain) rec.clip.sustain = [];
-    rec.clip.sustain.push({ beat, on: down });
-    rec.clip.sustain.sort((a, b) => a.beat - b.beat);
+    if (!clip.sustain) clip.sustain = [];
+    const last = clip.sustain[clip.sustain.length - 1];
+    if (last && !!last.on === !!down) return;      // no repeats of the same state
+    clip.sustain.push({ beat, on: !!down });
+    clip.sustain.sort((x, y) => x.beat - y.beat);
   },
 
   // ----- record played notes into a pattern clip -----
@@ -1487,7 +1494,10 @@ const Engine = {
       && startBeat >= c.start - 1e-6 && startBeat < c.start + clipBeats(c) - 1e-6);
     if (into) Undo.push('Record notes');
     this.midiRec = { trackId: track.id, clip: into || null, intoExisting: !!into,
-                     startBeat, held: new Map(), live: new Map() };
+                     startBeat, held: new Map(), live: new Map(), pendingPedal: null };
+    // Holding the pedal down already is a real state, but setPedal only fires
+    // on a change, so nothing would ever have written it.
+    if (this.pedalDown) this.recordPedal(true);
     KeysPanel.syncRecButton();
     const begin = (at) => {
       if (!this.midiRec) return; // cancelled during count-in
@@ -1511,6 +1521,11 @@ const Engine = {
         start: mr.startBeat, length: 4, notes: []
       };
       track.clips.push(mr.clip);
+      // pedal presses from before the first note belong in this clip
+      if (mr.pendingPedal) {
+        for (const e of mr.pendingPedal) this.writePedal(mr.clip, e.at, e.on);
+        mr.pendingPedal = null;
+      }
     }
     return mr.clip;
   },
@@ -1582,6 +1597,8 @@ const Engine = {
     const now = this.currentBeat();
     for (const [k, h] of mr.held) this.commitRecNote(h, now, k);   // close held notes
     mr.held.clear();
+    // a take that ends with the pedal still down leaves a span with no end
+    if (this.pedalDown && mr.clip) this.writePedal(mr.clip, now, false);
     mr.live.clear();
     if (this._growRaf) { cancelAnimationFrame(this._growRaf); this._growRaf = null; }
     this.midiRec = null;
