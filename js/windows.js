@@ -680,6 +680,7 @@ const Windows = {
     const list = w.body.querySelector('#fxList');
     const search = w.body.querySelector('#fxSearch');
     const render = () => {
+      this.stopSamplePreview();
       const q = search.value.trim().toLowerCase();
       list.innerHTML = '';
       for (const type of Object.keys(FX_DEFS)) {
@@ -708,6 +709,37 @@ const Windows = {
     search.addEventListener('input', render);
     render();
     App.syncWindowButtons();
+  },
+
+  // A loop can be a couple of minutes long and there was no way to stop one
+  // once it started: the play button only ever started things. It is a stop
+  // button while its own loop is playing.
+  _preview: null,
+  stopSamplePreview() {
+    clearTimeout(this._previewTimer);
+    try { Engine.stopAudition(); } catch (e) {}
+    const el = this._preview && this._preview.el;
+    if (el && el.isConnected) {
+      el.classList.remove('playing');
+      const u = el.querySelector('.samp-play use');
+      if (u) u.setAttribute('href', '#i-play');
+    }
+    this._preview = null;
+  },
+
+  toggleSamplePreview(sample, el) {
+    if (this._preview && this._preview.id === sample.id) { this.stopSamplePreview(); return; }
+    this.stopSamplePreview();
+    Engine.auditionSample(sample);
+    this._preview = { id: sample.id, el };
+    el.classList.add('playing');
+    const u = el.querySelector('.samp-play use');
+    if (u) u.setAttribute('href', '#i-stop');
+    // audition stops itself at the end, so the button has to come back on its
+    // own or it sits there offering to stop silence
+    const beats = Math.max(1, sample.length || 4);
+    this._previewTimer = setTimeout(() => this.stopSamplePreview(),
+      (beats * 60 / (S.bpm || 120)) * 1000 + 400);
   },
 
   // ---------- Samples browser (drag loops onto the timeline) ----------
@@ -765,7 +797,7 @@ const Windows = {
           });
           item.addEventListener('dragend', () => { Windows._dragSample = null; item.classList.remove('card-lifted'); });
           // click hears it (drag or double-click still adds it to the song)
-          item.addEventListener('click', () => Engine.auditionSample(s));
+          item.addEventListener('click', () => this.toggleSamplePreview(s, item));
           item.addEventListener('dblclick', () => { Engine.stopAudition(); App.addSampleToProject(s.id); });
           if (s.mine) {
             item.classList.add('samp-mine');

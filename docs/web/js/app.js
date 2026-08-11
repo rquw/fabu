@@ -431,36 +431,174 @@ const App = {
 
   // A finished little track built from the built-in loops, so a first-timer has
   // something to press play on and take apart.
+  // ---------- the example song ----------
+  // "Late Post" - A minor, 84bpm, thirty-two bars. Written as an arrangement
+  // rather than four loops stacked eight times, because the old one was the
+  // latter and it sounded like it: nothing entered, nothing left, nothing
+  // changed. This has an intro, a lift, a chorus, a break and an outro, and it
+  // uses the things fabu can do (swing, per-clip effects, automation) so that
+  // opening it up shows you where they live.
+  DEMO_CHORDS: [
+    // Am7, Dm7, G7, Cmaj7. One bar each, looping. Voiced close together in the
+    // middle of the piano so the chords sit under the melody, not over it.
+    [57, 60, 64, 67],
+    [57, 62, 65, 69],
+    [55, 59, 62, 65],
+    [55, 60, 64, 67]
+  ],
+
   loadDemo() {
     if (UI.playing || UI.recording) { Engine.stopRecord && Engine.stopRecord(); Engine.stop && Engine.stop(); }
     S = freshProject();
-    S.bpm = 100;
-    const lib = (id) => SAMPLE_LIB.find(s => s.id === id);
-    const clipAt = (sampleId, start) => {
-      const s = lib(sampleId);
-      if (!s) return null;
-      return {
-        id: uid('clip'), kind: 'midi', name: s.name, by: authorName(), start, length: s.length,
-        notes: s.notes.map(n => ({ id: uid('note'), pitch: n.pitch, start: n.start, length: n.length, vel: n.vel ?? 0.9 }))
-      };
+    S.bpm = 84;
+    S.swing = 0;
+
+    const N = (pitch, start, length, vel) => ({ id: uid('note'), pitch, start, length, vel });
+    const clip = (name, start, length, notes, fx) => {
+      const c = { id: uid('clip'), kind: 'midi', name, by: authorName(), start, length, notes };
+      if (fx) c.fx = fx.map(f => ({ id: uid('fx'), type: f[0], p: f[1] }));
+      return c;
     };
-    const layTrack = (name, instrument, sampleId, bars, fromBar = 0) => {
-      const t = makeTrack('midi');
-      t.name = name; t.instrument = instrument; t.clips = [];
-      for (let i = fromBar; i < bars; i++) { const c = clipAt(sampleId, i * 4); if (c) t.clips.push(c); }
-      return t;
+    const track = (name, instrument, clips, extra) =>
+      Object.assign(makeTrack('midi'), { name, instrument, clips }, extra || {});
+
+    // ---- drums ----
+    // A half-time backbeat: kick on 1 and the "and" of 3, snare on 3 only, so
+    // it leans back instead of marching. Hats in straight eighths, with the
+    // track's swing doing the rest.
+    const drumBar = (fill) => {
+      const n = [];
+      n.push(N(36, 0, 0.4, 0.95), N(36, 2.5, 0.4, 0.8));      // kick
+      n.push(N(38, 2, 0.4, 0.9));                              // snare
+      for (let i = 0; i < 8; i++) {
+        // the offbeat hats are quieter, which is what stops it sounding typed in
+        n.push(N(42, i * 0.5, 0.2, i % 2 ? 0.32 : 0.5));
+      }
+      if (fill) { n.push(N(38, 3.25, 0.2, 0.5), N(38, 3.5, 0.2, 0.65), N(38, 3.75, 0.2, 0.85)); }
+      return n;
     };
-    const BARS = 8;
-    const drums = layTrack('Drums', 'drums', 'dr_house', BARS);
-    const chords = layTrack('Chords', 'rpiano', 'me_chords', BARS);
-    drums.swing = 0.14; chords.swing = 0.14;   // a little shared groove
-    S.tracks.push(
-      drums,
-      layTrack('Bass', 'bass', 'ba_house', BARS),
-      chords,
-      layTrack('Lead', 'pluck', 'me_arp', BARS, 2)   // the arp enters at bar 3
-    );
+    const drumClips = [];
+    for (let bar = 4; bar < 32; bar++) {
+      if (bar >= 24 && bar < 28) continue;                     // the break: drums drop out
+      drumClips.push(clip('Beat', bar * 4, 4, drumBar((bar + 1) % 8 === 0),
+        // a gentle low pass all the way through is most of the lo-fi sound
+        bar === 4 ? [['dampen', { freq: 6500 }]] : [['dampen', { freq: 9000 }]]));
+    }
+
+    // ---- bass ----
+    // Root on the downbeat, fifth on the and-of-three. Long notes, no busyness.
+    const bassRoots = [45, 50, 43, 48];
+    const bassClips = [];
+    for (let bar = 4; bar < 32; bar++) {
+      if (bar >= 24 && bar < 26) continue;
+      const r = bassRoots[bar % 4];
+      bassClips.push(clip('Bass', bar * 4, 4,
+        [N(r, 0, 2.2, 0.9), N(r + 7, 2.5, 1.2, 0.72)]));
+    }
+
+    // ---- chords ----
+    // Upright piano, played slightly broken rather than as a block, and a touch
+    // late on the second half of the bar.
+    const chordClips = [];
+    for (let bar = 0; bar < 32; bar++) {
+      if (bar >= 24 && bar < 26) continue;
+      const ch = this.DEMO_CHORDS[bar % 4];
+      const notes = [];
+      ch.forEach((p, i) => notes.push(N(p, i * 0.035, 2.0, 0.62 - i * 0.03)));
+      ch.forEach((p, i) => notes.push(N(p, 2.5 + i * 0.03, 1.4, 0.5 - i * 0.03)));
+      chordClips.push(clip('Chords', bar * 4, 4, notes,
+        bar < 4 ? [['reverb', { amt: 0.5 }]] : [['reverb', { amt: 0.28 }]]));
+    }
+
+    // ---- melody, on vibes ----
+    // The tune. Four bars, answered by a variation, so it asks and answers.
+    const melA = [
+      N(76, 0, 0.9, 0.8), N(74, 1, 0.5, 0.7), N(72, 1.5, 1.4, 0.78),
+      N(69, 3.25, 0.6, 0.62),
+      N(72, 4, 0.9, 0.78), N(74, 5, 0.5, 0.7), N(76, 5.5, 1.8, 0.8),
+      N(72, 7.5, 0.4, 0.55)
+    ];
+    const melB = [
+      N(77, 0, 0.9, 0.82), N(76, 1, 0.5, 0.72), N(74, 1.5, 1.4, 0.8),
+      N(71, 3.25, 0.6, 0.64),
+      N(69, 4, 1.4, 0.8), N(72, 5.5, 0.5, 0.7), N(74, 6, 2.0, 0.84)
+    ];
+    const melClips = [
+      clip('Melody', 0, 8, melA, [['reverb', { amt: 0.55 }]]),
+      clip('Melody', 32, 8, melA, [['reverb', { amt: 0.3 }]]),
+      clip('Answer', 40, 8, melB, [['reverb', { amt: 0.3 }]]),
+      clip('Melody', 64, 8, melA, [['reverb', { amt: 0.3 }], ['echo', { time: 0.36, fb: 0.3, mix: 0.28 }]]),
+      clip('Answer', 72, 8, melB, [['reverb', { amt: 0.3 }], ['echo', { time: 0.36, fb: 0.3, mix: 0.28 }]]),
+      clip('Melody', 112, 8, melA, [['reverb', { amt: 0.6 }]])
+    ];
+
+    // ---- pluck arpeggio, from the lift onwards ----
+    const arpBar = () => {
+      const ch = [57, 60, 64, 67];
+      const n = [];
+      const order = [0, 1, 2, 3, 2, 1, 2, 3];
+      order.forEach((k, i) => n.push(N(ch[k] + 12, i * 0.5, 0.42, 0.34 + (i % 2 ? 0 : 0.08))));
+      return n;
+    };
+    const arpClips = [];
+    for (let bar = 12; bar < 24; bar++) {
+      const ch = this.DEMO_CHORDS[bar % 4];
+      const n = [];
+      const order = [0, 1, 2, 3, 2, 1, 2, 3];
+      order.forEach((k, i) => n.push(N(ch[k] + 12, i * 0.5, 0.42, 0.32 + (i % 2 ? 0 : 0.08))));
+      arpClips.push(clip('Arp', bar * 4, 4, n, [['echo', { time: 0.357, fb: 0.28, mix: 0.3 }]]));
+    }
+    for (let bar = 28; bar < 32; bar++) {
+      const ch = this.DEMO_CHORDS[bar % 4];
+      const n = [];
+      [0, 1, 2, 3, 2, 1, 2, 3].forEach((k, i) => n.push(N(ch[k] + 12, i * 0.5, 0.42, 0.3)));
+      arpClips.push(clip('Arp', bar * 4, 4, n, [['echo', { time: 0.357, fb: 0.28, mix: 0.3 }]]));
+    }
+
+    // ---- pad, holding the whole thing together ----
+    const padClips = [];
+    for (let bar = 8; bar < 32; bar += 2) {
+      if (bar >= 24 && bar < 26) continue;
+      const ch = this.DEMO_CHORDS[bar % 4];
+      padClips.push(clip('Pad', bar * 4, 8,
+        ch.map((p, i) => N(p - 12, 0, 7.6, 0.3 - i * 0.04)),
+        [['reverb', { amt: 0.6 }], ['lowcut', { freq: 120 }]]));
+    }
+
+    // ---- a sax line over the chorus ----
+    const saxClips = [
+      clip('Sax', 64, 8, [
+        N(69, 0.5, 1.6, 0.72), N(72, 2.25, 0.7, 0.66), N(71, 3, 1.2, 0.7),
+        N(67, 4.5, 1.4, 0.68), N(69, 6.25, 1.6, 0.74)
+      ], [['reverb', { amt: 0.4 }]]),
+      clip('Sax', 72, 8, [
+        N(76, 0.5, 1.4, 0.76), N(74, 2, 0.6, 0.66), N(72, 2.75, 2.0, 0.72),
+        N(69, 5.5, 2.2, 0.7)
+      ], [['reverb', { amt: 0.4 }]])
+    ];
+
+    const drums  = track('Drums',  'drumkit',  drumClips,  { swing: 0.18, vol: 0.9 });
+    const bass   = track('Bass',   'sub',      bassClips,  { vol: 0.85 });
+    const chords = track('Chords', 'rupright', chordClips, { swing: 0.18, vol: 0.8 });
+    const pad    = track('Pad',    'pad',      padClips,   { vol: 0.5 });
+    const mel    = track('Melody', 'rvibes',   melClips,   { vol: 0.8 });
+    const arp    = track('Arp',    'pluck',    arpClips,   { swing: 0.18, vol: 0.6 });
+    const sax    = track('Sax',    'rsax',     saxClips,   { vol: 0.7 });
+
+    // Automation, so the arrangement moves rather than just switching on and
+    // off: the pad opens up into the chorus and closes again for the outro.
+    pad.autom = { filter: [
+      { beat: 32,  v: 900 }, { beat: 60, v: 4200 }, { beat: 64, v: 9000 },
+      { beat: 96,  v: 9000 }, { beat: 112, v: 1400 }
+    ] };
+    pad.autoLanes = ['filter'];
+    // and the whole mix eases in and out at the edges
+    chords.autom = { volume: [{ beat: 0, v: 0.55 }, { beat: 16, v: 1 }, { beat: 116, v: 1 }, { beat: 128, v: 0 }] };
+
+    S.tracks.push(drums, bass, chords, pad, mel, arp, sax);
+
     Undo.undoStack.length = 0;
+
     Undo.redoStack.length = 0;
     UI.playhead = 0;
     UI.selClipId = null;
@@ -469,7 +607,8 @@ const App = {
     UI.dirty = true;
     UI.fileDirty = false;   // freshly loaded example; editing it will mark it unsaved
     this.currentPath = null;
-    $('#projName').value = tr('demo_name', 'Example song');
+    $('#projName').value = tr('demo_name', 'Late Post');
+    S.name = $('#projName').value;
     $('#bpmInput').value = S.bpm;
     if (Engine.ctx) { Engine.rebuildTracks(); Engine.updateAllTracks(); }
     Timeline.render();
@@ -764,7 +903,19 @@ const App = {
     return parts.length > 1 ? parts[parts.length - 2] : '';
   },
 
+  // Everything that could still be making a noise, silenced in one place.
+  silenceEverything() {
+    try { if (UI.playing) Engine.stop(); } catch (e) {}
+    try { if (Engine.midiRec) Engine.finishMidiRecord(); } catch (e) {}
+    try { Engine.stopAudition(); } catch (e) {}
+    try { if (typeof Gallery !== 'undefined') Gallery.stopPreview(); } catch (e) {}
+    try { if (typeof Windows !== 'undefined' && Windows.stopSamplePreview) Windows.stopSamplePreview(); } catch (e) {}
+    try { Engine.setPedal(false); } catch (e) {}
+    try { for (const k of [...Engine.liveKeys.keys()]) Engine.releaseKey(k); } catch (e) {}
+  },
+
   showHome() {
+    this.silenceEverything();
     this.showHomePage('home');
     const home = $('#home');
     home.classList.remove('closing');
