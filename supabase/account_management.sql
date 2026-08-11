@@ -1,4 +1,4 @@
--- fabu v1.0.1 — account management (change password, delete account).
+-- fabu v1.0.1: account management (change password, delete account).
 -- Run this once in the Supabase SQL editor (project utyhyjeqzrqbnszljmdh).
 -- Safe to re-run: uses create-or-replace and idempotent grants.
 
