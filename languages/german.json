@@ -1060,5 +1060,14 @@
   "autom_collapse": "Automation einklappen",
   "autom_expand": "Automation anzeigen",
   "autom_delete": "Diese Automation löschen",
-  "toast_autom_deleted": "{name}-Automation gelöscht"
+  "toast_autom_deleted": "{name}-Automation gelöscht",
+  "savename_title": "Benenne dein Projekt",
+  "savename_sub": "Es kommt in deinen fabu-Projektordner.",
+  "savename_go": "Speichern",
+  "savename_browse": "Stattdessen einen anderen Ordner wählen",
+  "untitled": "Unbenannt",
+  "saved_title": "Gespeichert",
+  "saved_sub": "{name} liegt in deinem fabu-Projektordner.",
+  "saved_open": "Projektordner öffnen",
+  "saved_exit": "Beenden"
 }

@@ -412,6 +412,45 @@ ipcMain.handle('save-file', async (e, { defaultName, filters, data, encoding }) 
 });
 
 // write straight to a known path (a project that already has a .fab file), so no dialog
+// The folder every project lives in unless somebody deliberately picks
+// another one. Created on demand so a fresh install has it the first time.
+function projectsDir() {
+  const dir = path.join(app.getPath('documents'), 'fabu projects');
+  fs.mkdirSync(dir, { recursive: true });
+  return dir;
+}
+
+ipcMain.handle('projects-dir', async () => {
+  try { return { ok: true, path: projectsDir() }; }
+  catch (err) { return { ok: false, error: String(err) }; }
+});
+
+// Save straight into the project folder under a given name. Never silently
+// writes over somebody else's project: an existing name gets a number, the way
+// a download would.
+ipcMain.handle('save-to-projects', async (e, { name, data }) => {
+  try {
+    const dir = projectsDir();
+    const base = String(name || 'Untitled').replace(/[\\/:*?"<>|]/g, '').trim() || 'Untitled';
+    let file = path.join(dir, base + '.fab');
+    let n = 2;
+    while (fs.existsSync(file)) file = path.join(dir, base + ' ' + (n++) + '.fab');
+    fs.writeFileSync(file, data, 'utf8');
+    return { ok: true, path: file, name: path.basename(file) };
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  }
+});
+
+// show the saved file in Finder/Explorer, selected
+ipcMain.handle('reveal-path', async (e, { filePath }) => {
+  try {
+    if (filePath) shell.showItemInFolder(filePath);
+    else shell.openPath(projectsDir());
+    return { ok: true };
+  } catch (err) { return { ok: false, error: String(err) }; }
+});
+
 ipcMain.handle('write-file', async (e, { filePath, data, encoding }) => {
   try {
     if (encoding === 'base64') fs.writeFileSync(filePath, Buffer.from(data, 'base64'));

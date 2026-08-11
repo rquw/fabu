@@ -1060,5 +1060,14 @@
   "autom_collapse": "Fold the automation away",
   "autom_expand": "Show the automation",
   "autom_delete": "Delete this automation",
-  "toast_autom_deleted": "{name} automation deleted"
+  "toast_autom_deleted": "{name} automation deleted",
+  "savename_title": "Name your project",
+  "savename_sub": "It goes in your fabu projects folder.",
+  "savename_go": "Save",
+  "savename_browse": "Choose a different folder instead",
+  "untitled": "Untitled",
+  "saved_title": "Saved",
+  "saved_sub": "{name} is in your fabu projects folder.",
+  "saved_open": "Open project folder",
+  "saved_exit": "Exit"
 }

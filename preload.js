@@ -3,6 +3,9 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('electronAPI', {
   saveFile: (opts) => ipcRenderer.invoke('save-file', opts),
   writeFile: (opts) => ipcRenderer.invoke('write-file', opts),
+  saveToProjects: (opts) => ipcRenderer.invoke('save-to-projects', opts),
+  projectsDir: () => ipcRenderer.invoke('projects-dir'),
+  revealPath: (opts) => ipcRenderer.invoke('reveal-path', opts),
   openFile: (opts) => ipcRenderer.invoke('open-file', opts),
   openPath: (opts) => ipcRenderer.invoke('open-path', opts),
   getLanguages: () => ipcRenderer.invoke('get-languages'),

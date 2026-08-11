@@ -234,11 +234,37 @@ const App = {
     };
     wrap.querySelector('#exSave').addEventListener('click', async () => {
       const ok = await this.save();
-      if (ok) done(); // if the save dialog was cancelled, stay
+      if (!ok) return;                       // cancelled at the name prompt: stay
+      if (kind === 'close' && window.electronAPI && window.electronAPI.revealPath) {
+        this.showSavedStep(wrap, done);
+        return;
+      }
+      done();
     });
     wrap.querySelector('#exDiscard').addEventListener('click', done);
     wrap.querySelector('#exStay').addEventListener('click', () => wrap.remove());
     wrap.addEventListener('mousedown', (e) => { if (e.target === wrap) wrap.remove(); });
+  },
+
+  // The last screen before the app closes: it says where the project went, and
+  // offers to show you rather than making you go and find it.
+  showSavedStep(wrap, exit) {
+    const name = (this.currentPath || '').split(/[\\/]/).pop() || this.projectFileName('.fab');
+    wrap.innerHTML = `
+      <div class="modal-card">
+        <div class="modal-title">${tr('saved_title', 'Saved')}</div>
+        <div class="modal-sub">${tr('saved_sub', '{name} is in your fabu projects folder.', { name: escapeHtml(name) })}</div>
+        <div class="modal-btns" style="flex-direction:column;align-items:stretch">
+          <button id="savedOpen" class="fbtn">${tr('saved_open', 'Open project folder')}</button>
+          <button id="savedExit" class="fbtn accent">${tr('saved_exit', 'Exit')}</button>
+        </div>
+      </div>`;
+    wrap.querySelector('#savedOpen').addEventListener('click', () => {
+      window.electronAPI.revealPath({ filePath: this.currentPath || null });
+      // deliberately does not exit: opening the folder and having the app
+      // vanish underneath you is not what that button says it does
+    });
+    wrap.querySelector('#savedExit').addEventListener('click', exit);
   },
 
   goHome() {
@@ -1825,6 +1851,43 @@ const App = {
 
   // ---------- save / load / export (.fab & .wav) ----------
 
+  // Ask for a name, not for a folder.
+  askProjectName() {
+    return new Promise((resolve) => {
+      const wrap = document.createElement('div');
+      wrap.className = 'modal-back';
+      wrap.innerHTML = `
+        <div class="modal-card">
+          <div class="modal-title">${tr('savename_title', 'Name your project')}</div>
+          <div class="modal-sub">${tr('savename_sub', 'It goes in your fabu projects folder.')}</div>
+          <input id="saveNameIn" type="text" maxlength="60" spellcheck="false">
+          <div class="modal-btns">
+            <button id="saveNameNo" class="fbtn">${tr('cancel', 'Cancel')}</button>
+            <button id="saveNameGo" class="fbtn accent">${tr('savename_go', 'Save')}</button>
+          </div>
+          <button id="saveNameBrowse" class="auth-inline" style="margin-top:10px">${tr('savename_browse', 'Choose a different folder instead')}</button>
+        </div>`;
+      document.body.appendChild(wrap);
+      const input = wrap.querySelector('#saveNameIn');
+      input.value = ($('#projName').value || '').trim() || tr('untitled', 'Untitled');
+      const done = (v) => { wrap.remove(); resolve(v); };
+      const go = () => {
+        const v = input.value.trim();
+        if (!v) { input.focus(); return; }
+        done(v);
+      };
+      wrap.querySelector('#saveNameGo').addEventListener('click', go);
+      wrap.querySelector('#saveNameNo').addEventListener('click', () => done(null));
+      wrap.querySelector('#saveNameBrowse').addEventListener('click', () => done('__browse__'));
+      wrap.addEventListener('mousedown', (e) => { if (e.target === wrap) done(null); });
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') go();
+        if (e.key === 'Escape') { e.stopPropagation(); done(null); }
+      });
+      setTimeout(() => { input.focus(); input.select(); }, 50);
+    });
+  },
+
   projectFileName(ext) {
     return ($('#projName').value.trim() || 'Untitled') + ext;
   },
@@ -1863,11 +1926,27 @@ const App = {
         }
         // file moved/deleted: fall through to the dialog
       }
-      const res = await window.electronAPI.saveFile({
-        defaultName: fname,
-        filters: [{ name: 'fabu Project', extensions: ['fab'] }],
-        data: json, encoding: 'utf8'
-      });
+      let res;
+      if (window.electronAPI.saveToProjects) {
+        const name = await this.askProjectName();
+        if (name == null) return false;                   // cancelled
+        if (name === '__browse__') {
+          res = await window.electronAPI.saveFile({
+            defaultName: fname,
+            filters: [{ name: 'fabu Project', extensions: ['fab'] }],
+            data: json, encoding: 'utf8'
+          });
+        } else {
+          res = await window.electronAPI.saveToProjects({ name, data: json });
+          if (res.ok) $('#projName').value = name;
+        }
+      } else {
+        res = await window.electronAPI.saveFile({
+          defaultName: fname,
+          filters: [{ name: 'fabu Project', extensions: ['fab'] }],
+          data: json, encoding: 'utf8'
+        });
+      }
       if (res.ok) {
         UI.dirty = false;
         UI.fileDirty = false;
