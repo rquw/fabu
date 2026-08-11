@@ -4,24 +4,52 @@ const CHANGELOG = [
   "version": "Unreleased",
   "items": [
    {
-    "title": "Your loops can go where other people will find them",
-    "body": "There is a gallery now. Put a loop in it from the loop editor, browse by newest, most liked, or only people you follow, and add anything you hear straight into your own loops with the author's name still on it. Profiles carry a line about you and a colour. Following each other both ways makes you friends. A shared loop is a recipe, not a recording: notes, an instrument name and a length, a few hundred bytes. That is why this can exist for free, and why nothing in it accepts audio. Reports are per person, three from different people takes a loop down on its own, and it can be put back."
+    "title": "fabu works on a phone and an iPad now",
+    "body": "It really did not before. The page could scroll sideways by eight pixels, which was enough to slide the whole app left and take the close button of whatever you had open off the edge of the screen, which is why the piano roll was a room with no door. Windows are proper sheets on a touch screen: pinned to the bottom, full width, with a grab bar, a close button you can actually hit, and a dimmed backdrop you tap to get out of. Nothing opens bigger than the screen any more."
    },
    {
-    "title": "The piano roll suggests what comes next",
-    "body": "Write a chord or two and it works out where they sit in the key, then offers the one that usually follows. Tab adds it, Shift+Tab picks a different option. It says \"G major\", not \"V\", because nobody should need theory to use it, and it can be turned off in Settings."
+    "title": "The piano roll got what it was missing",
+    "body": "You can reach other octaves without a mouse wheel, which means you can reach them at all on a tablet: octave buttons in the toolbar, or drag the piano keys up and down. The keyboard lives in the piano roll now, next to the pattern it plays into, and recording on top of a pattern goes into that pattern instead of building a separate take on a new track. Notes appear as you press and lengthen while you hold."
    },
    {
-    "title": "fabu works on a phone",
-    "body": "Not as a compromise: dragging patterns, the piano roll, the loop library and the mixer all work with a finger. Press and hold a loop to pick it up. The track list no longer eats the whole screen, the toolbar keeps every tool instead of quietly dropping them, and windows open as sheets along the bottom."
+    "title": "Automation you can see",
+    "body": "A track can show its volume, filter or pan as a lane underneath it, at the same zoom as the song. Quiet at the start and loud at the end is a shape that rises. Click adds a point, drag moves it."
    },
    {
-    "title": "Being removed from a room now sticks",
-    "body": "Moderation used to key on the display name, which is typed in by the person being moderated, so a kick lasted as long as it took to pick a new one. It does not any more. If somebody clears their browser and comes back on the same connection, the host is told by name and gets a \"let them in\" button, in case it turns out to be somebody's brother on the same wifi."
+    "title": "The loop button looked like undo because it was using the undo icon",
+    "body": "It has its own now."
    },
    {
-    "title": "Humanize, and real automation curves",
-    "body": "Nudge timing and loudness slightly so a part sounds played rather than programmed. Automation points can ease in and out instead of only running straight between each other."
+    "title": "The letters on the on-screen keyboard match your actual keyboard",
+    "body": "They were a fixed German row before, so they were wrong on QWERTY and very wrong on AZERTY. Which note each key plays never depended on this and has always worked on any layout."
+   },
+   {
+    "title": "Saving asks for a name, not a folder",
+    "body": "It goes in your fabu projects folder, and Save and exit tells you where it went and offers to open it. An existing name gets a number rather than being written over."
+   },
+   {
+    "title": "Smaller things",
+    "body": ""
+   },
+   {
+    "title": "",
+    "body": "fabu opens filling the screen the first time. Resize it and that sticks."
+   },
+   {
+    "title": "",
+    "body": "Windows and Linux no longer get a File/Edit/View menu bar that does nothing."
+   },
+   {
+    "title": "",
+    "body": "Closing the app closes it, instead of waiting on a round trip first."
+   },
+   {
+    "title": "",
+    "body": "The greeting follows the clock. Six in the morning gets \"Early music production?\"."
+   },
+   {
+    "title": "",
+    "body": "Loops in the gallery can be listened to before you take them."
    }
   ]
  },

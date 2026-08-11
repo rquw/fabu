@@ -2,6 +2,33 @@
 
 ## Unreleased
 
+**fabu works on a phone and an iPad now.**
+It really did not before. The page could scroll sideways by eight pixels, which was enough to slide the whole app left and take the close button of whatever you had open off the edge of the screen, which is why the piano roll was a room with no door. Windows are proper sheets on a touch screen: pinned to the bottom, full width, with a grab bar, a close button you can actually hit, and a dimmed backdrop you tap to get out of. Nothing opens bigger than the screen any more.
+
+**The piano roll got what it was missing.**
+You can reach other octaves without a mouse wheel, which means you can reach them at all on a tablet: octave buttons in the toolbar, or drag the piano keys up and down. The keyboard lives in the piano roll now, next to the pattern it plays into, and recording on top of a pattern goes into that pattern instead of building a separate take on a new track. Notes appear as you press and lengthen while you hold.
+
+**Automation you can see.**
+A track can show its volume, filter or pan as a lane underneath it, at the same zoom as the song. Quiet at the start and loud at the end is a shape that rises. Click adds a point, drag moves it.
+
+**The loop button looked like undo because it was using the undo icon.**
+It has its own now.
+
+**The letters on the on-screen keyboard match your actual keyboard.**
+They were a fixed German row before, so they were wrong on QWERTY and very wrong on AZERTY. Which note each key plays never depended on this and has always worked on any layout.
+
+**Saving asks for a name, not a folder.**
+It goes in your fabu projects folder, and Save and exit tells you where it went and offers to open it. An existing name gets a number rather than being written over.
+
+**Smaller things**
+- fabu opens filling the screen the first time. Resize it and that sticks.
+- Windows and Linux no longer get a File/Edit/View menu bar that does nothing.
+- Closing the app closes it, instead of waiting on a round trip first.
+- The greeting follows the clock. Six in the morning gets "Early music production?".
+- Loops in the gallery can be listened to before you take them.
+- Chord suggestions are gone.
+
+
 **Your loops can go where other people will find them.**
 There is a gallery now. Put a loop in it from the loop editor, browse by newest, most liked, or only people you follow, and add anything you hear straight into your own loops with the author's name still on it. Profiles carry a line about you and a colour. Following each other both ways makes you friends.
 
