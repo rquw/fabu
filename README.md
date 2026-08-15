@@ -9,37 +9,17 @@ https://rquw.github.io/fabu/
 
 ## what it does
 
-- piano roll, synth instruments, a drum kit, and you can build your own
+- piano roll, various instruments, and you can build your own
   instrument out of any audio file
-- per clip effects: gain, pitch, speed, drive, bitcrush, filter, fades
-- 3 band EQ, pan, mute, solo, automation lanes
-- record the mic, or record notes live off your keyboard
-- multiplayer. same project at the same time, with cursors and host controls
-- saves as .fab, exports wav / mp3 / ogg
-
-## running it
-
-```bash
-npm install
-npm start
-```
-
-## building
-
-```bash
-npm run dist        # whatever os youre on
-npm run dist:mac    # universal dmg
-npm run dist:win    # windows exe
-```
-
-Pushing a version tag builds both and puts them on the releases page. The app
-updates itself from there.
-
-## relay
-
-Multiplayer goes through a small websocket relay, it lives in `relay/`. Any
-free node host does the job, mine is on Render.
-
+- effect lanes with keyframes (automation lanes)
+- equalizer
+- record the mic, or record notes live off your keyboard. you can also use a MIDI keyboard but idk if that'll work. i haven't tested it
+- multiplayer. same project at the same time. up to 100 concurrent people (could get laggy lol)
+- saves as .fab, exports wav / mp3 / ogg. you can also export as MIDI or the different stems
+- automatic updates (may not work on windows. working on it)
+- a sample (or as it is called in the app, "loops") browser where you can upload your own or use posted samples from others
+- AND MORE !!!!!!!
+- 
 ## license
 
 MIT, see LICENSE.
