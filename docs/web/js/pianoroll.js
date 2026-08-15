@@ -1051,10 +1051,12 @@ const PianoRoll = {
     return Math.max(0, Math.min(84, 12 + rows) - rows + 1);
   },
 
-  // drum clips have their own row order, so up/down walks that instead of semitones
+  // drum clips have their own row order, so up/down walks that instead of semitones.
+  // rows go by pitch class, same as pitchToY, since a kick can be 36 or 60
   stepPitch(pitch, d) {
     if (!this._rowMap) return clamp(pitch + d, this.pitchFloor(), 120);
-    const i = this._rowMap.indexOf(pitch);
+    const pc = (p) => ((p % 12) + 12) % 12;
+    const i = this._rowMap.findIndex(rp => pc(rp) === pc(pitch));
     if (i < 0) return pitch;
     return this._rowMap[clamp(i - d, 0, this._rowMap.length - 1)];
   },
