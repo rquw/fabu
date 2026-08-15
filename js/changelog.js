@@ -34,6 +34,14 @@ const CHANGELOG = [
    {
     "title": "",
     "body": "The shortcut list shows the letters that are actually on your keyboard."
+   },
+   {
+    "title": "",
+    "body": "Turning the MIDI keyboard or the metronome on in Settings threw an error behind the scenes and left the panel stale."
+   },
+   {
+    "title": "",
+    "body": "Recovering a session said the backup could not be opened even though it had just worked."
    }
   ]
  },

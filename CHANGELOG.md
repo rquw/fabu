@@ -9,6 +9,8 @@
 - Pasting notes lands at the playhead. It always went to the start of the pattern before.
 - Patterns slide up against each other when you nudge them instead of refusing to move.
 - The shortcut list shows the letters that are actually on your keyboard.
+- Turning the MIDI keyboard or the metronome on in Settings threw an error behind the scenes and left the panel stale.
+- Recovering a session said the backup could not be opened even though it had just worked.
 
 ## 1.2.6
 - new app icon!

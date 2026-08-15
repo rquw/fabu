@@ -555,7 +555,7 @@ const Sync = {
       try {
         Undo.push('Restore session');
         Object.assign(S, r.state);
-        App.rebuildAll ? App.rebuildAll() : (Timeline.render(), Mixer && Mixer.render && Mixer.render());
+        afterStateRestore();   // Mixer never existed, so this always threw and said the backup was broken
         toast(tr('mp_recovered', 'Recovered your project from the last session'), 'green');
       } catch (e) { toast(tr('mp_restore_fail', 'That backup could not be opened'), 'red'); }
       this.clearRecovery();

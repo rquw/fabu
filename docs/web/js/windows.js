@@ -887,6 +887,9 @@ const Windows = {
 
   buildSettings(box) {
     box.innerHTML = '';
+    // the checkboxes used to call the window's own refresh, which is gone
+    // now this is shared with the home page. same thing, rebuild into the box.
+    const refresh = () => this.buildSettings(box);
     const inProject = !!S && !App.homeVisible();
     const head = (text, note) => {
       const h = document.createElement('div');
@@ -917,7 +920,7 @@ const Windows = {
         (v) => { Undo.push('Count-in setting'); S.countIn = v; toast(tr(v ? 'toast_countin_on' : 'toast_countin_off', 'Count-in ' + (v ? 'on' : 'off'))); });
       mkCheck(tr('set_metro', 'Metronome while playing'), S.metronome,
         tr('tip_set_metro', 'Click on every beat (M)'),
-        (v) => { App.setMetronome(v); w.refresh(); });
+        (v) => { App.setMetronome(v); refresh(); });
     }
 
     head(tr('set_sec_app', 'fabu'));
@@ -931,7 +934,7 @@ const Windows = {
     if (typeof MIDI !== 'undefined' && MIDI.supported()) {
       mkCheck(tr('set_midi', 'MIDI keyboard input'), MIDI.enabled,
         tr('tip_midi', 'Play and record instruments from a connected MIDI keyboard.'),
-        (v) => { MIDI.setEnabled(v); w.refresh(); });
+        (v) => { MIDI.setEnabled(v); refresh(); });
       const midiInfo = document.createElement('div');
       midiInfo.style.cssText = 'font-size:11px;color:var(--faint);margin:-4px 0 8px 26px';
       const devs = MIDI.deviceNames();
