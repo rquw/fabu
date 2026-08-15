@@ -1,26 +1,3 @@
-// fabu relay: a room-based WebSocket broadcaster.
-// Deploy on Render as a Node web service. Health check answers "fabu relay ok".
-//
-// The relay stays deliberately dumb about MUSIC: it does not know what a note
-// is, who the host is, or what the room rules are, and it should not. That is
-// the app's business. What it does have to understand is ABUSE, because a
-// modified client simply skips whatever the app would have checked.
-//
-// What it enforces:
-//   - a socket only reaches the room it actually joined
-//   - room codes have to look like room codes
-//   - rooms have a size cap, and one address cannot open endless sockets
-//   - messages have size caps, and every socket has a rate budget
-//   - dead sockets are reaped
-//   - every joiner carries an identity it did not write itself
-//
-// That last one matters more than it sounds. The host's moderation used to key
-// on the display name, which the person being moderated types in. So a kick
-// lasted exactly as long as it took to pick a new name. The relay is the only
-// party here that knows something about a connection that the connection cannot
-// lie about, so it stamps a connection key onto the frames that establish who
-// somebody is. The key is a keyed hash, never an address: the host learns that
-// two joiners share a connection, and nothing else about either of them.
 const http = require('http');
 const crypto = require('crypto');
 const { WebSocketServer } = require('ws');
@@ -36,13 +13,8 @@ const RATE_BYTES = 6 * 1024 * 1024;  // bytes per window per socket
 const STRIKES = 10;                  // rate violations tolerated before closing
 const ROOM_RE = /^[A-Z0-9]{4,12}$/;
 
-// Only the frames that say "this is who I am" are stamped. Cursors and note
-// edits go out untouched, so the common path stays a straight forward with no
-// re-serialisation, and compressed state frames stay opaque bytes.
 const STAMPED = new Set(['knock', 'presence', 'bye']);
 
-// A secret that outlives restarts keeps connection keys stable across deploys.
-// Without one the keys still work, they just all change when the relay does.
 const SECRET = process.env.RELAY_SECRET || crypto.randomBytes(32).toString('hex');
 function connKey(ip) {
   return crypto.createHmac('sha256', SECRET).update('conn:' + ip).digest('hex').slice(0, 12);
@@ -61,8 +33,6 @@ const server = http.createServer((req, res) => {
   res.end('fabu relay ok');
 });
 
-// maxPayload is the hard backstop: ws rejects anything larger before we ever
-// see it, so an enormous frame cannot be used to exhaust memory.
 const wss = new WebSocketServer({ server, maxPayload: MAX_STATE + 256 * 1024 });
 
 function ipOf(req) {
@@ -121,14 +91,12 @@ wss.on('connection', (ws, req) => {
     try {
       const size = data.length || data.byteLength || 0;
 
-      // ---- rate budget, per socket, per second ----
+      // ---- rate budget ----
       const now = Date.now();
       if (now - ws.winStart >= RATE_WINDOW) { ws.winStart = now; ws.winMsgs = 0; ws.winBytes = 0; }
       ws.winMsgs++;
       ws.winBytes += size;
       if (ws.winMsgs > RATE_MSGS || ws.winBytes > RATE_BYTES) {
-        // Drop the message rather than the client: one burst is usually a laggy
-        // connection catching up. Bursting over and over is not.
         if (++ws.strikes > STRIKES) {
           refuse(ws, 'rate');
           try { ws.close(1008, 'rate limit'); } catch (e) {}
@@ -147,24 +115,15 @@ wss.on('connection', (ws, req) => {
       }
 
       // ---- size caps by kind ----
-      // Only a project state has any business being large. A 12 MB cursor
-      // packet is not a cursor packet.
       const isState = !head || head.type === 'state';
       if (size > (isState ? MAX_STATE : MAX_MSG)) { refuse(ws, 'too_big'); return; }
 
       // ---- routing ----
-      // The destination is the room this socket JOINED, never the one the
-      // message claims. Trusting the message let anybody broadcast into any
-      // room without ever being in it, which defeats every moderation control
-      // the host has, since those only apply to people who actually joined.
       const room = ws.room;
       if (!room) return;
       const set = rooms.get(room);
       if (!set) return;
 
-      // Identity frames are re-written with what WE know about the socket, so
-      // whatever the sender put in these two fields is overwritten rather than
-      // trusted. Everything else is forwarded byte for byte.
       let out = data;
       if (head && STAMPED.has(head.type)) {
         head._pk = ws.pk;
@@ -187,7 +146,6 @@ wss.on('connection', (ws, req) => {
   ws.on('error', bye);
 });
 
-// sweep dead connections so rooms never fill with ghosts
 setInterval(() => {
   for (const ws of wss.clients) {
     if (!ws.isAlive) { try { ws.terminate(); } catch (e) {} continue; }

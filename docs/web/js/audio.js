@@ -1,4 +1,4 @@
-// ---------- Audio engine: instruments, playback scheduler, recording, export ----------
+// ---------- audio engine ----------
 'use strict';
 
 const INSTRUMENTS = {
@@ -23,30 +23,18 @@ const INSTRUMENTS = {
   drumkit: 'Acoustic Kit'
 };
 
-// real recorded melodic instruments (bundled CC0 MP3s in assets/instr), played
-// multi-zone: pick the sample whose root is nearest the note, then pitch-shift a little
 const MELODIC = {
   rpiano: { name: 'Grand Piano', attack: 0.004, release: 0.18, zones: [{ file: 'piano_c2', root: 36 }, { file: 'piano_c4', root: 60 }, { file: 'piano_c6', root: 84 }] },
   rvibes: { name: 'Vibraphone', attack: 0.003, release: 0.4, zones: [{ file: 'vibes_c3', root: 48 }, { file: 'vibes_d4', root: 62 }, { file: 'vibes_a4', root: 69 }, { file: 'vibes_c5', root: 72 }, { file: 'vibes_e5', root: 76 }] },
-  // roots below were measured from the audio, not taken from the file names
-  // (VCSL labels these an octave off, which would have detuned everything)
   rupright: { name: 'Upright Piano', gain: 2.6, attack: 0.004, release: 0.2, zones: [{ file: 'upright_c3', root: 48 }, { file: 'upright_c4', root: 60 }, { file: 'upright_c5', root: 72 }, { file: 'upright_c6', root: 84 }, { file: 'upright_c7', root: 96 }] },
   rglock: { name: 'Glockenspiel', gain: 5.5, attack: 0.002, release: 0.5, zones: [{ file: 'glock_g5', root: 79 }, { file: 'glock_c6', root: 84 }, { file: 'glock_c7', root: 96 }, { file: 'glock_c8', root: 108 }] },
-  // Wind and brass from the University of Iowa Musical Instrument Samples
-  // (Lawrence Fritts), which the university publishes for use in any project
-  // without restriction. Sliced out of their chromatic scale recordings; the
-  // roots below are the pitch each note actually sounded, so a trumpet that
-  // records 8 cents flat plays in tune here.
   rtrumpet: { name: 'Trumpet', gain: 0.64, attack: 0.02, release: 0.16, zones: [{ file: 'trumpet_g3', root: 54.936 }, { file: 'trumpet_b3', root: 58.93 }, { file: 'trumpet_e4', root: 63.898 }, { file: 'trumpet_g4', root: 66.892 }, { file: 'trumpet_c5', root: 71.932 }, { file: 'trumpet_g5', root: 79.121 }] },
   rflute: { name: 'Flute', gain: 2.34, attack: 0.03, release: 0.18, zones: [{ file: 'flute_d4', root: 61.923 }, { file: 'flute_g4', root: 67.055 }, { file: 'flute_c5', root: 72.101 }, { file: 'flute_g5', root: 79.053 }, { file: 'flute_c6', root: 84.214 }] },
   rsax: { name: 'Saxophone', gain: 0.93, attack: 0.022, release: 0.17, zones: [{ file: 'sax_cs3', root: 49.136 }, { file: 'sax_g3', root: 55.093 }, { file: 'sax_c4', root: 60.106 }, { file: 'sax_g4', root: 67.228 }, { file: 'sax_c5', root: 72.252 }, { file: 'sax_f5', root: 77.295 }] },
-  // Pipe organ from VCSL. These filenames were honest, unlike the ones above it.
   organ: { name: 'Organ', gain: 4.28, attack: 0.03, release: 0.12, zones: [{ file: 'organ_c2', root: 36.027 }, { file: 'organ_c3', root: 47.995 }, { file: 'organ_c4', root: 59.985 }, { file: 'organ_c5', root: 71.993 }] },
   rharp: { name: 'Harp', gain: 4.2, attack: 0.003, release: 0.35, zones: [{ file: 'harp_d2', root: 38 }, { file: 'harp_g3', root: 55 }, { file: 'harp_c5', root: 72 }, { file: 'harp_d6', root: 86 }] }
 };
 
-// pitch-class -> bundled real drum sample (assets/oneshots). Same layout as the
-// synth kit (kick=C, snare=D, clap=E, closed hat=F#, open hat=A#) plus a tom.
 const DRUMKIT_MAP = { 0: 'kick', 2: 'snare', 4: 'clap', 6: 'hat_closed', 9: 'tom', 10: 'hat_open' };
 
 const Engine = {
@@ -58,7 +46,6 @@ const Engine = {
   live: new Set(),       // killable handles for everything currently sounding
   liveKeys: new Map(),   // "trackId:pitch" -> voice (computer keyboard)
 
-  // playback
   startCtxTime: 0,
   startBeat: 0,
   schedTimer: null,
@@ -66,23 +53,15 @@ const Engine = {
   evIdx: 0,
   nextClickBeat: 0,
 
-  // sustain pedal (live playing)
   pedalDown: false,
   pedalHeld: new Set(),   // keys let go of while the pedal is down
 
-  // recording
   mediaRec: null,
   recChunks: [],
   recStream: null,
   recStartBeat: 0,
   midiRec: null,        // { trackId, clip, startBeat, held: Map } while note-recording
 
-  // A last ceiling after the glue compressor. The compressor is deliberately
-  // gentle (-3 dB, 3:1) so it does not duck quiet notes, which means a project
-  // with a lot stacked on it can still leave peaks above 1.0, and anything
-  // above 1.0 clips the moment it becomes a file. This curve is exactly linear
-  // below 0.8, so ordinary material passes through untouched, and folds what is
-  // above that into the remaining headroom instead of letting it square off.
   ceilingCurve() {
     if (this._ceilCurve) return this._ceilCurve;
     const n = 4096, c = new Float32Array(n);
@@ -98,10 +77,6 @@ const Engine = {
   makeCeiling(ac) {
     const ws = ac.createWaveShaper();
     ws.curve = this.ceilingCurve();
-    // No oversampling on purpose. Oversampling filters ring, and that ringing
-    // overshoots the curve's own maximum, which is the one thing this node
-    // exists to prevent: measured, 4x still let 20 samples past 1.0. With none,
-    // the output is exactly a table lookup and cannot exceed the table.
     ws.oversample = 'none';
     return ws;
   },
@@ -109,9 +84,6 @@ const Engine = {
   ensureCtx() {
     if (this.ctx) return this.ctx;
     this.ctx = new AudioContext({ latencyHint: 'interactive' });
-  // A gentle glue/limiter, not a pumping compressor. The old aggressive
-    // settings (thr -8, ratio 6) ducked quiet notes hard whenever one loud
-    // sound hit, so notes seemed to "cut out"; this only catches the peaks.
     this.comp = this.ctx.createDynamicsCompressor();
     this.comp.threshold.value = -3;
     this.comp.knee.value = 8;
@@ -122,7 +94,6 @@ const Engine = {
     this.master.gain.value = S.masterVol;
     this.master.connect(this.comp);
     this.ceiling = this.makeCeiling(this.ctx);
-    // a little room reverb makes the synths feel real
     this.rev = this.buildReverb(this.ctx, this.master, this.comp, 0.16);
     if (this.ecoMode()) { try { this.rev.pre.disconnect(this.rev.conv); } catch (e) {} }
     this.comp.connect(this.ceiling);
@@ -136,7 +107,6 @@ const Engine = {
 
   spb() { return 60 / S.bpm; },
 
-  // a synthesized impulse response: exponentially decaying stereo noise
   impulse(ac, seconds = 1.7, decay = 2.6) {
     const len = Math.floor(ac.sampleRate * seconds);
     const buf = ac.createBuffer(2, len, ac.sampleRate);
@@ -149,8 +119,6 @@ const Engine = {
     return buf;
   },
 
-  // master reverb send: dryBus -> convolver -> wet -> dest (dryBus already -> dest)
-  // `pre` is exposed so per-clip reverb effects can send into the same convolver.
   buildReverb(ac, source, dest, wetLevel) {
     const conv = ac.createConvolver();
     conv.buffer = this.impulse(ac);
@@ -160,8 +128,6 @@ const Engine = {
     return { conv, wet, pre };
   },
 
-  // eco mode: cheaper audio path for low-end machines (no convolver, fewer voices)
-  // scrubbing preference (on by default). Drag the playhead to hear what's under it.
   scrubOn() { try { return localStorage.getItem('fabu.scrub') !== '0'; } catch (e) { return true; } },
   setScrub(on) { try { localStorage.setItem('fabu.scrub', on ? '1' : '0'); } catch (e) {} if (!on) this.scrubEnd(); },
   ecoMode() { try { return localStorage.getItem('fabu.eco') === '1'; } catch (e) { return false; } },
@@ -176,9 +142,6 @@ const Engine = {
   },
   voiceCap() { return this.ecoMode() ? 40 : 96; },
 
-  // Every sounding voice registers here. Past the cap we steal the voices that
-  // are CLOSEST TO ENDING (least audible to cut) instead of the oldest. The
-  // old "steal oldest" logic chopped sustained notes off mid-hold.
   registerVoice(h, endTime) {
     if (endTime) h._end = endTime;
     this.live.add(h);
@@ -190,8 +153,7 @@ const Engine = {
     }
   },
 
-  // ----- track chains: clips into input, then EQ (3 band), pan, gain, master -----
-
+  // ----- track chains -----
   buildChain(ac, dest, track) {
     const input = ac.createGain();
     const trim = ac.createGain();     // 'gain' automation (pre-EQ trim, default 1)
@@ -201,7 +163,6 @@ const Engine = {
     eqMid.type = 'peaking'; eqMid.frequency.value = 1000; eqMid.Q.value = 0.9;
     const eqHigh = ac.createBiquadFilter();
     eqHigh.type = 'highshelf'; eqHigh.frequency.value = 4500;
-    // drive + crush as parallel wet stages (wet gain 0 = clean passthrough)
     const driveWS = ac.createWaveShaper(); driveWS.curve = this.distortionCurve(60); driveWS.oversample = '2x';
     const driveWet = ac.createGain(); driveWet.gain.value = 0;
     const driveSum = ac.createGain();
@@ -214,10 +175,8 @@ const Engine = {
     const sc = ac.createGain();   // sidechain "pump" ducking (1 = no ducking)
     input.connect(trim);
     trim.connect(eqLow); eqLow.connect(eqMid); eqMid.connect(eqHigh);
-    // drive stage: dry through + distorted*wet, summed
     eqHigh.connect(driveSum);
     eqHigh.connect(driveWS); driveWS.connect(driveWet); driveWet.connect(driveSum);
-    // crush stage
     driveSum.connect(crushSum);
     driveSum.connect(crushWS); crushWS.connect(crushWet); crushWet.connect(crushSum);
     crushSum.connect(lp); lp.connect(pan); pan.connect(gain); gain.connect(sc); sc.connect(dest);
@@ -232,7 +191,6 @@ const Engine = {
     chain.eqHigh.gain.value = track.eq.high;
     chain.pan.pan.value = track.pan;
     chain.gain.gain.value = this.audible(track) ? track.volume : 0;
-    // static values for the extra automatable params default to transparent
     if (chain.trim) chain.trim.gain.value = automValueAt(track, 'gain', 0) != null ? automValueAt(track, 'gain', 0) : 1;
     if (chain.driveWet) chain.driveWet.gain.value = automValueAt(track, 'drive', 0) != null ? automValueAt(track, 'drive', 0) : 0;
     if (chain.crushWet) chain.crushWet.gain.value = automValueAt(track, 'crush', 0) != null ? automValueAt(track, 'crush', 0) : 0;
@@ -266,8 +224,7 @@ const Engine = {
     if (this.master) this.master.gain.value = S.masterVol;
   },
 
-  // ----- automation (keyframes over time) -----
-
+  // ----- automation -----
   AUTOM_PARAMS: ['volume', 'gain', 'low', 'mid', 'high', 'pan', 'drive', 'crush', 'filter', 'transpose'],
 
   automAudioParam(chain, param) {
@@ -281,7 +238,6 @@ const Engine = {
       case 'drive': return chain.driveWet.gain;
       case 'crush': return chain.crushWet.gain;
       case 'filter': return chain.lp.frequency;
-      // 'transpose' has no audio-rate param; it's applied per note at schedule time
     }
     return null;
   },
@@ -311,8 +267,6 @@ const Engine = {
     }
   },
 
-  // sidechain "pump": duck the track on every beat then let it swell back,
-  // the classic compressor-pumping sound, tempo-synced (no real audio keying)
   scheduleSidechain(chain, track, startBeat, startTime, spb) {
     const sc = chain.sc;
     if (!sc) return;
@@ -342,7 +296,6 @@ const Engine = {
     if (chain) this.scheduleSidechain(chain, track, this.currentBeat(), this.ctx.currentTime + 0.02, this.spb());
   },
 
-  // live re-apply after editing a track's automation while playing
   rescheduleAutomation(track) {
     if (!UI.playing || !this.ctx) return;
     const chain = this.chains.get(track.id);
@@ -373,8 +326,7 @@ const Engine = {
     return c.input;
   },
 
-  // ----- noise buffer cache (per context) -----
-
+  // ----- noise buffer cache -----
   noise(ac) {
     if (!ac._noiseBuf) {
       const b = ac.createBuffer(1, ac.sampleRate * 1, ac.sampleRate);
@@ -385,9 +337,8 @@ const Engine = {
     return ac._noiseBuf;
   },
 
-  // ----- pitch shifting that keeps the same duration (granular overlap-add) -----
-
-  // returns a pitch-shifted copy of the sample's buffer, cached per semitone
+  // ----- pitch shifting that keeps the same duration -----
+  // grain size is a guess that sounded fine. dont touch it
   shiftedBuffer(sample, semis) {
     semis = Math.round(semis || 0);
     if (!semis) return sample.buffer;
@@ -424,10 +375,7 @@ const Engine = {
     return out;
   },
 
-  // ----- instruments (all synthesized, clean sounds, no samples needed) -----
-
-  // noAttack = true starts the voice already in its sustain phase (a tiny fade,
-  // no hard attack transient) so a note you seek INTO doesn't re-strike.
+  // ----- instruments -----
   makeVoice(ac, dest, instr, pitch, t, vel = 0.9, noAttack = false) {
     const custom = resolveInstrument(instr);
     if (custom) return this.makeSamplerVoice(ac, dest, custom, pitch, t, vel, noAttack);
@@ -435,8 +383,6 @@ const Engine = {
     if (instr === 'drums') return this.makeDrum(ac, dest, pitch, t, vel);
     if (instr === 'drumkit') return this.makeDrumkitVoice(ac, dest, pitch, t, vel);
     if (MELODIC[instr]) return this.makeMelodicVoice(ac, dest, instr, pitch, t, vel, noAttack);
-    // 'keys' was a synthesised piano, replaced by the sampled grand. Projects
-    // saved with it are remapped on load; this catches anything that slips past.
     if (instr === 'keys') return this.makeMelodicVoice(ac, dest, 'rpiano', pitch, t, vel, noAttack);
 
     const f = midiToFreq(pitch);
@@ -468,7 +414,6 @@ const Engine = {
       filter.connect(g);
       A = 0.014; D = 0.3; SUS = 0.65; R = 0.26; peak = 0.3;
     } else if (instr === 'epiano') {
-      // FM tine: sine carrier + fast-decaying modulator, soft bark on attack
       const carrier = ac.createOscillator();
       carrier.type = 'sine'; carrier.frequency.value = f;
       const mod = ac.createOscillator();
@@ -482,7 +427,6 @@ const Engine = {
       oscs.push(carrier, mod);
       A = 0.004; D = 1.1; SUS = 0.24; R = 0.35; peak = 0.42;
     } else if (instr === 'strings') {
-      // detuned saw ensemble, slow bow-in, mellow top end
       filter = ac.createBiquadFilter();
       filter.type = 'lowpass';
       filter.frequency.value = clamp(f * 5, 900, 5200); filter.Q.value = 0.4;
@@ -503,13 +447,8 @@ const Engine = {
       filter.connect(g);
       A = 0.006; D = 0.22; SUS = 0.72; R = 0.12; peak = 0.5;
     } else if (instr === 'sub') {
-      // 808-style sub: a sine whose pitch drops fast into the fundamental, with
-      // a short click on top so it still reads on small speakers. This is how an
-      // 808 is actually made (synthesised), not a sample pretending to be one.
       const o = ac.createOscillator();
       o.type = 'sine';
-      // the pitch drop is what makes an 808 an 808, but the same big drop up high
-      // just sounds like a whistle, so ease it off as the note climbs
       const low = clamp((72 - pitch) / 36, 0, 1);          // 1 down low, 0 up high
       const drop = 1.5 + 3 * low;
       o.frequency.setValueAtTime(f * drop, t);
@@ -517,10 +456,6 @@ const Engine = {
       const og = ac.createGain(); og.gain.value = 1;
       o.connect(og); og.connect(g);
       oscs.push(o);
-      // Attack transient: a very short filtered noise knock. This used to be a
-      // triangle at 8x the fundamental over 30ms, but a tone that long IS a
-      // note, so every 808 started with a little chiptune blip. Noise has no
-      // pitch, and 7ms reads as a click rather than something you can hum.
       const nz = ac.createBufferSource();
       nz.buffer = this.noise(ac);
       const nf = ac.createBiquadFilter();
@@ -533,7 +468,6 @@ const Engine = {
       oscs.push(nz);
       A = 0.004; D = 0.9; SUS = 0.55; R = 0.42; peak = 0.72;
     } else if (instr === 'pad') {
-      // wide, slow-blooming saw/triangle stack behind a gentle filter
       filter = ac.createBiquadFilter();
       filter.type = 'lowpass';
       filter.frequency.value = clamp(f * 3.2, 500, 3600); filter.Q.value = 0.7;
@@ -569,10 +503,8 @@ const Engine = {
 
     const p = peak * vel;
     if (noAttack) {
-      // straight to sustain, near-instant so it's just "already there" (no swell)
       g.gain.setValueAtTime(0, t);
       g.gain.linearRampToValueAtTime(p * SUS, t + 0.004);
-      // no filter sweep, since it's mid-note, the filter has already settled
     } else {
       g.gain.setValueAtTime(0, t);
       g.gain.linearRampToValueAtTime(p, t + A);
@@ -588,8 +520,6 @@ const Engine = {
     return this.wrapVoice(ac, g, oscs, R);
   },
 
-  // A grand-ish piano: inharmonic partials that each decay at their own rate,
-  // plus a short hammer click. Brighter the harder you play.
   makePiano(ac, dest, pitch, t, vel = 0.9, noAttack = false) {
     const f = midiToFreq(pitch);
     const g = ac.createGain();
@@ -605,8 +535,6 @@ const Engine = {
       o.type = 'sine';
       o.frequency.value = f * n * (1 + 0.0007 * n * n); // slight inharmonicity
       const pg = ac.createGain();
-      // mid-note: start each partial part-way down its decay so it sounds like
-      // the note has been ringing, not freshly struck
       const amp = lvl * (0.4 + 0.6 * vel) * 0.5 * (noAttack ? 0.5 : 1);
       pg.gain.setValueAtTime(0, t);
       pg.gain.linearRampToValueAtTime(amp, t + 0.004);
@@ -616,7 +544,6 @@ const Engine = {
       oscs.push(o);
     }
     if (!noAttack) {
-      // hammer thock: the attack transient we skip for a mid-note start
       const noise = ac.createBufferSource();
       noise.buffer = this.noise(ac); noise.loop = true;
       const hp = ac.createBiquadFilter(); hp.type = 'bandpass';
@@ -647,8 +574,6 @@ const Engine = {
     };
   },
 
-  // A custom instrument built from an audio file: resample by root note,
-  // with a trimmed region and attack/release envelope.
   makeSamplerVoice(ac, dest, inst, pitch, t, vel = 0.9, noAttack = false) {
     const s = Samples[inst.sampleId];
     const g = ac.createGain();
@@ -682,11 +607,7 @@ const Engine = {
     };
   },
 
-  // Drum kit: which sound depends on the note's pitch class
-  // C = kick, D = snare, E = clap, F/F# = closed hat, A/A# = open hat
-  // ----- synthesized one-shot sound effects (risers, hits, zaps…) -----
-  // Each plays its FULL effect regardless of note length (stop is a no-op), so
-  // dropping one anywhere just fires it.
+  // ----- synthesized one-shot sound effects -----
   _sfxHandle(sources, node) {
     return {
       stop: () => {}, // one-shots play out on their own
@@ -789,7 +710,6 @@ const Engine = {
   },
 
   // ----- metronome click -----
-
   METRO_SOUNDS: ['classic', 'tick', 'wood', 'beep'],
   metroSound() { try { return localStorage.getItem('fabu.metroSound') || 'classic'; } catch (e) { return 'classic'; } },
   setMetroSound(s) { try { localStorage.setItem('fabu.metroSound', s); } catch (e) {} },
@@ -797,7 +717,6 @@ const Engine = {
   click(ac, dest, t, accent) {
     const kind = this.metroSound();
     if (kind === 'tick' || kind === 'wood') {
-      // a real metronome tick: a tiny filtered noise knock
       const n = ac.createBufferSource();
       n.buffer = this.noise(ac); n.loop = true;
       const bp = ac.createBiquadFilter();
@@ -830,8 +749,6 @@ const Engine = {
   },
 
   // ----- audio clip playback with fades + pitch -----
-
-  // distortion / bitcrush curves for the WaveShaper effect
   distortionCurve(amount) {
     const k = Math.max(0, amount) * 4;
     const n = 8192, curve = new Float32Array(n), deg = Math.PI / 180;
@@ -851,17 +768,12 @@ const Engine = {
     return curve;
   },
 
-  // which dropped-effect params can be automated over time (waveshaper
-  // amounts can't be ramped, so drive/crush amount stay static)
   FX_AUTOM: {
     reverb: ['amt'], echo: ['time', 'fb', 'mix'], dampen: ['freq'],
     lowcut: ['freq'], tremolo: ['rate', 'depth'], wobble: ['rate', 'amt'], widen: ['amt']
   },
   fxAutomatable(type, key) { return (this.FX_AUTOM[type] || []).includes(key); },
 
-  // Set an effect-node AudioParam either to a static value or, when the effect
-  // has keyframes for this param and we're playing/exporting, as scheduled ramps
-  // over the song timeline. `transform` maps the user value to the node's units.
   bindFx(param, fx, key, def, transform, automCtx) {
     transform = transform || ((x) => x);
     const pts = fx.autom && fx.autom[key];
@@ -877,8 +789,6 @@ const Engine = {
     }
   },
 
-  // ramp an audio-source AudioParam (playbackRate / detune) from a clip's own
-  // keyframes, or set it static when there are none
   bindClipParam(param, autom, key, staticVal, transform, automCtx) {
     transform = transform || ((x) => x);
     const pts = autom && autom[key];
@@ -894,17 +804,11 @@ const Engine = {
     }
   },
 
-  // build a live automation context for a clip fx chain starting now
   liveFxCtx() {
     if (!UI.playing || !this.ctx) return null;
     return { curBeat: this.currentBeat(), time0: this.ctx.currentTime, beatToTime: (b) => this.beatToTime(b) };
   },
 
-  // A per-clip effect chain: the built-in drive, crush and filter sliders plus
-  // any dropped effects from clip.fx (reverb send, dampen, echo, …). Every note
-  // or audio source of the clip routes through it. Returns `dest` unchanged
-  // when the clip has nothing to apply. `automCtx` (optional) schedules any
-  // per-effect keyframes as ramps instead of static values.
   clipFxDest(ac, dest, clip, revIn, automCtx) {
     const list = clip.fx || [];
     const hasFx = clip.drive > 0 || clip.crush > 0 || (clip.cutoff > 0 && clip.cutoff < 20000) || list.length;
@@ -957,7 +861,6 @@ const Engine = {
         node.connect(f); node = f;
       } else if (fx.type === 'tremolo') {
         const g2 = ac.createGain();
-        // depth splits into the carrier level (1 - depth/2) and the LFO swing (depth/2)
         this.bindFx(g2.gain, fx, 'depth', 0.6, (d) => 1 - clamp(d, 0, 1) / 2, automCtx);
         const lfo = ac.createOscillator(); lfo.type = 'sine'; this.bindFx(lfo.frequency, fx, 'rate', 5, null, automCtx);
         const lg = ac.createGain(); this.bindFx(lg.gain, fx, 'depth', 0.6, (d) => clamp(d, 0, 1) / 2, automCtx);
@@ -971,7 +874,6 @@ const Engine = {
         lfo.connect(lg); lg.connect(f.frequency); lfo.start();
         node.connect(f); node = f;
       } else if (fx.type === 'widen') {
-        // Haas widening: delay one side a few ms
         const splitL = ac.createGain(), splitR = ac.createDelay(0.05);
         this.bindFx(splitR.delayTime, fx, 'amt', 0.6, (a) => 0.004 + a * 0.02, automCtx);
         const merger = ac.createChannelMerger(2);
@@ -990,8 +892,6 @@ const Engine = {
     const speed = clip.speed || 1;
     const trimOff = clipOffSec(clip);
     const rateAuto = clipRateAutom(clip);
-    // with rate automation the real output length is the integral of the curve,
-    // so the sound ends exactly where the block on the timeline ends
     const durOut = rateAuto ? clipAutoInfo(clip).durSec : clipDurSec(clip) / speed;
     if (outOff >= durOut) return;
 
@@ -1003,15 +903,12 @@ const Engine = {
     const speedAuto = automCtx && clip.autom && clip.autom.speed && clip.autom.speed.length;
 
     const src = ac.createBufferSource();
-    // automated pitch rides on the raw buffer via detune (tape-style); otherwise
-    // a clean length-preserving shift for the static pitch
     src.buffer = pitchAuto ? s.buffer : this.shiftedBuffer(s, clip.pitch || 0);
     if (pitchAuto) this.bindClipParam(src.detune, clip.autom, 'pitch', (clip.pitch || 0) * 100, (st) => st * 100, automCtx);
     if (speedAuto) this.bindClipParam(src.playbackRate, clip.autom, 'speed', speed, null, automCtx);
     else src.playbackRate.value = speed;
     const g = ac.createGain();
 
-    // effects (built-in sliders + dropped fx) live in the shared per-clip chain
     const fxDest = this.clipFxDest(ac, dest, clip, revIn, automCtx);
     src.connect(g); g.connect(fxDest);
 
@@ -1030,8 +927,6 @@ const Engine = {
       g.gain.linearRampToValueAtTime(envAt(x), T + x);
     }
 
-    // seeking into a rate-automated clip: the source position is the integral
-    // of the rate curve up to the seek point, not a straight multiply
     src.start(when, trimOff + (rateAuto ? clipAutoInfo(clip).sourceAt(outOff) : outOff * speed));
     src.stop(T + durOut + (rateAuto ? 0.1 : 0.03));   // durOut is exact now, small pad only
 
@@ -1048,10 +943,7 @@ const Engine = {
   },
 
   // ----- transport -----
-
   beatToTime(beat) { return this.startCtxTime + (beat - this.startBeat) * this.spb(); },
-  // Swing: delay notes that sit on an offbeat 8th by a fraction of an 8th note.
-  // Per-track (sw = track.swing). Only shifts note onsets, never the grid.
   swingBeat(beat, sw) {
     if (!sw || sw <= 0) return beat;
     const eighth = beat * 2;                 // position measured in 8th notes
@@ -1064,9 +956,6 @@ const Engine = {
     return this.startBeat + (this.ctx.currentTime - this.startCtxTime) / this.spb();
   },
 
-  // schedule one clip (midi or audio) playing on `t`'s chain into `ev`.
-  // futureOnly = don't re-trigger notes/clips already in progress at fromBeat
-  // (used for live edits: leave sounding voices exactly as they are)
   collectClipEvents(ev, c, t, fromBeat, futureOnly) {
     if (c.kind === 'midi') {
       let clipDest = null; // one shared per-clip fx chain, built at play time
@@ -1081,9 +970,6 @@ const Engine = {
       for (const n of c.notes) {
         if (n.start >= c.length) continue;
         const b = this.swingBeat(c.start + (n.start / sp), t.swing);
-        // Sustain pedal: a note that ends while the pedal is down keeps ringing
-        // until the pedal comes up, exactly like a real one. Applied here in the
-        // scheduler so playback, export and bouncing all agree by construction.
         const rawDur = sustainedLength(c, n.start, Math.min(n.length, c.length - n.start));
         const durB = rawDur / sp;
         const endB = b + durB;
@@ -1101,8 +987,6 @@ const Engine = {
             const end = time + remain * this.spb();
             v.stop(end);
             this.registerVoice(v, end);
-            // remember it so a live change to this clip's settings can reach a
-            // note that's still ringing (see applyLiveClipEdits)
             if (n.id && c.id && this.sounding) {
               const key = t.id + ':' + c.id + ':' + n.id;
               this.sounding.set(key, { v, trackId: t.id, clipId: c.id, noteId: n.id, endTime: end, sig: this.noteSig(t, c, n) });
@@ -1127,8 +1011,6 @@ const Engine = {
     for (const t of S.tracks) {
       for (const c of t.clips) {
         if (c.kind === 'group') {
-          // play each child at its absolute position through its original track,
-          // so a grouped drum pattern still sounds like drums, etc.
           for (const child of c.children) {
             const ot = getTrack(child.origTrackId) || t;
             const abs = Object.assign({}, child.clip, { start: c.start + (child.clip.start || 0) });
@@ -1144,8 +1026,6 @@ const Engine = {
   },
 
   play(atTime) {
-    // a fresh press means follow the playhead again, even if the view was
-    // dragged elsewhere during the last pass
     if (typeof Timeline !== 'undefined') Timeline._userScrolled = false;
     this.ensureCtx();
     this.ctx.resume();
@@ -1166,7 +1046,6 @@ const Engine = {
     App.onTransport();
   },
 
-  // jump the transport to a beat without stopping (used by the loop region)
   jumpTo(beat) {
     if (!UI.playing || !this.ctx) return;
     for (const v of this.live) v.kill();
@@ -1183,28 +1062,20 @@ const Engine = {
 
   schedTick() {
     if (!UI.playing) return;
-    // loop region: wrap back round while you work on a section
     if (S.loopOn && S.loopEnd > S.loopStart && this.currentBeat() >= S.loopEnd) {
       this.jumpTo(S.loopStart);
       return;
     }
-    // The music has run out but the transport keeps rolling into silence: the
-    // player probably wants it to come round again and does not know about L.
-    // Said once per session, and only when there was a real song to run out of.
     if (!S.loopOn && !this._loopHinted && songEndBeat() > 16 && this.currentBeat() > songEndBeat() + 1) {
       this._loopHinted = true;
       toast(tr('hint_loop_key', 'Press L to turn looping on and off'));
     }
-    // drop finished notes from the sounding map so it stays small
     if (this.sounding && this.sounding.size) {
       const t = this.ctx.currentTime;
       for (const [k, r] of this.sounding) if (t >= r.endTime) this.sounding.delete(k);
     }
     const horizon = this.ctx.currentTime + 0.15;
     const horizonBeat = this.startBeat + (horizon - this.startCtxTime) / this.spb();
-    // guards: a single 25ms tick can never legitimately fire thousands of events
-    // or clicks. If a stale scheduler state made horizonBeat balloon, cap and
-    // resync instead of spinning the whole app to a freeze.
     let evGuard = 0;
     while (this.evIdx < this.events.length && this.events[this.evIdx].beat < horizonBeat && evGuard++ < 4096) {
       const e = this.events[this.evIdx++];
@@ -1248,8 +1119,6 @@ const Engine = {
 
   seek(beat) {
     const wasPlaying = UI.playing;
-    // trying to move outside a live loop: the loop will pull you straight back,
-    // which looks broken unless we say what is happening
     if (S.loopOn && S.loopEnd > S.loopStart && (beat < S.loopStart - 1e-6 || beat >= S.loopEnd)
         && typeof App !== 'undefined' && App.hintLoop) App.hintLoop('escape');
     if (wasPlaying) this.haltPlayback();
@@ -1258,12 +1127,6 @@ const Engine = {
     else App.onTransport();
   },
 
-  // Scrubbing: while dragging the playhead (stopped), HOLD whatever melodic
-  // notes sit under it, like pressing keys. A note sounds the moment the
-  // playhead reaches it and releases the moment it leaves, so dragging over a
-  // chord sustains that chord and moving reveals the next one. No re-triggered
-  // bursts stacking up, no machine-gun attacks. Drums and audio clips are
-  // skipped (re-triggering them just sounds like noise).
   _scrubDrum(instr) { return instr === 'drums' || instr === 'drumkit'; },
   scrub(beat) {
     this.ensureCtx();
@@ -1273,8 +1136,6 @@ const Engine = {
     const fxCache = this._scrubFx || (this._scrubFx = new Map());
     const wanted = new Set();
     const anySolo = S.tracks.some(t => t.solo);
-    // route each held note through its clip's effect chain (built once per clip
-    // for the drag, cached; null = clip has no fx, so use the bare track input)
     const destFor = (trackId, clip) => {
       const ti = this.trackInput(trackId);
       if (fxCache.has(clip.id)) return fxCache.get(clip.id) || ti;
@@ -1312,13 +1173,10 @@ const Engine = {
         }
       }
     }
-    // release notes the playhead has moved off of
     for (const [key, v] of active) {
       if (!wanted.has(key)) { try { v.stop(at + 0.02); } catch (e) {} active.delete(key); }
     }
   },
-  // drag finished (or interrupted): let every held scrub note ring out, then
-  // tear down the per-clip effect chains built for this drag
   scrubEnd() {
     if (!this.scrubActive) return;
     const at = this.ctx ? this.ctx.currentTime : 0;
@@ -1330,32 +1188,19 @@ const Engine = {
     }, 500);
   },
 
-  // Apply edits mid-playback WITHOUT disturbing what's already sounding. We keep
-  // the timeline anchor and every live voice, and only replace the not-yet-
-  // scheduled future events with a freshly collected (edited) set. So changing a
-  // track's instrument, adding/moving/deleting future notes, etc. take hold for
-  // everything ahead of the playhead, while notes in progress just play out
-  // naturally: no stutter, no re-triggering, no "simulated" re-attack.
   reschedule() {
     if (!UI.playing || !this.ctx) return;
-    // start just past the current scheduling horizon so we neither double a note
-    // that's already been scheduled nor re-trigger one that's already sounding
     const fromBeat = this.startBeat + ((this.ctx.currentTime + 0.16) - this.startCtxTime) / this.spb();
     this.events = this.collectEvents(fromBeat, true); // futureOnly
     this.evIdx = 0;
   },
 
-  // signature of a note's *sound*: pitch, level, instrument and the clip's
-  // effects. If this changes, a note still ringing needs re-voicing to hear it.
   noteSig(t, c, n) {
     const fx = c.fx ? c.fx.map(f => f.type + JSON.stringify(f.p || {}) + JSON.stringify(f.autom || {})).join('|') : '';
     return [t.instrument, n.pitch + (c.pitch || 0) + (c.detune || 0) / 100, (n.vel ?? 0.9) * (c.gain ?? 1),
       c.drive || 0, c.crush || 0, c.cutoff || 0, fx].join(',');
   },
 
-  // A long note is already sounding and you change its clip's gain / transpose /
-  // drive / crush / filter and effects, re-voice just that note (seamless 4ms
-  // crossfade) so the change is actually heard, not only on the next note.
   applyLiveClipEdits() {
     if (!UI.playing || !this.ctx || !this.sounding || !this.sounding.size) return;
     const now = this.ctx.currentTime;
@@ -1385,10 +1230,6 @@ const Engine = {
     }
   },
 
-  // Any edit while the song plays (add/delete a clip or note, drop an effect,
-  // move something) reschedules from the current beat, debounced so a flurry
-  // of edits coalesces. This is what makes deletes stop sounding and effects
-  // take hold live, for you AND remote collaborators.
   liveEdit() {
     if (!UI.playing) return;
     clearTimeout(this._reTimer);
@@ -1396,7 +1237,6 @@ const Engine = {
   },
 
   // ----- live keyboard playing -----
-
   noteOn(trackId, pitch, vel = 0.9) {
     this.ensureCtx();
     this.ctx.resume();
@@ -1406,21 +1246,15 @@ const Engine = {
     if (!t || t.kind !== 'midi') return;
     const v = this.makeVoice(this.ctx, this.trackInput(trackId), t.instrument, pitch, this.ctx.currentTime, vel);
     this.liveKeys.set(key, v);
-    // capture into the running note recording
     if (this.midiRec && UI.playing && trackId === this.midiRec.trackId) {
       const h = { pitch, beat: this.currentBeat(), vel };
       this.midiRec.held.set(key, h);
-      // Put the note down straight away and let it lengthen under your fingers,
-      // rather than having it appear out of nowhere when you let go.
       this.startLiveNote(key, h);
     }
   },
 
   noteOff(trackId, pitch) {
     const key = trackId + ':' + pitch;
-    // Pedal down: let go of the key but not of the note, like a real piano.
-    // The recorder is told the key was released at the right moment either way,
-    // so what gets written down is the notes you played plus a pedal span.
     if (this.pedalDown) {
       if (this.liveKeys.has(key)) this.pedalHeld.add(key);
       if (this.midiRec) {
@@ -1442,8 +1276,6 @@ const Engine = {
   releaseKey(key) {
     const v = this.liveKeys.get(key);
     if (v) {
-      // the pedal can be pressed and let go before a note has ever sounded,
-      // and there is no audio context until then
       v.stop(this.ctx ? this.ctx.currentTime : 0);
       this.liveKeys.delete(key);
     }
@@ -1451,18 +1283,14 @@ const Engine = {
   },
 
   // ----- sustain pedal -----
-  // One flag the whole app agrees on, whatever pushed it: the keyboard, a real
-  // pedal on a MIDI keyboard, or the on-screen button.
   setPedal(down) {
     down = !!down;
     if (down === this.pedalDown) return;
     this.pedalDown = down;
     if (!down) {
-      // pedal up: everything it was holding is released now
       for (const key of [...this.pedalHeld]) this.releaseKey(key);
       this.pedalHeld.clear();
     }
-    // write it into the take being recorded, so it plays back as you played it
     if (this.midiRec && UI.playing) this.recordPedal(down);
     if (typeof KeysPanel !== 'undefined' && KeysPanel.showPedal) KeysPanel.showPedal(down);
   },
@@ -1485,7 +1313,6 @@ const Engine = {
   },
 
   // ----- record played notes into a pattern clip -----
-
   toggleMidiRecord() {
     if (this.midiRec) { this.finishMidiRecord(); return; }
     this.ensureCtx();
@@ -1498,8 +1325,6 @@ const Engine = {
     if (into) Undo.push('Record notes');
     this.midiRec = { trackId: track.id, clip: into || null, intoExisting: !!into,
                      startBeat, held: new Map(), live: new Map(), pendingPedal: null };
-    // Holding the pedal down already is a real state, but setPedal only fires
-    // on a change, so nothing would ever have written it.
     if (this.pedalDown) this.recordPedal(true);
     KeysPanel.syncRecButton();
     const begin = (at) => {
@@ -1512,7 +1337,6 @@ const Engine = {
     else begin();
   },
 
-  // the clip a take is being recorded into, made on demand
   recClip() {
     const mr = this.midiRec;
     const track = getTrack(mr.trackId);
@@ -1524,7 +1348,6 @@ const Engine = {
         start: mr.startBeat, length: 4, notes: []
       };
       track.clips.push(mr.clip);
-      // pedal presses from before the first note belong in this clip
       if (mr.pendingPedal) {
         for (const e of mr.pendingPedal) this.writePedal(mr.clip, e.at, e.on);
         mr.pendingPedal = null;
@@ -1533,8 +1356,6 @@ const Engine = {
     return mr.clip;
   },
 
-  // Draw the note the moment the key goes down, then stretch it every frame
-  // until the key comes up. This is the part that makes recording feel live.
   startLiveNote(key, h) {
     const clip = this.recClip();
     if (!clip) return;
@@ -1560,8 +1381,6 @@ const Engine = {
       }
       if (clip) {
         const want = Math.max(clip.length, Math.ceil(now - clip.start));
-        // growing the clip changes the timeline's layout, so that needs a real
-        // render; otherwise only the one block it lives in has to be repainted
         const capped = Math.min(want, maxPatternBeats());
         if (capped !== clip.length) { clip.length = capped; Timeline.renderSoon(); }
         else Timeline.redrawClip(clip);
@@ -1575,11 +1394,8 @@ const Engine = {
   commitRecNote(h, endBeat, key) {
     const mr = this.midiRec;
     if (!mr) return;
-    // a pattern has a ceiling, and a take that reaches it stops rather than
-    // stacking every further note on the last beat
     if (mr.clip && (h.beat - mr.clip.start) >= maxPatternBeats()) return;
     const len = Math.max(0.05, endBeat - h.beat);
-    // the note is already on screen from startLiveNote; this settles its length
     const liveKey = key != null ? key : [...mr.live.keys()].find(k => mr.live.get(k).note.pitch === h.pitch);
     const live = liveKey != null ? mr.live.get(liveKey) : null;
     if (live) {
@@ -1587,7 +1403,6 @@ const Engine = {
       live.clip.length = Math.min(maxPatternBeats(), Math.max(live.clip.length, Math.ceil(live.note.start + len)));
       mr.live.delete(liveKey);
     } else {
-      // no live note (recording started mid-hold): record it exactly as played
       const clip = this.recClip();
       if (!clip) return;
       const rel = Math.max(0, h.beat - clip.start);
@@ -1604,7 +1419,6 @@ const Engine = {
     const now = this.currentBeat();
     for (const [k, h] of mr.held) this.commitRecNote(h, now, k);   // close held notes
     mr.held.clear();
-    // a take that ends with the pedal still down leaves a span with no end
     if (this.pedalDown && mr.clip) this.writePedal(mr.clip, now, false);
     mr.live.clear();
     if (this._growRaf) { cancelAnimationFrame(this._growRaf); this._growRaf = null; }
@@ -1652,10 +1466,8 @@ const Engine = {
     src.stop(this.ctx.currentTime + Math.min(buffer.duration, 3));
   },
 
-  // ----- real drum kit (bundled CC0 samples, decoded on first use) -----
+  // ----- real drum kit -----
   DRUMKIT: {},
-  // Same rules as ensureMelodic: a failed piece must be retryable rather than
-  // silently missing for the rest of the session, and "ready" has to mean it.
   ensureDrumkit() {
     if (this._drumkitReady) return Promise.resolve();
     if (this._drumkitLoading) return this._drumkitLoading;
@@ -1698,15 +1510,8 @@ const Engine = {
     };
   },
 
-  // ----- real melodic instruments (bundled CC0 samples, multi-zone) -----
+  // ----- real melodic instruments -----
   MELODICBUF: {},
-  // Load the sampled instruments. Two things this has to get right, because
-  // getting them wrong means an instrument is silently mute:
-  //   * a failed fetch must be RETRYABLE. This used to swallow the error and
-  //     set _melodicReady anyway, so one hiccup muted that zone for the whole
-  //     session with nothing in the console.
-  //   * requests are limited to a few at a time. Firing all of them at once
-  //     (there are 40-odd now) is what made those hiccups happen.
   ensureMelodic() {
     if (this._melodicReady) return Promise.resolve();
     if (this._melodicLoading) return this._melodicLoading;
@@ -1736,7 +1541,6 @@ const Engine = {
     };
     this._melodicLoading = Promise.all(Array.from({ length: LANES }, worker)).then(() => {
       this._melodicLoading = null;
-      // only "ready" when everything really is; otherwise the next call retries
       this._melodicReady = failed.length === 0;
       this._melodicFailed = failed;
     });
@@ -1772,13 +1576,10 @@ const Engine = {
     };
   },
 
-  // hear a Loops-browser pattern before dragging it in; routed through its own
-  // bus so a second click can cut it instantly
   auditionSample(sample) {
     this.ensureCtx();
     this.ctx.resume();
     this.stopAudition();
-    // real-drum loops need their samples decoded before they will sound
     if (sample.instrument === 'drumkit' && !this._drumkitReady) {
       this.ensureDrumkit().then(() => this.auditionSample(sample));
       return;
@@ -1808,7 +1609,6 @@ const Engine = {
   },
 
   // ----- voice recording with count-in -----
-
   micId() { try { return localStorage.getItem('fabu.micId') || ''; } catch (e) { return ''; } },
   setMicId(id) { try { localStorage.setItem('fabu.micId', id || ''); } catch (e) {} },
 
@@ -1820,10 +1620,6 @@ const Engine = {
     let stream;
     try {
       const id = this.micId();
-      // Record the mic RAW. Echo-cancel / noise-suppression / auto-gain and the
-      // "voice" pipeline mangle music AND drop the whole output to tinny "phone
-      // call" quality (Chromium routes playback through the AEC). Force them all
-      // off, standard + legacy Chromium hints, so playback stays full quality.
       const audio = {
         echoCancellation: false, noiseSuppression: false, autoGainControl: false,
         voiceIsolation: false,
@@ -1848,8 +1644,6 @@ const Engine = {
     }
 
     this.recChunks = [];
-    // pick a codec the browser actually supports (some default to an empty/odd
-    // container and the take comes back silent), and flush periodically
     const mime = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4']
       .find(m => window.MediaRecorder && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(m));
     this.mediaRec = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
@@ -1861,14 +1655,11 @@ const Engine = {
     toast(tr('toast_recording', 'Recording'), 'red');
   },
 
-  // Counts in 1-2-3-4, then resolves with the exact ctx time of the next
-  // downbeat, where recording starts. No extra "GO" beat.
   countIn(isActive = () => UI.recording) {
     return new Promise((resolve) => {
       const overlay = $('#countOverlay');
       const num = $('#countNum');
       overlay.classList.remove('hidden');
-      // clicking the badge (or the cancel hint) stops the count-in
       overlay.onmousedown = () => { UI.recording = false; };
       const spb = this.spb();
       const t0 = this.ctx.currentTime + 0.15;
@@ -1934,7 +1725,6 @@ const Engine = {
         start: this.recStartBeat, sampleId: id,
         fadeIn: 0, fadeOut: 0, pitch: 0, gain: 1
       };
-      // don't clobber existing audio on this lane: give the take its own lane
       const cEnd = clip.start + clipBeats(clip);
       if (track.clips.some(c => c.start < cEnd - 1e-6 && c.start + clipBeats(c) > clip.start + 1e-6)) {
         track = makeTrack('audio'); track.name = 'Voice'; S.tracks.push(track); this.rebuildTracks();
@@ -1949,16 +1739,10 @@ const Engine = {
   },
 
   // ----- export to WAV -----
-
   async exportWav() { return this.encodeWav(await this.renderSong()); },
 
-  // Render a set of clips (across tracks) offline into one stereo buffer, so a
-  // group can be flattened into a real audio clip. Each clip plays through its
-  // own track's chain (EQ, volume, effects, reverb) exactly as it sounds now.
   async bounceClips(items, startBeat, lenBeats) {
     this.ensureCtx();
-    // the sampled instruments must actually be decoded before we render, or
-    // the export comes out silent for every one of them
     await this.ensureMelodic();
     await this.ensureDrumkit();
     const spb = this.spb();
@@ -1999,7 +1783,6 @@ const Engine = {
     }
     this._offlineFx = null;
     const buf = await oc.startRendering();
-    // tiny fade at the hard cut so it doesn't click
     const fade = Math.min(256, buf.length);
     for (let ch = 0; ch < buf.numberOfChannels; ch++) {
       const d = buf.getChannelData(ch);
@@ -2008,9 +1791,6 @@ const Engine = {
     return buf;
   },
 
-  // Render each track on its own, so you can take the parts elsewhere.
-  // Same chain as the full mix, just one track at a time (mutes/solos ignored
-  // so you always get every stem).
   async renderStems(onProgress) {
     this.ensureCtx();
     await this.ensureMelodic();   // same as renderSong: no samples, no sound
@@ -2063,11 +1843,9 @@ const Engine = {
     return out;
   },
 
-  // Render the whole song offline into a stereo AudioBuffer.
+  // swing + sidechain have to be done here too, offline doesnt get them for free
   async renderSong() {
     this.ensureCtx();
-    // the sampled instruments must actually be decoded before we render, or
-    // the export comes out silent for every one of them
     await this.ensureMelodic();
     await this.ensureDrumkit();
     const spb = this.spb();
@@ -2076,8 +1854,6 @@ const Engine = {
     const sr = 44100;
     const oc = new OfflineAudioContext(2, Math.ceil(lenSec * sr), sr);
 
-    // match the live master chain exactly. These used to differ (-8/6 offline
-    // vs -3/3 live), so every export came out more squashed than what you mixed
     const comp = oc.createDynamicsCompressor();
     comp.threshold.value = -3; comp.knee.value = 8; comp.ratio.value = 3;
     comp.attack.value = 0.006; comp.release.value = 0.2;
@@ -2089,7 +1865,6 @@ const Engine = {
     comp.connect(ceil);
     ceil.connect(oc.destination);
 
-    // offline automation context so per-effect keyframes render into the export
     const offFx = { curBeat: 0, time0: lead, beatToTime: (b) => lead + b * spb };
     this._offlineFx = offFx;
     for (const t of S.tracks) {
@@ -2118,7 +1893,6 @@ const Engine = {
     return oc.startRendering();
   },
 
-  // Encode a rendered buffer to MP3 (lamejs), yielding so a progress bar can move.
   async encodeMp3(buffer, kbps = 192, onProgress) {
     const enc = new lamejs.Mp3Encoder(2, buffer.sampleRate, kbps);
     const L = buffer.getChannelData(0);
@@ -2149,7 +1923,6 @@ const Engine = {
     return out.buffer;
   },
 
-  // Encode to real OGG Vorbis with the bundled WASM encoder, yielding for progress.
   async encodeOggVorbis(buffer, quality = 3, onProgress) {
     if (!this._oggEnc) {
       const bytes = new Uint8Array(b64ToBuf(window.FABU_OGG_WASM));
@@ -2178,7 +1951,6 @@ const Engine = {
     return out.buffer;
   },
 
-  // Encode via MediaRecorder (opus). Real-time, used for ogg/webm when supported.
   encodeOpus(buffer, mime, onProgress) {
     return new Promise((resolve, reject) => {
       const ac = new AudioContext();
@@ -2232,5 +2004,4 @@ const Engine = {
   }
 };
 
-// pushUndo lives in state.js's world but Engine needs it before app.js defines helpers
 function pushUndoAction(label) { Undo.push(label); }

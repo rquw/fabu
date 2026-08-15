@@ -1,15 +1,8 @@
-// ---------- Standard MIDI File import ----------
-// Drop a .mid on the timeline and it becomes real, editable patterns rather
-// than an opaque blob. Everything is converted to BEATS, not seconds, so the
-// notes land on the bar grid and follow the project tempo like any other clip.
-// (js/midi.js is the unrelated Web MIDI *input* feature: live keyboards.)
+// ---------- standard MIDI File import ----------
 'use strict';
 
 const MidiFile = {
 
-  // General MIDI instrument names. Only used to LABEL the lane a part landed
-  // on, so you can tell the trumpet line from the bass line while dragging it
-  // around. The sound is always piano: a MIDI file is notes, not instruments.
   GM: ('Piano,Bright Piano,Electric Grand,Honky Tonk,Electric Piano,Electric Piano 2,Harpsichord,Clavinet,' +
     'Celesta,Glockenspiel,Music Box,Vibraphone,Marimba,Xylophone,Tubular Bells,Dulcimer,' +
     'Drawbar Organ,Percussive Organ,Rock Organ,Church Organ,Reed Organ,Accordion,Harmonica,Tango Accordion,' +
@@ -32,9 +25,6 @@ const MidiFile = {
     return this.GM[prog] || 'Part';
   },
 
-  // Pick the closest instrument fabu actually has for a part, going by what
-  // the file calls it. Only confident matches count; anything unclear falls
-  // back to Grand Piano rather than guessing a sound the user then hunts down.
   matchInstrument(chan, prog, trackName) {
     if (chan === 9) return 'drums';
     const hay = ((trackName || '') + ' ' + (this.GM[prog] || '')).toLowerCase();
@@ -49,15 +39,7 @@ const MidiFile = {
       [/bass\b|contrabass|tuba/, 'bass'],
       [/violin|viola|cello|string|fiddle|orchestra/, 'strings'],
       [/choir|voice|vocal|aah|ooh|pad\b|halo|sweep|atmosphere|new age|warm/, 'pad'],
-      // Brass and reeds keep the synth lead on purpose: it is three detuned
-      // sawtooths behind a resonant lowpass with a fast attack, which is
-      // literally how synth brass is built, so a trumpet or sax line lands
-      // somewhere recognisable.
       [/trumpet|trombone|horn|brass|sax|clarinet|oboe|bassoon|lead\b|square|saw\b/, 'synth'],
-      // Flutes and whistles deliberately fall through to the grand. They are
-      // near-sine and soft; a resonant saw is the wrong timbre, strings bow in
-      // over 0.22s and the pad over 0.5s, so both smear a melody. Nothing here
-      // is close enough, and the rule is close enough or fall back.
       [/e[- ]?piano|rhodes|wurli|electric piano|clav/, 'epiano'],
       [/piano|grand|keys/, 'rpiano']
     ];
@@ -66,9 +48,6 @@ const MidiFile = {
   },
 
   // ---------- parsing ----------
-
-  // Reads a Standard MIDI File into { ppq, tempoBpm, tracks: [{ name, notes }] }
-  // where each note is { pitch, start, length, vel } measured in beats.
   parse(buf) {
     const d = new DataView(buf);
     const u8 = new Uint8Array(buf);
@@ -81,8 +60,6 @@ const MidiFile = {
     const division = d.getInt16(12);
     let p = 8 + headLen;
 
-    // SMPTE timing (negative division) is film-frame based: there is no musical
-    // beat grid to map it onto, so refuse instead of importing nonsense.
     if (division <= 0) throw new Error('smpte');
     const ppq = division;
 
@@ -125,7 +102,6 @@ const MidiFile = {
             const us = (u8[p] << 16) | (u8[p + 1] << 8) | u8[p + 2];
             if (us > 0 && tempoBpm == null) tempoBpm = 60000000 / us;
           } else if (meta === 0x58 && mlen >= 2 && !timeSig) {
-            // numerator, then denominator as a power of two (3, 2 => 3/4)
             timeSig = [u8[p], Math.pow(2, u8[p + 1])];
           } else if ((meta === 0x03 || meta === 0x01) && mlen && !name) {
             let s = '';
@@ -135,20 +111,14 @@ const MidiFile = {
           p += mlen;
           continue;
         }
-        // sysex. The length must be read into a variable first: `p += varint()`
-        // captures the old p before varint() advances it, losing one byte and
-        // shifting every following event by whatever the last data byte was.
         if (status === 0xf0 || status === 0xf7) { const slen = varint(); p += slen; continue; }
 
         if (type === 0x90 || type === 0x80) {
           const pitch = u8[p], vel = u8[p + 1];
           p += 2;
           const key = (chan << 8) | pitch;
-          // a note-on with velocity 0 is the common way of writing note-off
           if (type === 0x90 && vel > 0) {
             if (!open.has(key)) open.set(key, []);
-            // stamp the note with whatever instrument was selected at the time,
-            // so a part that changes instrument later can be split off
             open.get(key).push({ tick, vel, prog: prog.get(chan) || 0 });
           } else {
             const stack = open.get(key);
@@ -165,9 +135,6 @@ const MidiFile = {
           continue;
         }
 
-        // sustain pedal (CC64). Without this, exported piano parts come in
-        // sounding clipped and short, because the pedal is where most of a
-        // piano performance's length actually lives.
         if (type === 0xb0 && u8[p] === 64) {
           const on = u8[p + 1] >= 64;
           if (!pedal.has(chan)) pedal.set(chan, []);
@@ -176,13 +143,10 @@ const MidiFile = {
           p += 2;
           continue;
         }
-        // program change picks a new instrument for this channel from here on
         if (type === 0xc0) { prog.set(chan, u8[p]); p += 1; continue; }
-        // channel aftertouch carries one data byte, everything else two
         p += (type === 0xd0) ? 1 : 2;
       }
 
-      // notes still held when the track ends (sloppily written files): close them
       for (const [key, stack] of open) {
         for (const on of stack) {
           notes.push({
@@ -194,10 +158,6 @@ const MidiFile = {
       }
 
       notes.sort((a, b) => a.start - b.start);
-      // A MIDI "track" is not a part. Format 0 files put every instrument in one
-      // chunk separated only by channel, and a single channel can switch
-      // instrument partway through. Split on both so each distinct voice gets
-      // its own lane you can drag around on its own.
       const byPart = new Map();
       for (const n of notes) {
         const key = n.chan + ':' + (n.prog || 0);
@@ -215,10 +175,6 @@ const MidiFile = {
   isMidiFile(f) { return /\.(mid|midi|smf)$/i.test(f.name) || f.type === 'audio/midi' || f.type === 'audio/x-midi'; },
 
   // ---------- export ----------
-  // Write the project back out as a Standard MIDI File, format 1: one chunk of
-  // tempo and time signature, then one chunk per instrument track. Audio and
-  // group tracks are skipped, because there are no notes in them to write.
-
   PPQ: 480,
 
   varint(n) {
@@ -234,9 +190,6 @@ const MidiFile = {
       .concat([(len >> 24) & 255, (len >> 16) & 255, (len >> 8) & 255, len & 255], bytes);
   },
 
-  // Collect a track's notes as absolute-tick events, with the pedal applied the
-  // same way playback applies it: as CC64, not by lengthening the notes. What
-  // you export is what you wrote.
   trackEvents(track) {
     const ppq = this.PPQ;
     const ev = [];
@@ -259,17 +212,10 @@ const MidiFile = {
         ev.push({ t: Math.round((c.start + sp2.to) * ppq), order: 0, data: [0xb0, 64, 0] });
       }
     }
-    // note-offs before note-ons at the same tick, so a repeated note retriggers
     ev.sort((a, b) => a.t - b.t || a.order - b.order);
     return ev;
   },
 
-  // What to call a track in the exported file. fabu tracks are very often left
-  // as "Instrument 2", which tells whoever opens this in another program
-  // nothing at all. So: use the track name when the user actually chose one,
-  // otherwise the name of its biggest pattern, otherwise the instrument. The
-  // biggest pattern is the one most likely to be the part, rather than a
-  // four bar fill someone dropped in at the end.
   DEFAULT_TRACK_NAME: /^(instrument|audio|track)\s*\d*$/i,
   DEFAULT_CLIP_NAME: /^(pattern|clip|p\d*|take\s*\d*)$/i,
 
@@ -277,7 +223,6 @@ const MidiFile = {
     const given = (track.name || '').trim();
     if (given && !this.DEFAULT_TRACK_NAME.test(given)) return given;
 
-    // longest pattern that carries a name of its own
     let best = null, bestLen = -1;
     for (const c of track.clips || []) {
       if (c.kind !== 'midi' || !c.notes || !c.notes.length) continue;
@@ -297,7 +242,6 @@ const MidiFile = {
     const tracks = (S.tracks || []).filter(t => t.kind === 'midi' && (t.clips || []).some(c => c.kind === 'midi' && c.notes && c.notes.length));
     if (!tracks.length) return null;
 
-    // conductor track: tempo, time signature, name
     let head = [];
     const us = Math.round(60000000 / (S.bpm || 120));
     head = head.concat(this.varint(0), [0xff, 0x51, 0x03, (us >> 16) & 255, (us >> 8) & 255, us & 255]);
@@ -308,8 +252,6 @@ const MidiFile = {
     head = head.concat(this.varint(0), [0xff, 0x03, title.length], [...title].map(c => c.charCodeAt(0) & 127));
     head = head.concat(this.varint(0), [0xff, 0x2f, 0x00]);
 
-    // MThd is exactly six bytes: format, track count, division. Getting the
-    // length wrong here makes the file unreadable by everything, including us.
     const ntrks = tracks.length + 1;
     let out = this.chunk('MThd', [0, 1, (ntrks >> 8) & 255, ntrks & 255, (ppq >> 8) & 255, ppq & 255]);
     out = out.concat(this.chunk('MTrk', head));
@@ -340,7 +282,6 @@ const MidiFile = {
   },
 
   // ---------- import ----------
-
   async importFiles(files, atBeat) {
     for (const f of files) await this.importOne(f, atBeat);
   },
@@ -359,9 +300,6 @@ const MidiFile = {
 
     Undo.push('Import MIDI');
 
-    // An empty project has no opinions worth protecting, so the file's own
-    // tempo and time signature are adopted rather than forced into 120 / 4-4.
-    // A project with work in it keeps its settings; we only report the file's.
     const emptyProject = !S.tracks.some(t => (t.clips || []).length);
     let adopted = null;
     if (emptyProject) {
@@ -371,7 +309,6 @@ const MidiFile = {
       const base = (file.name || '').replace(/\.(mid|midi|smf)$/i, '').trim();
       if (base && (!S.name || S.name === 'Untitled')) S.name = base;
       adopted = { bpm: S.bpm, sig: S.timeSig[0] + '/' + S.timeSig[1] };
-      // the tempo box, the bar grid and the project title all read these
       const bpmInput = document.getElementById('bpmInput');
       if (bpmInput) bpmInput.value = S.bpm;
       const nameInput = document.getElementById('projName');
@@ -384,10 +321,6 @@ const MidiFile = {
     const multi = midi.tracks.length > 1;
     let total = 0, firstClip = null;
 
-    // One offset for the WHOLE file, not one per track. Shifting each track by
-    // its own first note would drop them all onto the same beat and destroy the
-    // timing between them: a bass entering at bar 3 must stay two bars behind
-    // the piano, not start with it.
     let offset = Infinity;
     for (const mt of midi.tracks) for (const n of mt.notes) if (n.start < offset) offset = n.start;
     if (!isFinite(offset)) offset = 0;
@@ -402,23 +335,14 @@ const MidiFile = {
         length: n.length,
         vel: n.vel
       }));
-      // round out to whole bars so the clip lines up with the grid. Uses the
-      // project's actual bar length, so a 3/4 file is not padded to 4/4.
       const bpb = beatsPerBar();
       const length = Math.max(bpb, Math.ceil((end - offset) / bpb) * bpb);
 
       const track = makeTrack('midi');
       track.name = multi ? tr('midi_track_n', 'Imported Midi {n}', { n: i + 1 }) : tr('midi_track', 'Imported Midi');
-      // If what the file calls this part matches an instrument fabu has, use
-      // it (a part named Strings should sound like strings); anything unclear
-      // falls back to Grand Piano rather than guessing.
       track.instrument = this.matchInstrument(mt.chan, mt.prog, mt.name);
       S.tracks.push(track);
 
-      // The clip is labelled with what the file called this part, so you can
-      // tell the trumpet line from the bass line when dragging lanes around.
-      // Skip the GM name when the track name already says the same thing
-      // ("Grand Piano Piano" told nobody anything twice).
       const gm = this.partName(mt.chan, mt.prog);
       const label = (mt.name && mt.name.toLowerCase().includes(gm.toLowerCase().split(' ')[0].toLowerCase()))
         ? mt.name
@@ -429,7 +353,6 @@ const MidiFile = {
         name: label || track.name,
         start, length, notes
       };
-      // the pedal moves with the notes and is trimmed to the clip
       const ped = (mt.pedal || [])
         .map(e => ({ beat: e.beat - offset, on: e.on }))
         .filter(e => e.beat >= -1e-9 && e.beat <= length + 1e-9);
@@ -447,8 +370,6 @@ const MidiFile = {
     if (firstClip) App.selectClip(firstClip.id);
     if (UI.playing) Engine.liveEdit();
 
-    // The file's own tempo is not forced onto the project (that would rewrite
-    // the timing of everything already there), but the user should be told it.
     const bpm = midi.tempoBpm ? Math.round(midi.tempoBpm) : null;
     if (this._adopted) {
       toast(tr('midi_adopted', '{n} notes imported. Project set to {bpm} BPM, {sig}.',
@@ -457,10 +378,6 @@ const MidiFile = {
     }
     toast(tr('midi_added', '{n} notes imported', { n: total }), 'green');
 
-    // The project already had work in it, so its tempo was left alone. Offer to
-    // match the file rather than silently letting the two disagree: the notes
-    // are placed in beats, so they play at whatever the project tempo is, which
-    // is right musically but wrong if you wanted the original speed.
     if (bpm && Math.abs(bpm - S.bpm) >= 1) {
       const from = Math.round(S.bpm);
       const change = await App.askYesNo({

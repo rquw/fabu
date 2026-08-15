@@ -1,9 +1,3 @@
-// Web-only: on phones, note that there is a desktop app.
-// The wording matters. It used to say the phone version does not really work,
-// which was true then and is not now: dragging, the piano roll and the loops
-// all work with a finger. So it points at the app as the better tool for a long
-// session rather than as the only one that functions.
-// Never runs in the packaged desktop app (electronAPI is present there).
 (function () {
   if (window.electronAPI) return;                 // desktop app: do nothing
 

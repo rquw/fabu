@@ -1,10 +1,6 @@
-// ---------- The loop gallery: publish loops, browse other people's, follow them ----------
+// ---------- the loop gallery ----------
 'use strict';
 
-// Everything here goes through the same anon-key RPC path the accounts use, so
-// there is no second set of credentials and no table this can reach directly.
-// Writes carry a token instead of a password: the password is traded for one
-// once, at sign-in, and the token is what sits in storage afterwards.
 const Gallery = {
   TOKEN_KEY: 'fabu.token',
   CATS: ['drums', 'bass', 'melodic', 'jazz', 'other'],
@@ -14,9 +10,6 @@ const Gallery = {
 
   rpc(fn, body) { return Auth.rpc(fn, body); },
 
-  // Reading is open to everyone. Writing needs a token, and getting one needs
-  // the password once. Asking for it at the moment somebody presses Publish is
-  // better than a login wall in front of a gallery they only wanted to look at.
   async needToken() {
     const t = this.token();
     if (t) return t;
@@ -64,12 +57,9 @@ const Gallery = {
     });
   },
 
-  // A token that has been revoked server-side must not sit in storage pretending
-  // to work, or every action fails with an unexplained "not signed in".
   forgetToken() { this.setToken(null); },
 
   // ---------- publishing ----------
-
   async publish(loop) {
     if (!loop) return;
     const t = await this.needToken();
@@ -121,7 +111,6 @@ const Gallery = {
   },
 
   // ---------- browsing ----------
-
   heard: new Map(),      // loop id -> parsed loop, so a second listen is instant
   playingId: null,
   playingEl: null,
@@ -142,9 +131,6 @@ const Gallery = {
   cat: '',
   query: '',
 
-  // The gallery shows up in two places: a floating window over a project, and a
-  // full page on the home screen. Only the box it draws into differs, so the
-  // browser itself is built once and told where to go.
   toggle() {
     if (Windows.isOpen('gallery')) { Windows.close('gallery'); return; }
     const w = Windows.create('gallery', tr('gal_title', 'Loop gallery'), 'i-library',
@@ -177,7 +163,6 @@ const Gallery = {
     const setSort = (s) => {
       this.sort = s;
       box.querySelectorAll('.gal-tab').forEach(b => b.classList.toggle('on', b.dataset.sort === s));
-      // searching and filtering by kind mean nothing on your own local loops
       box.querySelector('.gal-filters').classList.toggle('hidden', s === 'mine');
       this.refresh();
     };
@@ -192,7 +177,6 @@ const Gallery = {
     setSort(this.sort);
   },
 
-  // whichever copy was mounted last, as long as it is still in the document
   list() {
     if (this.box && this.box.isConnected) return this.box.querySelector('#galList');
     const w = Windows.wins.get('gallery');
@@ -205,8 +189,6 @@ const Gallery = {
     this.stopPreview();
     list.innerHTML = `<div class="gal-note">${tr('gal_loading', 'Loading…')}</div>`;
 
-    // Your own loops live in this browser, not on the server, so this tab needs
-    // nothing from the network and works with no account at all.
     if (this.sort === 'mine') {
       const mine = MyLoops.all();
       if (!mine.length) {
@@ -222,8 +204,6 @@ const Gallery = {
       return;
     }
 
-    // "People you follow" is the one view that means nothing signed out, so it
-    // says so rather than showing an empty shelf.
     if (this.sort === 'friends' && !this.token()) {
       list.innerHTML = `<div class="gal-note">${tr('gal_need_signin', 'Sign in to see loops from people you follow.')}</div>`;
       const b = document.createElement('button');
@@ -254,7 +234,6 @@ const Gallery = {
     });
   },
 
-  // one of your own loops: play it, publish it, edit it
   mineCard(l) {
     const el = document.createElement('div');
     el.className = 'gal-card';
@@ -332,8 +311,6 @@ const Gallery = {
       play.querySelector('use').setAttribute('href', '#i-stop');
       Engine.auditionSample({ id: 'gal' + r.id, name: loop.name, instrument: loop.instrument,
                               length: loop.length, notes: loop.notes, sustain: loop.sustain });
-      // audition stops itself at the end of the loop, so the button has to
-      // come back on its own or it sits there saying stop over silence
       clearTimeout(this._playTimer);
       const beats = Math.max(1, loop.length || 4);
       this._playTimer = setTimeout(() => this.stopPreview(), (beats * 60 / (S.bpm || 120)) * 1000 + 300);
@@ -423,9 +400,6 @@ const Gallery = {
   },
 
   // ---------- profiles ----------
-
-  // Your own profile, from wherever you are. Signing in first is the point of
-  // the profile, so it asks rather than doing nothing.
   async openMyProfile() {
     if (!Auth.isLoggedIn()) { Auth.open(() => this.openMyProfile()); return; }
     this.openProfile(Auth.user);
@@ -533,7 +507,6 @@ const Gallery = {
     });
   },
 
-  // The same profile as the modal, laid out as a page for the home screen.
   async mountProfile(box, name) {
     box.innerHTML = `<div class="gal-note">${tr('gal_loading', 'Loading…')}</div>`;
     if (!name) {
@@ -550,8 +523,6 @@ const Gallery = {
       const rows = await this.rpc('fabu_profile_get', { t: this.token(), who: name });
       p = Array.isArray(rows) ? rows[0] : rows;
     } catch (e) { /* handled below */ }
-    // With no server reachable there is still something true to show: the name
-    // they are signed in as, and the loops sitting in this browser.
     if (!p) p = { username: name, bio: '', accent: '', loops: 0, likes: 0,
                   followers: 0, following: 0, i_follow: false, offline: true };
     const mine = Auth.user === p.username;
@@ -621,7 +592,6 @@ const Gallery = {
   },
 
   // ---------- people you follow ----------
-
   async openFollowing() {
     const t = await this.needToken();
     if (!t) return;

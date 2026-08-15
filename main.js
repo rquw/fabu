@@ -4,13 +4,7 @@ const path = require('path');
 
 let win;
 
-// ---- Updates ----
-// The app is unsigned, so electron-updater's own background installer is off
-// (its differential download kept failing halfway and could even remove the
-// app). We only use it to CHECK for new versions. When the user clicks Update,
-// we download the FULL installer ourselves, verify its sha512 against the
-// release manifest, and only then hand over. The installed app is never
-// touched until a complete, verified new version is on disk.
+// ---- updates ----
 let updateInfo = null;
 let updater = null;
 let pendingRestart = null; // set once an update is downloaded/ready; run on 'restart-now'
@@ -20,24 +14,17 @@ function setupAutoUpdate() {
   try { ({ autoUpdater: updater } = require('electron-updater')); } catch (e) { return; }
   updater.autoDownload = false;
   updater.autoInstallOnAppQuit = false;
-  // full download instead of the differential/blockmap one, because the diff download
-  // was what kept cancelling halfway on the unsigned build.
   updater.disableDifferentialDownload = true;
   updater.on('update-available', (info) => {
     updateInfo = info;
     if (win) win.webContents.send('update-ready', info && info.version);
   });
-  // Windows: electron-updater does the download + install (it sequences the
-  // app-quit-then-install correctly; the old hand-rolled spawn raced it and
-  // never actually replaced the files).
   updater.on('download-progress', (p) => {
     if (win) win.webContents.send('update-progress', Math.floor(p.percent || 0));
   });
   updater.on('update-downloaded', () => {
-    // don't restart yet: let the user pick "now" or "in a minute" so they can save
     pendingRestart = () => {
       quitOk = true;
-      // false = show the installer, true = start fabu again afterwards
       try { updater.quitAndInstall(false, true); }
       catch (e) { if (win) win.webContents.send('update-error', String(e && e.message)); }
     };
@@ -48,7 +35,6 @@ function setupAutoUpdate() {
     shell.openExternal('https://rquw.github.io/fabu/').catch(() => {});
   });
   updater.checkForUpdates().catch(() => {});
-  // keep checking through a long session so a fresh release is noticed promptly
   setInterval(() => updater.checkForUpdates().catch(() => {}), 15 * 60 * 1000);
 }
 
@@ -58,7 +44,6 @@ function versionNewer(a, b) { // a > b, "1.0.10" style
   return false;
 }
 
-// manual "check for updates" from the settings window
 ipcMain.handle('check-updates', async () => {
   if (!app.isPackaged || !updater) return { status: 'dev', version: app.getVersion() };
   try {
@@ -110,7 +95,6 @@ function downloadAsset(meta, destPath) {
   });
 }
 
-// old installers and swapped-out bundles from previous updates; best-effort
 function cleanUpdateLeftovers() {
   try {
     const tmp = app.getPath('temp');
@@ -131,14 +115,11 @@ async function applyUpdateMac() {
   try {
     await downloadAsset(meta, dest);
   } catch (e) {
-    // flaky network: one quiet retry before giving up
     await new Promise((r) => setTimeout(r, 1500));
     if (win) win.webContents.send('update-progress', 0);
     await downloadAsset(meta, dest);
   }
 
-  // unpack the new fabu.app and swap it in place (we relaunch later, once the
-  // user picks when to restart)
   const { execFile } = require('child_process');
   const run = (cmd, args) => new Promise((res, rej) => execFile(cmd, args, (e) => (e ? rej(e) : res())));
   const dir = path.join(tmp, 'fabu-update-' + updateInfo.version);
@@ -149,7 +130,6 @@ async function applyUpdateMac() {
   if (!fs.existsSync(newApp)) throw new Error('no app in the update');
   const curApp = path.resolve(process.execPath, '..', '..', '..');
   if (!curApp.endsWith('.app')) throw new Error('not running from an .app');
-  // strip quarantine and ad-hoc sign so Gatekeeper doesn't re-warn on the swap
   try { await run('/usr/bin/xattr', ['-cr', newApp]); } catch (e) { /* none set */ }
   try { await run('/usr/bin/codesign', ['--force', '--deep', '--sign', '-', newApp]); } catch (e) { /* best effort */ }
   const oldApp = path.join(tmp, 'fabu-old-' + Date.now() + '.app');
@@ -160,24 +140,10 @@ async function applyUpdateMac() {
     await run('/bin/mv', [oldApp, curApp]); // put the old one back
     throw e;
   }
-  // the new app is in place; defer the relaunch until the user is ready
   pendingRestart = () => { quitOk = true; app.relaunch(); app.quit(); };
   if (win) win.webContents.send('update-downloaded');
 }
 
-// Windows.
-// The NSIS one-click installer UNINSTALLS the old version before installing the
-// new one, so anything that makes the install step fail leaves the machine with
-// no app at all, which is exactly what kept happening. Two causes, both fixed
-// here by doing what macOS already does instead of handing off to
-// electron-updater's installer:
-//   1. the app was still running when the installer tried to replace its files,
-//      so the copy failed after the uninstall had already happened;
-//   2. every release ships an installer called plain "fabu.exe", so a stale or
-//      half-written file from an earlier attempt could be the one that ran.
-// Now: download the FULL installer ourselves to a version-stamped path, verify
-// its sha512 against the release manifest, and only then quit and hand over.
-// and the app is completely gone before the installer starts.
 async function applyUpdateWin() {
   const files = (updateInfo && updateInfo.files) || [];
   const meta = files.find((f) => f.url && /\.exe$/i.test(f.url));
@@ -192,8 +158,6 @@ async function applyUpdateWin() {
     await downloadAsset(meta, dest);
   }
 
-  // A verified installer also goes to Downloads, so that if the install still
-  // fails the user has a known-good copy to run instead of an empty machine.
   let backup = null;
   try {
     backup = path.join(app.getPath('downloads'), 'fabu-' + updateInfo.version + '-installer.exe');
@@ -203,9 +167,6 @@ async function applyUpdateWin() {
   pendingRestart = () => {
     quitOk = true;
     const { spawn } = require('child_process');
-    // Start the installer through cmd with a short wait, detached from us. The
-    // delay is the point: we must be fully exited before it touches a file,
-    // otherwise the uninstall succeeds and the install cannot.
     try {
       spawn('cmd.exe', ['/c', 'timeout /t 4 /nobreak >nul & start "" "' + dest + '" --force-run'], {
         detached: true, stdio: 'ignore', windowsHide: true
@@ -216,7 +177,6 @@ async function applyUpdateWin() {
   if (win) win.webContents.send('update-downloaded', backup);
 }
 
-// the renderer asks to actually restart (either "now" or after its 1-minute wait)
 ipcMain.on('restart-now', () => {
   if (!pendingRestart) return;
   const fn = pendingRestart; pendingRestart = null;
@@ -231,16 +191,10 @@ ipcMain.on('install-update', () => {
     shell.openExternal('https://rquw.github.io/fabu/').catch(() => {}); // the site always works
   };
   if (process.platform === 'darwin') {
-    // macOS can't use electron-updater unsigned, so we swap the .app ourselves
     applyUpdateMac().catch(fail);
   } else if (process.platform === 'win32') {
     if (updater) {
-      // electron-updater sequences quit-then-install itself, which is the
-      // part the manual spawn could never get right. update-downloaded sets
-      // pendingRestart to quitAndInstall.
       updater.downloadUpdate().catch((e) => {
-        // if it will not, fall back to fetching the installer ourselves so
-        // there is at least a verified copy in Downloads to run by hand
         applyUpdateWin().catch(fail);
       });
     } else {
@@ -252,19 +206,14 @@ ipcMain.on('install-update', () => {
   }
 });
 
-// ---- Main window size and position ----
-// Sizing the app the way you like it and having it forget every launch is a
-// small daily annoyance, so the bounds are kept in userData and restored.
+// ---- main window size and position ----
 const WIN_STATE = () => path.join(app.getPath('userData'), 'window-state.json');
 
-// no saved state means this is the first time fabu has been opened here
 function readWindowState() {
   const def = { width: 1440, height: 900, firstRun: true };
   let s;
   try { s = JSON.parse(fs.readFileSync(WIN_STATE(), 'utf8')); } catch (e) { return def; }
   if (!s || !s.width || !s.height) return def;
-  // A window remembered on a second monitor that is no longer plugged in would
-  // open somewhere invisible, so only keep a position still on a real display.
   try {
     const { screen } = require('electron');
     const onScreen = s.x != null && s.y != null && screen.getAllDisplays().some((d) => {
@@ -281,8 +230,6 @@ function trackWindowState(w) {
   const writeNow = () => {
     if (!w || w.isDestroyed()) return;
     try {
-      // getBounds while maximized returns the maximized size, which would
-      // become the "restored" size forever after; keep the normal bounds
       const b = w.isMaximized() || w.isFullScreen() ? w.getNormalBounds() : w.getBounds();
       fs.writeFileSync(WIN_STATE(), JSON.stringify({
         x: b.x, y: b.y, width: b.width, height: b.height,
@@ -290,11 +237,8 @@ function trackWindowState(w) {
       }));
     } catch (e) { /* disk full or read-only profile: not worth a crash */ }
   };
-  // resizing fires continuously, so those are debounced
   const save = () => { clearTimeout(t); t = setTimeout(writeNow, 400); };
   for (const ev of ['resize', 'move', 'maximize', 'unmaximize', 'enter-full-screen', 'leave-full-screen']) w.on(ev, save);
-  // On the way out there is no time to debounce: the process is about to go and
-  // the timer would never fire, losing whatever the user just did to the window.
   w.on('close', () => { clearTimeout(t); writeNow(); });
 }
 
@@ -318,10 +262,6 @@ function createWindow() {
     }
   });
   if (st.maximized) win.maximize();
-  // First launch fills the display. Deliberately by sizing to the work area
-  // rather than calling maximize(): on macOS that turns into real fullscreen,
-  // which takes over a Space and hides the menu bar, and nobody asked for
-  // that. This is just a big window, and dragging it smaller sticks.
   else if (st.firstRun) {
     try {
       const { screen } = require('electron');
@@ -334,32 +274,21 @@ function createWindow() {
 
   win.loadFile('index.html');
 
-  // tell the renderer about fullscreen so it can reclaim the macOS traffic-light gutter
   const sendFS = () => { if (win && !win.isDestroyed()) win.webContents.send('fullscreen-changed', win.isFullScreen()); };
   win.on('enter-full-screen', sendFS);
   win.on('leave-full-screen', sendFS);
   win.webContents.on('did-finish-load', sendFS);
 
-  // open external links (Ko-fi, GitHub, etc.) in the real browser, not a blank window
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https?:\/\//i.test(url)) { shell.openExternal(url); return { action: 'deny' }; }
     return { action: 'deny' };
   });
 
-  // Closing used to take a round trip through the renderer every single time,
-  // even with nothing to ask about: main told the renderer to check, the
-  // renderer answered, and only then did anything happen. If the renderer was
-  // busy drawing or rendering audio, that gap is the "it does not close
-  // straight away" everybody notices. The renderer now keeps main informed of
-  // whether there is anything unsaved, so the common case never asks at all.
   win.on('close', (e) => {
     if (quitOk) return;
     e.preventDefault();
     if (!rendererDirty) { beginQuit(); return; }
     win.webContents.send('confirm-close');
-    // A renderer that is wedged must not make the app unclosable. If it has not
-    // answered by now it is not going to, and an unsaved project is recoverable
-    // from the autosave anyway.
     clearTimeout(closeTimer);
     closeTimer = setTimeout(() => { if (!quitOk) beginQuit(); }, 3000);
   });
@@ -369,9 +298,6 @@ let quitOk = false;
 let rendererDirty = false;
 let closeTimer = null;
 
-// Hide first, then quit. Teardown is not instant (audio devices, the GPU
-// process, the update checker), and a window that sits there through it looks
-// like the app has hung.
 function beginQuit() {
   if (quitOk) return;
   quitOk = true;
@@ -386,11 +312,6 @@ ipcMain.on('set-dirty', (e, dirty) => { rendererDirty = !!dirty; });
 
 ipcMain.handle('get-version', () => app.getVersion());
 
-// Windows and Linux get Electron's default File/Edit/View/Window/Help bar
-// unless you say otherwise, and none of it does anything fabu needs: every
-// command already has a button. On macOS the menu bar belongs to the system,
-// not to the window, and removing it would take the standard Cmd shortcuts
-// (copy, paste, quit, hide) with it, so it stays there.
 function setupMenu() {
   if (process.platform === 'darwin') return;
   Menu.setApplicationMenu(null);
@@ -398,7 +319,6 @@ function setupMenu() {
 
 app.whenReady().then(() => {
   setupMenu();
-  // Allow microphone access for voice recording
   session.defaultSession.setPermissionRequestHandler((wc, permission, cb) => {
     cb(permission === 'media');
   });
@@ -414,8 +334,7 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
 
-// ---- File dialogs ----
-
+// ---- file dialogs ----
 ipcMain.handle('save-file', async (e, { defaultName, filters, data, encoding }) => {
   let defaultPath = defaultName;
   try {
@@ -440,9 +359,6 @@ ipcMain.handle('save-file', async (e, { defaultName, filters, data, encoding }) 
   }
 });
 
-// write straight to a known path (a project that already has a .fab file), so no dialog
-// The folder every project lives in unless somebody deliberately picks
-// another one. Created on demand so a fresh install has it the first time.
 function projectsDir() {
   const dir = path.join(app.getPath('documents'), 'fabu projects');
   fs.mkdirSync(dir, { recursive: true });
@@ -454,9 +370,6 @@ ipcMain.handle('projects-dir', async () => {
   catch (err) { return { ok: false, error: String(err) }; }
 });
 
-// Save straight into the project folder under a given name. Never silently
-// writes over somebody else's project: an existing name gets a number, the way
-// a download would.
 ipcMain.handle('save-to-projects', async (e, { name, data }) => {
   try {
     const dir = projectsDir();
@@ -471,7 +384,6 @@ ipcMain.handle('save-to-projects', async (e, { name, data }) => {
   }
 });
 
-// show the saved file in Finder/Explorer, selected
 ipcMain.handle('reveal-path', async (e, { filePath }) => {
   try {
     if (filePath) shell.showItemInFolder(filePath);
@@ -512,7 +424,6 @@ ipcMain.handle('open-file', async (e, { filters }) => {
   }
 });
 
-// Open a known file by path (used by the homescreen recents list)
 ipcMain.handle('open-path', async (e, { filePath }) => {
   try {
     const buf = fs.readFileSync(filePath);
@@ -522,7 +433,6 @@ ipcMain.handle('open-path', async (e, { filePath }) => {
   }
 });
 
-// The persistent instrument library lives in userData too
 function libraryPath() { return path.join(app.getPath('userData'), 'instruments.json'); }
 
 ipcMain.handle('library-write', async (e, { data }) => {
@@ -544,7 +454,6 @@ ipcMain.handle('library-read', async () => {
   }
 });
 
-// Autosave lives in the app's userData folder so big projects are fine
 function autosavePath() { return path.join(app.getPath('userData'), 'autosave.fab'); }
 
 ipcMain.handle('autosave-write', async (e, { data }) => {
@@ -567,8 +476,6 @@ ipcMain.handle('autosave-read', async () => {
   }
 });
 
-// Read every .json in the languages folder. A language exists only if its
-// file exists. The editable copy (Resources/languages) wins over the bundled one.
 ipcMain.handle('get-languages', async () => {
   const dirs = [];
   if (process.resourcesPath) dirs.push(path.join(process.resourcesPath, 'languages'));

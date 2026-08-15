@@ -1,8 +1,6 @@
-// ---------- Project state, samples, and the undo system ----------
+// ---------- project state ----------
 'use strict';
 
-// The whole song lives in S. Everything in S is JSON-serializable,
-// which is what makes snapshot-undo and .fab saving simple.
 let S = null;
 
 function freshProject() {
@@ -24,26 +22,18 @@ function freshProject() {
   };
 }
 
-// How many quarter-note beats are in one bar. Everything in the app counts in
-// quarter beats, so 3/4 is 3 and 6/8 is 3 as well (six eighths). Old projects
-// saved before time signatures existed have no timeSig and stay 4/4.
 function beatsPerBar() {
   const ts = (S && S.timeSig) || [4, 4];
   const n = Math.max(1, ts[0] || 4), d = Math.max(1, ts[1] || 4);
   return n * (4 / d);
 }
 
-// ---------- Sustain pedal ----------
-// A clip's pedal is a list of { beat, on } events in clip-relative beats, kept
-// sorted. Notes are never rewritten: the pedal is applied when a note is
-// scheduled, so lifting it gives you the original notes back untouched.
-
+// ---------- sustain pedal ----------
 function pedalEvents(clip) {
   const s = clip && clip.sustain;
   return (s && s.length) ? s : null;
 }
 
-// Is the pedal held at this point in the clip?
 function pedalDownAt(clip, beat) {
   const ev = pedalEvents(clip);
   if (!ev) return false;
@@ -55,8 +45,6 @@ function pedalDownAt(clip, beat) {
   return down;
 }
 
-// How long a note actually rings once the pedal is taken into account: to the
-// next pedal lift if one is holding it, otherwise its own length.
 function sustainedLength(clip, noteStart, dur) {
   const ev = pedalEvents(clip);
   if (!ev) return dur;
@@ -69,17 +57,11 @@ function sustainedLength(clip, noteStart, dur) {
   return Math.max(dur, Math.min(lift, clip.length) - noteStart);
 }
 
-// Add a pedal span, merging into whatever is already there so overlapping
-// presses cannot leave the pedal stuck down.
 function setPedalSpan(clip, from, to) {
   if (!clip.sustain) clip.sustain = [];
-  // keep every existing span: the merge below joins whatever overlaps. Dropping
-  // overlapping ones first would swallow the part of an earlier press that
-  // reached further back than the new one.
   const spans = pedalSpans(clip);
   spans.push({ from: Math.max(0, from), to: Math.max(from, to) });
   spans.sort((a, b) => a.from - b.from);
-  // merge touching spans
   const merged = [];
   for (const s of spans) {
     const last = merged[merged.length - 1];
@@ -90,7 +72,6 @@ function setPedalSpan(clip, from, to) {
   for (const s of merged) { clip.sustain.push({ beat: s.from, on: true }, { beat: s.to, on: false }); }
 }
 
-// The pedal as spans rather than events, which is what the UI draws
 function pedalSpans(clip) {
   const ev = pedalEvents(clip);
   if (!ev) return [];
@@ -115,7 +96,6 @@ function clearPedalRange(clip, from, to) {
   for (const s of spans) if (s.to > s.from + 1e-9) clip.sustain.push({ beat: s.from, on: true }, { beat: s.to, on: false });
 }
 
-// Runtime-only UI state (not saved, not undoable)
 const UI = {
   playhead: 0,          // beats
   playing: false,
@@ -134,15 +114,12 @@ const UI = {
     v = !!v;
     if (v === this._fileDirty) return;
     this._fileDirty = v;
-    // so the desktop app can close straight away when there is nothing to ask
     if (window.electronAPI && window.electronAPI.setDirty) {
       try { window.electronAPI.setDirty(v); } catch (e) {}
     }
   }
 };
 
-// Decoded audio lives here, referenced by sampleId from clips.
-// { id: { name, buffer: AudioBuffer, bytes: ArrayBuffer, mime } }
 const Samples = {};
 
 function makeTrack(kind) {
@@ -166,14 +143,11 @@ function makeTrack(kind) {
   };
 }
 
-// Persistent instrument library (id -> def), shared across all projects.
-// Its sample buffers are decoded into Samples on startup.
 let LIB = {};
 function resolveInstrument(id) {
   return (S && S.instruments && S.instruments[id]) || LIB[id] || null;
 }
 
-// Automation keyframes for one parameter, created on demand
 function automPoints(track, param) {
   if (!track.autom) track.autom = {};
   if (!track.autom[param]) track.autom[param] = [];
@@ -181,12 +155,8 @@ function automPoints(track, param) {
 }
 
 // ---------- automation curves ----------
-// A keyframe's shape describes how the line LEAVES it, on the way to the next
-// one. Straight is the default and what every existing project has, so a
-// missing shape has to keep behaving exactly as it always did.
 const CURVE_SHAPES = ['lin', 'ease', 'in', 'out', 'hold'];
 
-// f runs 0..1 across the segment and comes back reshaped
 function curveEase(f, shape) {
   switch (shape) {
     case 'ease': return f * f * (3 - 2 * f);      // slow at both ends
@@ -197,7 +167,6 @@ function curveEase(f, shape) {
   }
 }
 
-// Interpolated value of a raw keyframe array at a beat (0 if empty)
 function interpPoints(pts, beat) {
   if (!pts || !pts.length) return 0;
   if (beat <= pts[0].beat) return pts[0].v;
@@ -212,7 +181,6 @@ function interpPoints(pts, beat) {
   return pts[pts.length - 1].v;
 }
 
-// Interpolated automation value at a beat, or null if the param has no keyframes
 function automValueAt(track, param, beat) {
   const pts = track.autom && track.autom[param];
   if (!pts || !pts.length) return null;
@@ -228,8 +196,6 @@ function getClip(id) {
   return null;
 }
 
-// Trimming: clip.offset = seconds into the sample where playback starts,
-// clip.dur = seconds of sample material to play (both in the sample's own time)
 function clipOffSec(clip) { return clip.offset || 0; }
 function clipDurSec(clip) {
   const s = Samples[clip.sampleId];
@@ -239,12 +205,7 @@ function clipDurSec(clip) {
   return clip.dur != null ? Math.min(clip.dur, max) : max;
 }
 
-// ---------- automated playback rate (speed / pitch keyframes on audio) ----------
-// With speed or pitch automation the source is consumed at a VARYING rate, so
-// the clip's real length and any seek position are the INTEGRAL of that curve,
-// not a simple division. We integrate numerically once and cache a cumulative
-// table, so footprint, seeking and the waveform all agree with what plays.
-
+// ---------- automated playback rate ----------
 const _rateCache = new Map(); // clip.id -> { key, durSec, dt, table }
 
 function clipRateAutom(clip) {
@@ -252,8 +213,6 @@ function clipRateAutom(clip) {
     ((clip.autom.speed && clip.autom.speed.length) || (clip.autom.pitch && clip.autom.pitch.length)));
 }
 
-// combined playback rate at an absolute song beat (speed keyframes x pitch
-// detune; a static pitch shift is length-preserving so it does not count)
 function clipRateAtBeat(clip, beat) {
   const sp = (clip.autom && clip.autom.speed && clip.autom.speed.length)
     ? interpPoints(clip.autom.speed, beat) : (clip.speed || 1);
@@ -280,7 +239,6 @@ function clipAutoInfo(clip) {
   }
   const info = {
     key, dt, table, durSec: t,
-    // source seconds consumed after `outSec` seconds of output (for seek + waveform)
     sourceAt(outSec) {
       const i = Math.max(0, outSec / this.dt);
       const i0 = Math.min(this.table.length - 1, Math.floor(i));
@@ -292,9 +250,6 @@ function clipAutoInfo(clip) {
   return info;
 }
 
-// Audio clip length in beats depends on trim, tempo and speed. Pitch shifting
-// preserves duration (so it does NOT change the length); speed does. With
-// speed/pitch automation the length is the integral of the rate curve.
 function audioClipBeats(clip) {
   const s = Samples[clip.sampleId];
   if (!s || !s.buffer) return 4;
@@ -302,8 +257,6 @@ function audioClipBeats(clip) {
   return (clipDurSec(clip) / (clip.speed || 1)) * (S.bpm / 60);
 }
 
-// The longest a single pattern may be, in beats. Two minutes of music at the
-// project's tempo, so it means the same thing at 60bpm as at 200.
 const MAX_PATTERN_MINUTES = 2;
 function maxPatternBeats() {
   return Math.max(8, Math.round(MAX_PATTERN_MINUTES * (S && S.bpm ? S.bpm : 120)));
@@ -311,7 +264,6 @@ function maxPatternBeats() {
 
 function clipBeats(clip) {
   if (clip.kind === 'group') return clip.length;
-  // a pattern's speed stretches/squashes how much timeline it takes up
   return clip.kind === 'midi' ? clip.length / (clip.speed || 1) : audioClipBeats(clip);
 }
 
@@ -323,9 +275,7 @@ function songEndBeat() {
   return end;
 }
 
-// ---------- Undo / redo: snapshot the whole project ----------
-// Every mutating action calls pushUndo('label') BEFORE changing S.
-
+// ---------- undo / redo ----------
 const Undo = {
   undoStack: [],
   redoStack: [],
@@ -344,7 +294,7 @@ const Undo = {
     if (!this.undoStack.length) { toast(tr('toast_nothing_undo', 'Nothing to undo')); return; }
     const entry = this.undoStack.pop();
     this.redoStack.push({ label: entry.label, snap: JSON.stringify(S) });
-    S = JSON.parse(entry.snap);
+    S = JSON.parse(entry.snap);   // S is replaced, old refs are stale
     afterStateRestore();
     toast(tr('undo_prefix', 'Undo') + ': ' + actLabel(entry.label));
     updateUndoButtons();
@@ -366,9 +316,6 @@ function updateUndoButtons() {
   $('#btnRedo').style.opacity = Undo.redoStack.length ? 1 : 0.35;
 }
 
-// Re-sync everything visible after S got replaced (undo/redo/load)
-// Instruments that no longer exist, mapped to what replaced them. Applied when
-// a project loads so old files keep sounding like something.
 const INSTR_REPLACED = { keys: 'rpiano' };
 
 function migrateInstruments() {
@@ -381,7 +328,6 @@ function migrateInstruments() {
 function afterStateRestore() {
   migrateInstruments();
   if (UI.playing) Engine.stop();
-  // selection may point at things that no longer exist
   if (UI.selClipId && !getClip(UI.selClipId)) UI.selClipId = null;
   if (UI.selTrackId && !getTrack(UI.selTrackId)) UI.selTrackId = null;
   Engine.rebuildTracks();

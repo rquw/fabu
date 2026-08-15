@@ -1,7 +1,6 @@
-// ---------- App glue: transport, shortcuts, keyboard instrument, files ----------
+// ---------- app glue ----------
 'use strict';
 
-// physical key codes to scale degrees (layout independent, QWERTZ friendly)
 const WHITE_CODES = { KeyA: 0, KeyS: 2, KeyD: 4, KeyF: 5, KeyG: 7, KeyH: 9, KeyJ: 11, KeyK: 12, KeyL: 14, Semicolon: 16, Quote: 17 };
 const BLACK_CODES = { KeyW: 1, KeyE: 3, KeyT: 6, KeyY: 8, KeyU: 10, KeyO: 13, KeyP: 15 };
 
@@ -20,7 +19,6 @@ const App = {
 
     window.addEventListener('resize', () => Timeline.render());
     window.addEventListener('blur', () => this.releaseAllKeys());
-    // buttons must not keep focus, otherwise Space would re-trigger them
     document.addEventListener('click', (e) => {
       const b = e.target.closest('button');
       if (b) b.blur();
@@ -35,16 +33,13 @@ const App = {
     Auth.init();
     if (typeof MIDI !== 'undefined') MIDI.init();
     Sync.initCursors();
-    // closing the app asks about unsaved changes
     if (window.electronAPI && window.electronAPI.onConfirmClose) {
       window.electronAPI.onConfirmClose(() => {
         if (!UI.fileDirty) { window.electronAPI.confirmClose(); return; }
         this.confirmExit('close');
       });
-      // main starts out assuming nothing is unsaved; make that true on the way in
       if (window.electronAPI.setDirty) window.electronAPI.setDirty(UI.fileDirty);
     }
-    // one-click update: fabu downloads the new version itself and swaps over
     if (window.electronAPI && window.electronAPI.onUpdateReady) {
       window.electronAPI.onUpdateReady((version) => this.showUpdateBanner(version));
       window.electronAPI.onUpdateProgress((pct) => {
@@ -63,18 +58,12 @@ const App = {
           this.autosaveTick(); // last save before the swap
         });
       }
-      // update finished downloading: let the user pick when to restart
       if (window.electronAPI.onUpdateDownloaded) {
         window.electronAPI.onUpdateDownloaded((backupPath) => this.showRestartPrompt(backupPath));
       }
-      // macOS traffic lights overlap the top-left unless we reserve space when
-      // windowed; reclaim that gutter in fullscreen (no traffic lights there)
       if (/Mac/i.test(navigator.platform)) document.body.classList.add('is-mac');
       if (window.electronAPI.onFullscreen) window.electronAPI.onFullscreen((fs) => document.body.classList.toggle('is-fullscreen', fs));
     }
-    // greet the user once after an update went through
-    // the web build has no electronAPI, so start from the built-in constant and
-    // let the packaged app correct it below
     this.version = (typeof APP_VERSION !== 'undefined' && APP_VERSION) || this.version || '0.0.0';
     const hv0 = document.getElementById('homeVer');
     if (hv0) hv0.textContent = 'v' + this.version;
@@ -84,7 +73,6 @@ const App = {
         this.version = v;
         const hv = document.getElementById('homeVer');
         if (hv) hv.textContent = 'v' + v;
-        // a "Check for updates" button by the version, like the one in Settings
         const cu = document.getElementById('homeCheckUpd');
         if (cu && window.electronAPI.checkUpdates) {
           cu.classList.remove('hidden');
@@ -105,7 +93,6 @@ const App = {
     }
   },
 
-  // manual update check from the settings window
   async checkForUpdates() {
     if (!(window.electronAPI && window.electronAPI.checkUpdates)) return 'unsupported';
     try {
@@ -139,7 +126,6 @@ const App = {
     b.querySelector('#updLater').addEventListener('click', () => b.remove());
   },
 
-  // the update finished downloading, so ask when to restart so work can be saved
   showRestartPrompt(backupPath) {
     const banner = document.getElementById('updateBanner');
     if (banner) banner.remove();
@@ -147,8 +133,6 @@ const App = {
     const wrap = document.createElement('div');
     wrap.id = 'restartModal';
     wrap.className = 'modal-back';
-    // Windows installs by replacing the app, so name where the spare installer
-    // is: if the install ever fails, that file is the way back in.
     const fallback = backupPath
       ? `<div class="modal-sub" style="font-size:11.5px;opacity:.75">${tr('upd_backup_note', 'A copy of the installer is in your Downloads folder, in case anything goes wrong.')}</div>`
       : '';
@@ -169,16 +153,12 @@ const App = {
       if (window.electronAPI && window.electronAPI.restartNow) window.electronAPI.restartNow();
     };
     wrap.querySelector('#rsNow').addEventListener('click', doRestart);
-    // "in 1 minute" means "let me save first", so the modal has to get out of
-    // the way. It used to sit there blocking the whole app until it restarted
     wrap.querySelector('#rsSoon').addEventListener('click', () => {
       wrap.remove();
       this.showRestartCountdown(60, doRestart);
     });
   },
 
-  // A small bar in the corner while the delayed restart counts down: you can
-  // keep working and save, restart early, or cancel it entirely.
   showRestartCountdown(secs, doRestart) {
     const old = document.getElementById('restartBar');
     if (old) { clearInterval(old._iv); old.remove(); }
@@ -205,8 +185,7 @@ const App = {
     });
   },
 
-  // ---------- leave confirmation (home / quit) ----------
-
+  // ---------- leave confirmation ----------
   confirmExit(kind) {
     const old = document.getElementById('exitModal');
     if (old) old.remove();
@@ -248,8 +227,6 @@ const App = {
     wrap.addEventListener('mousedown', (e) => { if (e.target === wrap) wrap.remove(); });
   },
 
-  // The last screen before the app closes: it says where the project went, and
-  // offers to show you rather than making you go and find it.
   showSavedStep(wrap, exit, kind) {
     const name = (this.currentPath || '').split(/[\\/]/).pop() || this.projectFileName('.fab');
     wrap.innerHTML = `
@@ -264,8 +241,6 @@ const App = {
       </div>`;
     wrap.querySelector('#savedOpen').addEventListener('click', () => {
       window.electronAPI.revealPath({ filePath: this.currentPath || null });
-      // deliberately does not exit: opening the folder and having the app
-      // vanish underneath you is not what that button says it does
     });
     wrap.querySelector('#savedExit').addEventListener('click', exit);
   },
@@ -277,7 +252,6 @@ const App = {
   },
 
   // ---------- autosave ----------
-
   AUTOSAVE_MS: 6000,
   _autosaveData: null,
 
@@ -342,7 +316,6 @@ const App = {
   },
 
   // ---------- persistent instrument library ----------
-
   LIB_KEY: 'fabu.instruments',
 
   async loadLibrary() {
@@ -398,7 +371,6 @@ const App = {
     if (LIB[id]) { delete LIB[id]; this.saveLibrary(); }
   },
 
-  // quick delete of a custom instrument (from the track header trash button)
   deleteInstrument(id) {
     if (!resolveInstrument(id)) return;
     Undo.push('Delete instrument');
@@ -413,12 +385,8 @@ const App = {
   },
 
   // ---------- fresh project ----------
-
   newProject(announce = true) {
     if (UI.playing || UI.recording) { Engine.stopRecord && Engine.stopRecord(); Engine.stop && Engine.stop(); }
-    // A new project starts genuinely empty. Prefilled lanes look like a mess
-    // you have to clear out before you can start; the tutorial points at the
-    // Instrument button instead.
     S = freshProject();
     Undo.undoStack.length = 0;
     Undo.redoStack.length = 0;
@@ -438,18 +406,8 @@ const App = {
     if (typeof Tutor !== 'undefined') Tutor.maybeStartEmpty();
   },
 
-  // A finished little track built from the built-in loops, so a first-timer has
-  // something to press play on and take apart.
   // ---------- the example song ----------
-  // "Late Post" - A minor, 84bpm, thirty-two bars. Written as an arrangement
-  // rather than four loops stacked eight times, because the old one was the
-  // latter and it sounded like it: nothing entered, nothing left, nothing
-  // changed. This has an intro, a lift, a chorus, a break and an outro, and it
-  // uses the things fabu can do (swing, per-clip effects, automation) so that
-  // opening it up shows you where they live.
   DEMO_CHORDS: [
-    // Am7, Dm7, G7, Cmaj7. One bar each, looping. Voiced close together in the
-    // middle of the piano so the chords sit under the melody, not over it.
     [57, 60, 64, 67],
     [57, 62, 65, 69],
     [55, 59, 62, 65],
@@ -471,16 +429,9 @@ const App = {
     const track = (name, instrument, clips, extra) =>
       Object.assign(makeTrack('midi'), { name, instrument, clips }, extra || {});
 
-    // Bars are grouped into four-bar blocks rather than one clip each. Every
-    // clip carrying an effect builds its own effect chain when it plays, so a
-    // hundred and fifteen one-bar clips meant a hundred-odd delay lines and
-    // filters standing up at once, which is what made playback stutter. Same
-    // music, a quarter of the blocks.
     const BLOCK = 4;                      // bars per clip
     const BL = BLOCK * 4;                 // beats per clip
-    // shift a bar's notes to their place inside the block
     const at = (notes, barInBlock) => notes.map(n => Object.assign({}, n, { start: n.start + barInBlock * 4 }));
-    // build one clip per four bars, skipping bars the caller says are silent
     const blocks = (name, fromBar, toBar, barNotes, fx, skip) => {
       const outClips = [];
       for (let b0 = fromBar; b0 < toBar; b0 += BLOCK) {
@@ -496,9 +447,6 @@ const App = {
     };
 
     // ---- drums ----
-    // A half-time backbeat: kick on 1 and the "and" of 3, snare on 3 only, so
-    // it leans back instead of marching. Hats in straight eighths, with the
-    // track's swing doing the rest.
     const drumBar = (bar) => {
       const n = [];
       n.push(N(36, 0, 0.4, 0.95), N(36, 2.5, 0.4, 0.8));
@@ -511,15 +459,12 @@ const App = {
       [['dampen', { freq: 9000 }]], (bar) => bar >= 24 && bar < 28);
 
     // ---- bass ----
-    // Root on the downbeat, fifth on the and-of-three. Long notes, no busyness.
     const bassRoots = [45, 50, 43, 48];
     const bassClips = blocks('Bass', 4, 32,
       (bar) => { const r = bassRoots[bar % 4]; return [N(r, 0, 2.2, 0.9), N(r + 7, 2.5, 1.2, 0.72)]; },
       null, (bar) => bar >= 24 && bar < 26);
 
     // ---- chords ----
-    // Upright piano, broken slightly rather than played as a block, and a touch
-    // late on the second half of the bar.
     const chordBar = (bar) => {
       const ch = this.DEMO_CHORDS[bar % 4];
       const n = [];
@@ -550,7 +495,7 @@ const App = {
       clip('Outro', 112, 8, melA, [['reverb', { amt: 0.6 }]])
     ];
 
-    // ---- pluck arpeggio, from the lift onwards ----
+    // ---- pluck arpeggio ----
     const arpBar = (bar) => {
       const ch = this.DEMO_CHORDS[bar % 4];
       const n = [];
@@ -560,7 +505,7 @@ const App = {
     const arpClips = blocks('Arp', 12, 24, arpBar, [['echo', { time: 0.357, fb: 0.28, mix: 0.3 }]])
       .concat(blocks('Arp', 28, 32, arpBar, [['echo', { time: 0.357, fb: 0.28, mix: 0.3 }]]));
 
-    // ---- pad, holding the whole thing together ----
+    // ---- pad ----
     const padClips = [];
     for (let bar = 8; bar < 32; bar += 8) {
       const n = [];
@@ -591,14 +536,11 @@ const App = {
     const arp    = track('Arp',    'pluck',    arpClips,   { swing: 0.18, vol: 0.6 });
     const sax    = track('Sax',    'rsax',     saxClips,   { vol: 0.7 });
 
-    // Automation, so the arrangement moves rather than just switching on and
-    // off: the pad opens up into the chorus and closes again for the outro.
     pad.autom = { filter: [
       { beat: 32,  v: 900 }, { beat: 60, v: 4200 }, { beat: 64, v: 9000 },
       { beat: 96,  v: 9000 }, { beat: 112, v: 1400 }
     ] };
     pad.autoLanes = ['filter'];
-    // and the whole mix eases in and out at the edges
     chords.autom = { volume: [{ beat: 0, v: 0.55 }, { beat: 16, v: 1 }, { beat: 116, v: 1 }, { beat: 128, v: 0 }] };
 
     S.tracks.push(drums, bass, chords, pad, mel, arp, sax);
@@ -624,8 +566,6 @@ const App = {
     toast(tr('toast_demo_loaded', 'Example loaded. Press play, then take it apart.'));
   },
 
-  // The changelog is baked into the build, so this works offline and can never
-  // describe a version other than the one you are running.
   openWhatsNew() {
     const old = document.getElementById('newsModal');
     if (old) old.remove();
@@ -654,8 +594,6 @@ const App = {
   },
 
   // ---------- homescreen ----------
-
-  // the little equaliser along the bottom of the New project card
   drawHomeArt() {
     const g = document.querySelector('#homeNew .hc-bars');
     if (!g || g.childNodes.length) return;
@@ -663,7 +601,6 @@ const App = {
     let d = '';
     for (let i = 0; i < n; i++) {
       const x = 4 + i * (232 / n);
-      // a shape that rises toward the middle, with a steady wobble on top
       const swell = Math.sin((i / n) * Math.PI);
       const h = 5 + swell * 34 * (0.55 + 0.45 * Math.abs(Math.sin(i * 1.7)));
       d += `M${x.toFixed(1)} 60V${(60 - h).toFixed(1)}`;
@@ -680,11 +617,6 @@ const App = {
   wireHome() {
     this.drawHomeArt();
     this.watchGreeting();
-    // The sidebar. Everything here is a real place you can get to; nothing is a
-    // label for something that does not exist yet.
-    // Every sidebar entry is a page in this screen. Nothing here opens a small
-    // floating window over the home screen: a popup is what you use next to
-    // your song, not what you use when the song is not even open yet.
     for (const b of $$('#homeNav .hn-item')) {
       b.addEventListener('click', () => this.showHomePage(b.dataset.nav));
     }
@@ -701,8 +633,6 @@ const App = {
   },
 
   // ---------- feedback ----------
-  // Deliberately open to everyone, signed in or not: the people most likely to
-  // have something worth hearing are the ones who could not get started.
   openFeedback() {
     const old = document.getElementById('fbModal');
     if (old) old.remove();
@@ -747,10 +677,6 @@ const App = {
   },
 
   // ---------- the greeting ----------
-  // Six in the morning and half past midnight are not the same moment, and a
-  // screen that says the same thing at both is a screen nobody reads twice.
-
-  // Each band starts at its hour and runs until the next one starts.
   GREET_BANDS: [
     { from: 0,  key: 'late',      fb: 'Still up?' },
     { from: 5,  key: 'early',     fb: 'Good morning' },
@@ -759,8 +685,6 @@ const App = {
     { from: 17, key: 'evening',   fb: 'Good evening' },
     { from: 22, key: 'night',     fb: 'Good evening' }
   ],
-  // two lines per band, so it has some life without ever changing under you
-  // mid-session: the choice is keyed to the date, not to the render
   GREET_SUBS: {
     late:      [['Some of the best ideas turn up at this hour.', 'greet_sub_late1'],
                 ['The quiet is good for this.', 'greet_sub_late2']],
@@ -790,8 +714,6 @@ const App = {
     const band = this.greetBand(now);
     this._greetBand = band.key;
 
-    // The very first time, "good evening" to somebody who has never opened the
-    // app is a stranger being familiar. Say hello properly instead.
     if (greet) {
       greet.textContent = hasProjects
         ? tr('greet_' + band.key, band.fb)
@@ -799,16 +721,12 @@ const App = {
     }
     if (sub) {
       const opts = this.GREET_SUBS[band.key] || this.GREET_SUBS.morning;
-      // the day of the year picks the line, so it is steady all day and
-      // different tomorrow rather than flickering on every redraw
       const day = Math.floor((now - new Date(now.getFullYear(), 0, 0)) / 86400000);
       const [fb, key] = opts[day % opts.length];
       sub.textContent = tr(key, fb);
     }
   },
 
-  // Leaving fabu open past a boundary should not leave it saying good evening
-  // at three in the morning. Cheap because it only redraws when the band moves.
   watchGreeting() {
     setInterval(() => {
       if (!this.homeVisible() || this.homePage !== 'home') return;
@@ -819,7 +737,6 @@ const App = {
 
   homePage: 'home',
 
-  // Escape is "back" everywhere else in the app, so it is back here too.
   homeEscape() {
     if (!this.homeVisible() || this.homePage === 'home') return false;
     this.showHomePage('home');
@@ -870,8 +787,6 @@ const App = {
     }
   },
 
-  // A literal list. A wall of tiles is fine for the six you touched this week
-  // and useless for finding one project out of eighty.
   renderProjectList(box) {
     const all = this.getRecents();
     if (!all.length) {
@@ -883,7 +798,6 @@ const App = {
     all.forEach((r, i) => {
       const row = document.createElement('div');
       row.className = 'proj-row';
-      // capped, so eighty projects do not take four seconds to finish arriving
       row.style.setProperty('--i', Math.min(i, 14));
       const hue = 12 + ((r.name.charCodeAt(0) * 47) % 37);
       row.innerHTML = `
@@ -902,14 +816,12 @@ const App = {
     box.appendChild(list);
   },
 
-  // just the folder it sits in, which is what tells two "sketch" files apart
   shortPath(p) {
     if (!p) return '';
     const parts = String(p).split(/[\\/]/).filter(Boolean);
     return parts.length > 1 ? parts[parts.length - 2] : '';
   },
 
-  // Everything that could still be making a noise, silenced in one place.
   silenceEverything() {
     try { if (UI.playing) Engine.stop(); } catch (e) {}
     try { if (Engine.midiRec) Engine.finishMidiRecord(); } catch (e) {}
@@ -940,8 +852,6 @@ const App = {
     setTimeout(() => {
       home.style.display = 'none';
       home.classList.remove('closing');
-      // Now the workspace is actually on screen, so the first-run walkthrough
-      // has something real to point at.
       if (typeof Tutor !== 'undefined') Tutor.maybeStartEmpty();
     }, 220);
   },
@@ -976,8 +886,6 @@ const App = {
     return d === 1 ? tr('yesterday', 'yesterday') : tr('days_ago', '{n} days ago', { n: d });
   },
 
-  // "All projects" is the same shelf without the cut-off, rather than a second
-  // screen that would have to be kept in step with this one.
   recentsExpanded: false,
   RECENT_SHELF: 6,
   setRecentsExpanded(on) {
@@ -1053,7 +961,6 @@ const App = {
     });
   },
 
-  // Right-click did this already, which nobody knew, so it is a button now.
   recentMenu(e, r) {
     e.stopPropagation();
     ctxMenu(e, [
@@ -1080,7 +987,6 @@ const App = {
     this.hideHome();
   },
 
-  // "Listen" plays a recent project without leaving the home screen
   async previewRecent(path) {
     if (!window.electronAPI) { toast(tr('toast_recents_need_app', 'Recents need the app'), 'red'); return; }
     Engine.ensureCtx(); Engine.ctx.resume(); // use the click gesture for audio permission
@@ -1121,19 +1027,14 @@ const App = {
   },
 
   // ---------- languages (file-driven i18n) ----------
-
   languages: [],
   currentLangFile: null,
   LANG_KEY: 'fabu.lang',
 
-  // Find every languages/*.json. Uses the Electron bridge, or in a plain
-  // browser reads the folder listing that the dev server hands back.
   async discoverLanguages() {
     if (window.electronAPI && window.electronAPI.getLanguages) {
       try { return await window.electronAPI.getLanguages(); } catch (e) { return []; }
     }
-    // browser: read a manifest (works on static hosts like GitHub Pages),
-    // falling back to a dev-server directory listing.
     let names = [];
     try {
       const man = await fetch('languages/index.json');
@@ -1175,14 +1076,11 @@ const App = {
     this.applyI18n();
     this.renderFlags();
     this.renderRecents();
-    // re-render the parts that build their text in JS
     if (Timeline.lanes) { Timeline.render(); Windows.refreshAll(); KeysPanel.refreshTracks(); }
     KeysPanel.syncRecButton();
     if (announce) toast(entry.data.language_name || entry.file);
   },
 
-  // Replace text of [data-i18n] and tooltips of [data-i18n-tip]. Missing keys
-  // are left alone so the built-in English text stays.
   applyI18n(root = document) {
     for (const el of root.querySelectorAll('[data-i18n]')) {
       const v = t(el.dataset.i18n);
@@ -1220,8 +1118,7 @@ const App = {
     }
   },
 
-  // ---------- snap coach (nudge to change grid when fighting the snap) ----------
-
+  // ---------- snap coach ----------
   _coachUntil: 0,
   _coachTimer: null,
 
@@ -1230,8 +1127,6 @@ const App = {
     if (now < this._coachUntil) return;      // cooldown so it is not naggy
     this._coachUntil = now + 25000;
     const el = $('#snapCoach');
-    // sit it right under the snap control wherever that ends up (wrapped topbar,
-    // narrow window, etc.) instead of a fixed screen-centre spot
     const snap = $('#snapSelect');
     if (snap) {
       const r = snap.getBoundingClientRect();
@@ -1240,7 +1135,6 @@ const App = {
     }
     clearTimeout(this._coachTimer);
     el.classList.remove('hidden', 'hide');
-    // restart the entrance animation
     el.classList.remove('show'); void el.offsetWidth; el.classList.add('show');
     this._coachTimer = setTimeout(() => {
       el.classList.remove('show');
@@ -1250,7 +1144,6 @@ const App = {
   },
 
   // ---------- transport ----------
-
   onTransport() {
     const use = $('#btnPlay use');
     use.setAttribute('href', UI.playing ? '#i-pause' : '#i-play');
@@ -1276,10 +1169,6 @@ const App = {
     toast(tr(v ? 'toast_metro_on' : 'toast_metro_off', 'Metronome ' + (v ? 'on' : 'off')));
   },
 
-  // repeat a section while you work on it
-  // Nudge about the L key, but only when the user has actually shown they want
-  // it: replaying the same passage over and over, or fighting a loop that is
-  // holding the playhead in. Each nudge is said once and then never again.
   _loopHinted: {},
   hintLoop(kind) {
     if (this._loopHinted[kind]) return;
@@ -1292,8 +1181,6 @@ const App = {
     if (msg) toast(msg);
   },
 
-  // Count deliberate replays of roughly the same spot. Three is enough to say
-  // the user is looping by hand.
   noteReplay(beat) {
     const near = this._lastPlayFrom != null && Math.abs(beat - this._lastPlayFrom) < 1;
     this._replays = near ? (this._replays || 1) + 1 : 1;
@@ -1312,10 +1199,8 @@ const App = {
             : tr('toast_loop_off', 'Repeat off'));
   },
 
-  // section markers (Intro, Drop, Chorus, ...) along the ruler
   addMarker(beat) {
     const at = beat != null ? beat : snapBeat(UI.playhead, S.snap || 1);
-    // a real dialog: Electron has no window.prompt, so the old one just vanished
     this.askText(tr('marker_prompt', 'Section name'), tr('marker_default', 'Section'), (name) => {
       if (!name) return;
       Undo.push('Add marker');
@@ -1328,7 +1213,6 @@ const App = {
     });
   },
 
-  // small in-app text prompt (quick presets for section names)
   askText(title, initial, done) {
     const old = document.getElementById('askModal');
     if (old) old.remove();
@@ -1359,10 +1243,8 @@ const App = {
   },
 
   // ---------- versions ----------
-
   RELEASES_URL: 'https://github.com/rquw/fabu/releases',
 
-  // -1 if a < b, 0 if equal, 1 if a > b. Missing parts count as zero.
   cmpVersion(a, b) {
     const pa = String(a || '0').split('.').map(n => parseInt(n, 10) || 0);
     const pb = String(b || '0').split('.').map(n => parseInt(n, 10) || 0);
@@ -1373,9 +1255,6 @@ const App = {
     return 0;
   },
 
-  // The newest published release, cached for a few hours. Never throws and
-  // never blocks anything important: if it cannot be reached we simply do not
-  // claim to know what the latest version is.
   async latestVersion() {
     try {
       const raw = localStorage.getItem('fabu.latestVer');
@@ -1397,9 +1276,6 @@ const App = {
     } catch (e) { return null; }
   },
 
-  // A dialog with as many buttons as the situation needs. Each button is
-  // { label, value, style } where style picks the look: 'accent' for the
-  // recommended one, 'danger' for the one that can hurt, plain otherwise.
   askChoice({ title, body, buttons }) {
     return new Promise((resolve) => {
       const old = document.getElementById('choiceModal');
@@ -1433,15 +1309,11 @@ const App = {
     });
   },
 
-  // main.js routes window.open with an http url to the system browser, so this
-  // works the same in the desktop app and the web build
   openReleases(tag) {
     const url = tag ? this.RELEASES_URL + '/tag/v' + tag : this.RELEASES_URL;
     window.open(url, '_blank', 'noopener');
   },
 
-  // A plain yes/no, in the app's own dialog style. Resolves false if the user
-  // dismisses it, because "no" is always the safe answer here.
   askYesNo({ title, body, yes, no }) {
     return new Promise((resolve) => {
       const old = document.getElementById('confirmModal');
@@ -1476,7 +1348,6 @@ const App = {
     });
   },
 
-  // get rid of the repeat region entirely
   clearLoop() {
     S.loopOn = false; S.loopStart = 0; S.loopEnd = 0;
     const b = document.getElementById('btnLoop');
@@ -1508,13 +1379,11 @@ const App = {
   },
 
   // ---------- selection ----------
-
   selectClip(id, add = false) {
     if (!add) {
       UI.selClipIds = new Set(id ? [id] : []);
       UI.selClipId = id;
     } else if (id) {
-      // shift-click: toggle membership, last one clicked becomes primary
       if (UI.selClipIds.has(id) && UI.selClipIds.size > 1) {
         UI.selClipIds.delete(id);
         if (UI.selClipId === id) UI.selClipId = [...UI.selClipIds].pop() || null;
@@ -1538,7 +1407,6 @@ const App = {
     }
   },
 
-  // replace the whole selection at once (marquee)
   selectClipSet(ids) {
     UI.selClipIds = new Set(ids);
     UI.selClipId = ids.length ? ids[ids.length - 1] : null;
@@ -1559,8 +1427,7 @@ const App = {
     for (const el of $$('.lane')) el.classList.toggle('sel', el.dataset.trackId === id);
   },
 
-  // ---------- track / clip operations (all undoable) ----------
-
+  // ---------- track / clip operations ----------
   addTrack(kind) {
     Undo.push(kind === 'midi' ? 'Add instrument track' : 'Add audio track');
     const t = makeTrack(kind);
@@ -1618,7 +1485,6 @@ const App = {
       f.track.clips.splice(f.track.clips.indexOf(f.clip), 1);
       if (PianoRoll.clipId === f.clip.id) PianoRoll.close();
     }
-    // a group track left empty by deleting its group clip has no purpose
     S.tracks = S.tracks.filter(t => t.kind !== 'group' || t.clips.length);
     Engine.rebuildTracks();
     this.selectClip(null);
@@ -1647,9 +1513,6 @@ const App = {
   },
 
   // ---------- groups (compound clips) ----------
-
-  // bundle the selected clips (across tracks) into one group clip on a new track.
-  // Non-destructive: the originals are kept inside and restored on ungroup.
   async groupSelectedClips() {
     const items = [...UI.selClipIds].map(getClip).filter(Boolean);
     if (items.length < 2) { toast(tr('toast_group_need2', 'Select at least two clips to group')); return; }
@@ -1657,7 +1520,6 @@ const App = {
     const start = Math.min(...items.map(it => it.clip.start));
     const end = Math.max(...items.map(it => it.clip.start + clipBeats(it.clip)));
     const lenBeats = Math.max(0.25, end - start);
-    // keep the originals so Ungroup can bring them back exactly
     const children = items.map(it => ({
       origTrackId: it.track.id,
       origTrackName: it.track.name,
@@ -1670,7 +1532,6 @@ const App = {
     let buf;
     try { buf = await Engine.bounceClips(items, start, lenBeats); }
     catch (e) { console.warn('bounce failed', e); toast(tr('toast_group_fail', 'Could not bounce the group'), 'red'); return; }
-    // selection may have changed while rendering; make sure the clips still exist
     if (items.some(it => !getClip(it.clip.id))) { toast(tr('toast_group_fail', 'Could not bounce the group'), 'red'); return; }
     Undo.push('Group clips');
     const id = uid('smp');
@@ -1697,8 +1558,6 @@ const App = {
     toast(tr('toast_grouped', 'Grouped {n} clips', { n: items.length }), 'green');
   },
 
-  // undo a group: put every child back on its original track, drop the group.
-  // Works for a bounced audio group (new) or an old-style container group.
   ungroupClip(clipId) {
     const f = getClip(clipId);
     if (!f) return;
@@ -1722,9 +1581,6 @@ const App = {
       restored.push(clip.id);
     }
     gt.clips.splice(gt.clips.indexOf(group), 1);
-    // keep the flattened sample in memory so undoing the ungroup can find it
-    // again (Undo only snapshots the project, not the decoded audio); unused
-    // samples are dropped from the saved file automatically anyway.
     if (!gt.clips.length && (gt.fromGroup || gt.kind === 'group')) S.tracks.splice(S.tracks.indexOf(gt), 1);
     Engine.rebuildTracks();
     Timeline.render();
@@ -1736,8 +1592,6 @@ const App = {
     toast(tr('toast_ungrouped', 'Ungrouped'), 'green');
   },
 
-  // Flatten the selected clip(s) into a plain audio clip, exactly like an
-  // audio file you dragged in. One-way (no "revert to pattern"); undo with Cmd Z.
   async convertToAudio() {
     const items = [...UI.selClipIds].map(getClip).filter(Boolean);
     if (!items.length) return;
@@ -1770,7 +1624,6 @@ const App = {
     toast(tr('toast_converted', 'Converted to audio'), 'green');
   },
 
-  // slice the selected clip in two at the playhead
   splitSelectedClip() {
     if (!UI.selClipId) { toast(tr('toast_select_clip_split', 'Select a clip to split first'), 'red'); return; }
     const f = getClip(UI.selClipId);
@@ -1859,11 +1712,6 @@ const App = {
   },
 
   // ---------- built-in sample loops ----------
-
-  // Add a preset loop as an editable pattern clip. Drops onto a matching-
-  // instrument track, otherwise spins up a fresh track with the right sound.
-  // Take a pattern off the timeline and keep it, then open the editor so it can
-  // be named before it disappears into a list as "Pattern 4".
   saveClipAsLoop(clipId) {
     const f = getClip(clipId);
     if (!f) return;
@@ -1877,7 +1725,6 @@ const App = {
   },
 
   addSampleToProject(id, beat = null, laneIdx = null) {
-    // your own loops are placed exactly like the built-in ones
     const preset = SAMPLE_LIB.find(s => s.id === id)
       || (typeof MyLoops !== 'undefined' && MyLoops.asPresets().find(s => s.id === id));
     if (!preset) return;
@@ -1885,7 +1732,6 @@ const App = {
     Undo.push('Add loop');
     let track = (laneIdx != null) ? S.tracks[laneIdx] : null;
     if (!(track && track.kind === 'midi' && track.instrument === preset.instrument)) {
-      // ensure the instrument exists as a built-in; make a track for the loop
       track = makeTrack('midi');
       track.instrument = preset.instrument;
       track.name = preset.name;
@@ -1898,7 +1744,6 @@ const App = {
       start: Timeline.firstFreeStart(track, preset.length, beat, null), length: preset.length,
       notes: preset.notes.map(n => ({ id: uid('note'), pitch: n.pitch, start: n.start, length: n.length, vel: n.vel }))
     };
-    // a loop you saved from a pattern keeps its pedal
     if (preset.sustain && preset.sustain.length) clip.sustain = preset.sustain.map(e => ({ beat: e.beat, on: !!e.on }));
     track.clips.push(clip);
     Timeline.render();
@@ -1909,7 +1754,6 @@ const App = {
   },
 
   // ---------- droppable clip effects ----------
-
   addFxToClip(clip, type) {
     if (!FX_DEFS[type]) return;
     Undo.push('Add effect');
@@ -1986,7 +1830,6 @@ const App = {
           });
           inp.addEventListener('change', () => { inp._g = false; if (UI.playing) Engine.reschedule(); });
           row.append(lbl, inp, val);
-          // automation dot: keyframe this effect param over time
           if (Engine.fxAutomatable(fx.type, k)) {
             const dot = document.createElement('button');
             const has = fx.autom && fx.autom[k] && fx.autom[k].length;
@@ -2006,7 +1849,6 @@ const App = {
   },
 
   // ---------- audio file import ----------
-
   async importAudioFiles(files, beat, targetTrack) {
     if (typeof Sync !== 'undefined' && Sync.connected) {
       const act = Sync.audioAction();
@@ -2056,9 +1898,7 @@ const App = {
     setHint(tr('hint_audio_clip', 'Double-click an audio clip for gain, pitch and fades.'));
   },
 
-  // ---------- save / load / export (.fab & .wav) ----------
-
-  // Ask for a name, not for a folder.
+  // ---------- save / load / export ----------
   askProjectName() {
     return new Promise((resolve) => {
       const wrap = document.createElement('div');
@@ -2121,7 +1961,6 @@ const App = {
     const json = this.collectFab();
     const fname = this.projectFileName('.fab');
     if (window.electronAPI) {
-      // already has a file? save straight to it, no "save as" prompt
       if (this.currentPath && window.electronAPI.writeFile) {
         const wr = await window.electronAPI.writeFile({ filePath: this.currentPath, data: json, encoding: 'utf8' });
         if (wr.ok) {
@@ -2131,7 +1970,6 @@ const App = {
           toast(tr('toast_saved', 'Saved {name}', { name: wr.name }), 'green');
           return true;
         }
-        // file moved/deleted: fall through to the dialog
       }
       let res;
       if (window.electronAPI.saveToProjects) {
@@ -2199,7 +2037,6 @@ const App = {
       Engine.ensureCtx();
       if (UI.playing || UI.recording) { Engine.stopRecord(); Engine.stop(); }
 
-      // decode embedded samples
       for (const [id, s] of Object.entries(data.samples || {})) {
         const bytes = b64ToBuf(s.data);
         try {
@@ -2210,8 +2047,6 @@ const App = {
         }
       }
 
-      // A file written by a newer build may use fields this one does not know
-      // about, and saving over it would drop them. Ask before that happens.
       if (data.appVersion && this.cmpVersion(data.appVersion, this.version) > 0) {
         const choice = await this.askChoice({
           title: tr('fver_title', 'Warning!'),
@@ -2260,13 +2095,10 @@ const App = {
     const wrap = document.createElement('div');
     wrap.id = 'exportModal';
     wrap.className = 'modal-back';
-    // What the song is, so the choice below has some context: three formats
-    // that differ mostly in size, and two exports that are not audio at all.
     const beats = songEndBeat();
     const secs = beats * (60 / (S.bpm || 120));
     const mmss = Math.floor(secs / 60) + ':' + String(Math.round(secs % 60)).padStart(2, '0');
     const trackCount = S.tracks.filter(t => (t.clips || []).length).length;
-    // 44.1k stereo 16 bit, and roughly 1 MB a minute for the compressed ones
     const mb = (n) => n < 0.1 ? '<0.1 MB' : n.toFixed(1) + ' MB';
     const sizeWav = mb(secs * 44100 * 2 * 2 / 1048576);
     const sizeSmall = mb(secs * 16000 / 1048576);
@@ -2316,7 +2148,6 @@ const App = {
       </div>`;
     document.body.appendChild(wrap);
     const close = () => wrap.remove();
-    // MIDI is notes, not audio, so it needs none of the rendering machinery
     const midiBtn = wrap.querySelector('#expMidi');
     if (midiBtn) midiBtn.addEventListener('click', () => { MidiFile.exportFile(); close(); });
     wrap.querySelector('#exportCancel').addEventListener('click', close);
@@ -2372,7 +2203,6 @@ const App = {
     }
   },
 
-  // one WAV per track, so parts can go into another tool or to a collaborator
   async runStemExport(wrap) {
     const prog = wrap.querySelector('#exportProg');
     const bar = wrap.querySelector('#exportBar');
@@ -2423,12 +2253,10 @@ const App = {
   },
 
   // ---------- top bar wiring ----------
-
   wireTopbar() {
     $('#btnPlay').addEventListener('click', () => this.togglePlay());
     $('#btnStop').addEventListener('click', () => this.stop());
     $('#btnRec').addEventListener('click', () => Engine.toggleRecord());
-    // metronome: click toggles, long-press (or right-click) picks the sound
     const metroBtn = $('#btnMetro');
     let metroHeld = false, metroTimer = null;
     const openMetroMenu = () => {
@@ -2496,8 +2324,6 @@ const App = {
 
     const bpm = $('#bpmInput');
     bpm.addEventListener('change', () => this.setBpm(parseFloat(bpm.value) || 120));
-    // drag the BPM number up/down to change it (no pointer lock, which never
-    // worked on macOS). A full-window overlay keeps the drag going anywhere.
     let bpmStart = 120, bpmPushed = false;
     this.bindVDrag(bpm, {
       onStart: () => { bpmStart = S.bpm; bpmPushed = false; },
@@ -2510,26 +2336,17 @@ const App = {
 
     $('#projName').addEventListener('change', () => { UI.dirty = true; UI.fileDirty = true; });
 
-    // the bar counter is where the time signature lives now
     const pos = $('#posDisplay');
     if (pos) {
       pos.style.cursor = 'pointer';
       pos.addEventListener('click', () => Timeline.openTimeSigMenu(pos));
     }
 
-    // Settings lives in the home sidebar now, wired with the rest of it.
   },
 
-  // vertical drag on a number field, cross-platform. Overlay captures the drag
-  // so the cursor can leave the field and nothing else reacts mid-drag.
-  // A plain CLICK is not a drag: it falls through to the input, which focuses
-  // and selects itself so you can just type a number. The old version called
-  // preventDefault + blur on mousedown, which made typing impossible.
   bindVDrag(el, opts) {
     el.addEventListener('mousedown', (e) => {
-      // already typing in it: leave the mouse alone (text selection etc.)
       if (document.activeElement === el) return;
-      // stop the browser focusing on mousedown; a clean click focuses in `up`
       e.preventDefault();
       let lastY = e.clientY, acc = 0, dragging = false, overlay = null;
       if (opts.onStart) opts.onStart();
@@ -2552,10 +2369,6 @@ const App = {
         if (overlay) overlay.remove();
         if (dragging && opts.onEnd) opts.onEnd();
         if (!dragging && el.select) {
-          // A click means "let me type a number". Focusing alone leaves the old
-          // value sitting there to be deleted by hand, so select it: the first
-          // keystroke replaces it. select() works on number inputs even though
-          // selectionStart does not report it.
           el.focus();
           try { el.select(); } catch (e) { /* older engines */ }
         }
@@ -2563,10 +2376,8 @@ const App = {
       window.addEventListener('mousemove', move);
       window.addEventListener('mouseup', up);
     });
-    // Enter or clicking away commits, like every other field
     el.addEventListener('keydown', (e) => { if (e.key === 'Enter') el.blur(); });
   },
-
 
   syncWindowButtons() {
     $('#btnMixer').classList.toggle('on', Windows.isOpen('mixer'));
@@ -2578,8 +2389,7 @@ const App = {
     if (pk) pk.classList.toggle('on', KeysPanel.visible);
   },
 
-  // ---------- keyboard: shortcuts + playing notes ----------
-
+  // ---------- keyboard ----------
   heldKeys: new Map(), // code -> {trackId, pitch}
 
   releaseAllKeys() {
@@ -2593,22 +2403,16 @@ const App = {
       const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName || '');
       const mod = e.metaKey || e.ctrlKey;
 
-      // On the home screen Escape backs out of a sub-page. Checked first
-      // because none of the transport shortcuts below mean anything there.
       if (e.key === 'Escape' && !typing && !document.querySelector('.modal-back')) {
         if (this.homeEscape()) { e.preventDefault(); return; }
       }
 
-      // Sustain pedal. Held, not toggled, so it behaves like the real thing.
       if ((e.code === 'ShiftLeft' || e.code === 'ShiftRight') && !mod && !e.altKey && !typing
           && KeysPanel.visible && !e.repeat) {
         Engine.setPedal(true);
         return;
       }
 
-      // dev-only load test. This has to be checked BEFORE the mod block below:
-      // that block ends in a bare return, so anything Cmd-based placed after it
-      // is unreachable. On macOS Alt also rewrites e.key, so match on e.code.
       if (mod && e.altKey && e.shiftKey && e.code === 'KeyP') {
         e.preventDefault();
         if (typeof LoadTest === 'undefined') return;
@@ -2639,8 +2443,6 @@ const App = {
         return;
       }
 
-      // Space always plays/pauses, even with a floating window, slider, checkbox
-      // or menu focused, unless the user is actually typing into a text field.
       const ae = document.activeElement;
       const textField = ae && (ae.tagName === 'TEXTAREA' || ae.isContentEditable ||
         (ae.tagName === 'INPUT' && /^(text|password|email|search|url|tel|number|)$/i.test(ae.type || 'text')));
@@ -2671,7 +2473,7 @@ const App = {
         return;
       }
 
-      // --- playing notes (only while the keyboard panel is open) ---
+      // --- playing notes ---
       if (KeysPanel.visible && !e.repeat) {
         const deg = WHITE_CODES[e.code] ?? BLACK_CODES[e.code];
         if (deg !== undefined) {
@@ -2688,7 +2490,7 @@ const App = {
         if (e.code === 'KeyX') { KeysPanel.setOctave(UI.keysOctave + 1); return; }
       }
 
-      // --- single letter shortcuts (disabled while playing keys) ---
+      // --- single letter shortcuts ---
       if (e.repeat) return;
       if (e.code === 'KeyM') { this.setMetronome(!S.metronome); return; }
       if (e.code === 'KeyL') { this.setLoop(!S.loopOn); return; }
@@ -2704,8 +2506,6 @@ const App = {
     });
 
     window.addEventListener('keyup', (e) => {
-      // let the pedal up on release no matter what else was going on, so it can
-      // never get stuck down after a shortcut or a lost focus
       if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') Engine.setPedal(false);
       const h = this.heldKeys.get(e.code);
       if (h) {
@@ -2714,17 +2514,14 @@ const App = {
         KeysPanel.highlight(e.code, false);
       }
     });
-    // focus lost mid-press (alt-tab) would otherwise leave the pedal held
     window.addEventListener('blur', () => Engine.setPedal(false));
   }
 };
 
-// ---------- On-screen keyboard panel ----------
-
+// ---------- on-screen keyboard panel ----------
 const KeysPanel = {
   visible: false,
 
-  // reflect the pedal wherever it came from: Shift, the button, or hardware
   showPedal(down) {
     const b = document.getElementById('keysPedal');
     if (b) b.classList.toggle('on', !!down);
@@ -2732,18 +2529,14 @@ const KeysPanel = {
 
   init() {
     this.readLayout();
-    // controls steal keyboard focus, which then swallows the note keys until you
-    // click back into the app; blur them so playing keeps working right away.
     const blurSoon = (el) => setTimeout(() => { if (el && el.blur) el.blur(); }, 0);
     $('#octDown').addEventListener('click', (e) => { this.setOctave(UI.keysOctave - 1); blurSoon(e.currentTarget); });
     $('#octUp').addEventListener('click', (e) => { this.setOctave(UI.keysOctave + 1); blurSoon(e.currentTarget); });
     $('#keysTrackSel').addEventListener('change', (e) => { UI.keysTrackId = e.target.value; blurSoon(e.target); });
     $('#keysRecBtn').addEventListener('click', (e) => { Engine.toggleMidiRecord(); blurSoon(e.currentTarget); });
-    // the pedal: click to latch, or hold Shift, or use a real one over MIDI
     const ped = $('#keysPedal');
     if (ped) ped.addEventListener('click', (e) => { Engine.setPedal(!Engine.pedalDown); blurSoon(e.currentTarget); });
 
-    // a close button (X) on the keyboard panel
     const close = document.createElement('button');
     close.id = 'keysClose';
     close.className = 'keys-close';
@@ -2799,10 +2592,6 @@ const KeysPanel = {
     toast(tr('toast_octave', 'Octave {n}', { n: UI.keysOctave }));
   },
 
-  // What is actually printed on the physical key at this position. Which note
-  // a key plays is decided by where the key IS, so the mapping already worked
-  // on any layout; the labels did not. They were a fixed QWERTZ row, which is
-  // wrong on QWERTY and very wrong on AZERTY. The browser knows the real ones.
   layout: null,
   US_LABELS: {
     KeyA: 'A', KeyS: 'S', KeyD: 'D', KeyF: 'F', KeyG: 'G', KeyH: 'H', KeyJ: 'J',
@@ -2813,7 +2602,6 @@ const KeysPanel = {
     const v = this.layout && this.layout.get(code);
     return String(v || this.US_LABELS[code] || '').toUpperCase();
   },
-  // read the layout once, then redraw the keys with the right letters on them
   async readLayout() {
     try {
       if (!navigator.keyboard || !navigator.keyboard.getLayoutMap) return;
@@ -2822,7 +2610,6 @@ const KeysPanel = {
     } catch (e) { /* not supported: the US labels are the fallback */ }
   },
 
-  // build 1.5 visual octaves matching the computer-key mapping
   build() {
     const box = $('#pianoKeys');
     box.innerHTML = '';

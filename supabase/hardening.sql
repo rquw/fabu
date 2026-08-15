@@ -1,17 +1,9 @@
--- fabu: brute force protection, abuse limits, and the feedback box.
--- Run this once in the Supabase SQL editor. Safe to re-run.
---
--- IMPORTANT: this REPLACES fabu_login. It keeps the same signature and the
--- same true/false answer the app already expects; all that is added is a
--- record of failures and a refusal to keep answering when there have been too
--- many. If you have customised fabu_login yourself, read this first.
+-- brute force + limits + feedback box. replaces fabu_login, same signature
 
 create extension if not exists pgcrypto;
 
 -- ---------- brute force ----------
 
--- One row per account being guessed at. Nothing here identifies a person: it
--- is a username, a count, and two timestamps.
 create table if not exists public.fabu_login_guard (
   username   text primary key,
   fails      int not null default 0,
@@ -19,23 +11,17 @@ create table if not exists public.fabu_login_guard (
   last_fail  timestamptz not null default now()
 );
 
--- How long a username has to wait before another guess is answered. Backs off
--- as the guessing continues, and stops growing at five minutes: an attacker
--- must not be able to lock somebody out of their own account for longer than
--- that just by getting their password wrong on purpose.
 create or replace function public.fabu_login_wait(uname text)
 returns int language plpgsql security definer set search_path = public, extensions as $$
 declare g record; wait int;
 begin
   select * into g from public.fabu_login_guard where username = uname;
   if g is null then return 0; end if;
-  -- a quiet quarter of an hour wipes the slate
   if g.last_fail < now() - interval '15 minutes' then
     delete from public.fabu_login_guard where username = uname;
     return 0;
   end if;
   if g.fails < 5 then return 0; end if;
-  -- 5 fails: 5s. Then doubling, capped at 300s.
   wait := least(300, 5 * power(2, least(g.fails - 5, 8))::int);
   if g.last_fail + (wait || ' seconds')::interval > now() then
     return ceil(extract(epoch from (g.last_fail + (wait || ' seconds')::interval - now())))::int;
@@ -43,8 +29,6 @@ begin
   return 0;
 end; $$;
 
--- Sign in. Returns true, or false for a wrong password, an unknown user, or a
--- username that is being guessed at too fast to keep answering.
 create or replace function public.fabu_login(u text, p text)
 returns boolean language plpgsql security definer set search_path = public, extensions as $$
 declare stored text; uname text := lower(trim(u));
@@ -59,8 +43,6 @@ begin
     return true;
   end if;
 
-  -- Failures are counted for names that do not exist as well, so the timing
-  -- does not quietly tell an attacker which usernames are real.
   insert into public.fabu_login_guard (username, fails)
   values (uname, 1)
   on conflict (username) do update
@@ -68,15 +50,12 @@ begin
   return false;
 end; $$;
 
--- How long this account has to wait, so the app can say so instead of just
--- repeating "wrong password" at somebody who is typing it correctly.
 create or replace function public.fabu_login_cooldown(u text)
 returns int language plpgsql security definer set search_path = public, extensions as $$
 begin
   return public.fabu_login_wait(lower(trim(u)));
 end; $$;
 
--- Changing a password is another way to guess one, so it waits too.
 create or replace function public.fabu_change_password(u text, oldp text, newp text)
 returns text language plpgsql security definer set search_path = public, extensions as $$
 declare stored text; uname text := lower(trim(u));
@@ -96,7 +75,6 @@ begin
   return 'ok';
 end; $$;
 
--- Deleting an account is a third. Same treatment.
 create or replace function public.fabu_delete_account(u text, p text)
 returns boolean language plpgsql security definer set search_path = public, extensions as $$
 declare stored text; uname text := lower(trim(u));
@@ -115,7 +93,6 @@ begin
   return true;
 end; $$;
 
--- Trading a password for a gallery token is a fourth.
 create or replace function public.fabu_token_new(u text, p text)
 returns text language plpgsql security definer set search_path = public, extensions as $$
 declare stored text; uname text := lower(trim(u)); t text; n int;
@@ -131,7 +108,6 @@ begin
   end if;
   delete from public.fabu_login_guard where username = uname;
   delete from public.fabu_tokens where last_used < now() - interval '90 days';
-  -- one account cannot hoard tokens
   select count(*) into n from public.fabu_tokens where username = uname;
   if n > 20 then
     delete from public.fabu_tokens where token in (
@@ -146,7 +122,6 @@ end; $$;
 
 -- ---------- abuse limits ----------
 
--- Following was the one list with no ceiling on it.
 create or replace function public.fabu_follow(t text, who text)
 returns boolean language plpgsql security definer set search_path = public, extensions as $$
 declare me text := public.fabu_who(t); target text := lower(trim(who)); n int;
@@ -168,7 +143,6 @@ begin
   return true;
 end; $$;
 
--- Reports are one per person per loop already, but not per person per hour.
 create or replace function public.fabu_loop_report(t text, lid bigint, why text)
 returns boolean language plpgsql security definer set search_path = public, extensions as $$
 declare uname text := public.fabu_who(t); n int;
@@ -184,7 +158,6 @@ begin
   return true;
 end; $$;
 
--- A bio is a line about yourself, not a place to put a novel.
 create or replace function public.fabu_profile_set(t text, bio_in text, accent_in text)
 returns boolean language plpgsql security definer set search_path = public, extensions as $$
 declare uname text := public.fabu_who(t);
@@ -211,9 +184,6 @@ create index if not exists fabu_feedback_recent on public.fabu_feedback (created
 alter table public.fabu_feedback enable row level security;
 alter table public.fabu_login_guard enable row level security;
 
--- Anyone can send feedback, signed in or not, because the people most likely
--- to have something useful to say are the ones who could not get started.
--- Returns true, or false if it is empty, enormous, or the tenth in an hour.
 create or replace function public.fabu_feedback_send(msg text, contact text, who text, app text)
 returns boolean language plpgsql security definer set search_path = public, extensions as $$
 declare n int;

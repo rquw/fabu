@@ -1,6 +1,3 @@
-// Web MIDI input: play (and record) instruments from a physical MIDI keyboard.
-// Notes flow through the same Engine.noteOn/noteOff path as the computer keys,
-// so recording "just works" when a note-record take is running.
 'use strict';
 const MIDI = {
   access: null,
@@ -27,7 +24,6 @@ const MIDI = {
     for (const inp of this.inputs) {
       inp.onmidimessage = this.enabled ? (e) => this.onMessage(e) : null;
     }
-    // keep the Settings panel's device list current
     if (typeof Windows !== 'undefined' && Windows.wins && Windows.wins.get('settings')) {
       const w = Windows.wins.get('settings');
       if (w && w.refresh) w.refresh();
@@ -40,7 +36,6 @@ const MIDI = {
     this.refresh();
   },
 
-  // the instrument track a MIDI key should play (same as the on-screen keyboard)
   target() {
     return (typeof KeysPanel !== 'undefined' && KeysPanel.targetTrack && KeysPanel.targetTrack()) || null;
   },
@@ -48,7 +43,6 @@ const MIDI = {
   onMessage(e) {
     const [status, d1, d2] = e.data;
     const cmd = status & 0xf0;
-    // a real sustain pedal sends CC64: 64 and up is down, below is up
     if (cmd === 0xb0 && d1 === 64) { Engine.setPedal(d2 >= 64); return; }
     if (cmd !== 0x90 && cmd !== 0x80) return;   // note on / note off only
     const t = this.target();

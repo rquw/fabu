@@ -1,18 +1,4 @@
--- fabu: the loop gallery, profiles and friends.
--- Run this once in the Supabase SQL editor (project utyhyjeqzrqbnszljmdh).
--- Safe to re-run: every statement is idempotent.
---
--- On storage, which was the open question: a shared loop is a recipe, not a
--- recording. It stores notes, an instrument name and a length, so a typical
--- one is a few hundred bytes. A hundred thousand of them is about 33 MB, well
--- inside the free tier. Audio would not be, which is why nothing here accepts
--- audio: the 64 KB cap in fabu_loop_publish is enforced in the database, not
--- left to the client to respect.
---
--- Every function here is security definer and every table is closed to direct
--- access, so the anon key can only do the specific things these functions do.
--- Writes are authenticated by a token from fabu_token_new, never by a password
--- sent along with each action.
+-- loop gallery. paste into supabase sql editor, safe to re-run
 
 create extension if not exists pgcrypto;
 
@@ -57,8 +43,6 @@ create table if not exists public.fabu_likes (
   primary key (loop_id, username)
 );
 
--- One row per direction. Both directions present means the friendship is
--- mutual, which is the only state the app calls "friends".
 create table if not exists public.fabu_follows (
   follower text not null,
   followee text not null,
@@ -74,7 +58,6 @@ create table if not exists public.fabu_reports (
   primary key (loop_id, reporter)
 );
 
--- Nothing reaches these tables except through the functions below.
 alter table public.fabu_tokens   enable row level security;
 alter table public.fabu_profiles enable row level security;
 alter table public.fabu_loops    enable row level security;
@@ -84,8 +67,6 @@ alter table public.fabu_reports  enable row level security;
 
 -- ---------- helpers ----------
 
--- Who does this token belong to? Also refreshes last_used, so an account that
--- is in use keeps its token. Returns null for an unknown or expired token.
 create or replace function public.fabu_who(t text)
 returns text language plpgsql security definer set search_path = public, extensions as $$
 declare uname text;
@@ -97,8 +78,6 @@ begin
   return uname;
 end; $$;
 
--- Trade a password for a token, once, at sign-in. Everything else uses the
--- token, so a password is never attached to an ordinary action.
 create or replace function public.fabu_token_new(u text, p text)
 returns text language plpgsql security definer set search_path = public, extensions as $$
 declare stored text; uname text := lower(trim(u)); t text;
@@ -122,15 +101,11 @@ end; $$;
 
 -- ---------- loops ----------
 
--- Publish a loop. Returns the new id, or a negative code:
---   -1 not signed in   -2 too large   -3 daily limit reached   -4 bad name
 create or replace function public.fabu_loop_publish(t text, nm text, cat text, tempo int, payload text)
 returns bigint language plpgsql security definer set search_path = public, extensions as $$
 declare uname text := public.fabu_who(t); today int; newid bigint;
 begin
   if uname is null then return -1; end if;
-  -- 64 KB is roughly two hundred times a normal loop. Anything near it is not
-  -- a loop, and audio cannot fit at all, which is the point.
   if payload is null or length(payload) > 65536 then return -2; end if;
   if nm is null or length(trim(nm)) = 0 or length(nm) > 40 then return -4; end if;
   select count(*) into today from public.fabu_loops
@@ -143,8 +118,6 @@ begin
   return newid;
 end; $$;
 
--- Browse. sort_by is 'new' | 'top' | 'friends'. A null/empty category is all
--- of them. Hidden loops never appear.
 create or replace function public.fabu_loop_list(t text, cat text, sort_by text, q text, lim int, off int)
 returns table (id bigint, author text, name text, category text, bpm int,
                likes int, plays int, created_at timestamptz, liked boolean)
@@ -168,7 +141,6 @@ begin
   offset greatest(0, coalesce(off, 0));
 end; $$;
 
--- Fetch one loop's payload, and count the play.
 create or replace function public.fabu_loop_get(lid bigint)
 returns text language plpgsql security definer set search_path = public, extensions as $$
 declare d text;
@@ -179,7 +151,6 @@ begin
   return d;
 end; $$;
 
--- Like, or take the like back. Returns the new like count, or -1 unsigned-in.
 create or replace function public.fabu_loop_like(t text, lid bigint)
 returns int language plpgsql security definer set search_path = public, extensions as $$
 declare uname text := public.fabu_who(t); n int;
@@ -205,9 +176,6 @@ begin
   return found;
 end; $$;
 
--- Report a loop. Enough distinct reporters and it hides itself: with no
--- moderator awake at 3am, the room has to be able to take out its own rubbish.
--- Hiding is reversible and hides nothing permanently.
 create or replace function public.fabu_loop_report(t text, lid bigint, why text)
 returns boolean language plpgsql security definer set search_path = public, extensions as $$
 declare uname text := public.fabu_who(t); n int;
@@ -257,7 +225,6 @@ begin
   return true;
 end; $$;
 
--- Follow or unfollow. Returns true if we now follow them.
 create or replace function public.fabu_follow(t text, who text)
 returns boolean language plpgsql security definer set search_path = public, extensions as $$
 declare me text := public.fabu_who(t); target text := lower(trim(who));
@@ -273,8 +240,6 @@ begin
   return true;
 end; $$;
 
--- Everyone this account follows, with whether they follow back. Following each
--- other both ways is what the app shows as a friend.
 create or replace function public.fabu_follow_list(t text)
 returns table (name text, mutual boolean, loops int)
 language plpgsql security definer set search_path = public, extensions as $$
@@ -290,8 +255,6 @@ begin
 end; $$;
 
 -- ---------- grants ----------
--- fabu_who is internal: it is the thing that turns a token into an identity,
--- so it is never callable from outside.
 revoke all on function public.fabu_who(text) from public, anon, authenticated;
 
 do $$

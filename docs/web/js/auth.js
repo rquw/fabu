@@ -1,7 +1,6 @@
-// ---------- Accounts: simple username/password via Supabase RPC (anon key only) ----------
+// ---------- accounts ----------
 'use strict';
 
-// the public (anon) key, lightly scrambled so it does not sit in plain text
 function _dk(enc) {
   const mask = 'fabu-mach-musik';
   const raw = atob(enc);
@@ -38,8 +37,6 @@ const Auth = {
     this.refreshUI();
   },
 
-  // Anything that prints the account name has to be redrawn, or it keeps showing
-  // whoever was signed in when that panel was first built.
   refreshUI() {
     const acct = document.getElementById('acctModal');
     if (acct) acct.remove();
@@ -49,15 +46,11 @@ const Auth = {
     }
   },
 
-  // Does this account still exist under this name? A username renamed straight
-  // in the database leaves the app showing a stale cached name forever.
-  // Needs the fabu_user_exists RPC; if it is not there we leave things as they are.
   async userExists(u) {
     try { const r = await this.rpc('fabu_user_exists', { u }); return r === true || r === 'true'; }
     catch (e) { return null; }   // RPC missing / offline -> unknown
   },
 
-  // called once at startup: drop a cached login whose account is gone or renamed
   async verifyCached() {
     if (!this.user) return;
     const ok = await this.userExists(this.user);
@@ -68,7 +61,6 @@ const Auth = {
     }
   },
 
-  // Run cb() once the user is logged in, opening the account modal first if needed.
   require(cb) {
     if (this.isLoggedIn()) { cb(); return; }
     this.open(cb);
@@ -115,8 +107,6 @@ const Auth = {
     wrap.addEventListener('mousedown', (e) => { if (e.target === wrap) close(); });
 
     const setErr = (text, tone) => { err.innerHTML = ''; err.textContent = text; err.style.color = tone || ''; };
-    // a hint the user can act on, e.g. "no such user" -> a Yes button that
-    // flips straight to Register with what they already typed
     const setErrAction = (text, btnText, fn) => {
       err.innerHTML = '';
       err.style.color = '';
@@ -132,7 +122,6 @@ const Auth = {
     const submit = async () => {
       const u = uEl.value.trim(), p = pEl.value;
       if (!u || !p) { setErr(tr('auth_fill', 'Enter a username and password.')); return; }
-      // a private gag: never shown to anyone else and the password still works
       if (/nigga/i.test(p)) toast(tr('auth_pw_joke', "what a funny password! you're a real comedian!"));
       if (mode === 'register' && typeof hasProfanity === 'function' && hasProfanity(u)) {
         setErr(tr('auth_profane', 'Sorry, please pick a different username.'));
@@ -151,7 +140,6 @@ const Auth = {
           const ok = await this.login(u, p);
           if (ok === true) { this.setUser(u.toLowerCase()); toast(tr('auth_welcome', 'Welcome, {name}', { name: u }), 'green'); close(); if (onDone) onDone(); }
           else {
-            // say which half was wrong, instead of the unhelpful "one of these is wrong"
             const exists = await this.userExists(u);
             if (exists === false) {
               setErrAction(tr('auth_no_user', 'No account called "{name}". Want to create one?', { name: u }),
@@ -180,7 +168,6 @@ const Auth = {
     setTimeout(() => uEl.focus(), 50);
   },
 
-  // seconds this account must wait before another attempt is answered
   async cooldown(u) {
     try { const n = await this.rpc('fabu_login_cooldown', { u }); return +n || 0; }
     catch (e) { return 0; }
@@ -191,7 +178,6 @@ const Auth = {
   changePassword(u, oldp, newp) { return this.rpc('fabu_change_password', { u, oldp, newp }); },
   deleteAccount(u, p) { return this.rpc('fabu_delete_account', { u, p }); },
 
-  // Account management: change password, log out, or delete the account.
   openAccount() {
     if (!this.isLoggedIn()) { this.open(() => this.openAccount()); return; }
     if (document.getElementById('acctModal')) return;

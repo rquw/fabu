@@ -1,11 +1,4 @@
-// ---------- Load test: fake players, for checking what the relay can take ----------
-// Development tool. Each bot opens its OWN WebSocket to the relay and behaves
-// like a real client (join, knock, presence heartbeat, moving cursor, playhead),
-// so the traffic through the server is genuine, not simulated locally.
-//
-// Deliberately does NOT broadcast project state: a bot sending state would
-// overwrite everyone's project. That means this measures connection count and
-// message throughput, which is the part a free tier falls over on first.
+// ---------- load test ----------
 'use strict';
 
 const LoadTest = {
@@ -30,7 +23,6 @@ const LoadTest = {
     try { return localStorage.getItem('fabu.dev') === '1'; } catch (e) { return false; }
   },
 
-  // spawn `n` fake players into the room the user is currently hosting
   spawn(n = 1) {
     if (!this.enabled()) return;
     if (typeof Sync === 'undefined' || !Sync.room || !Sync.connected) {
@@ -64,11 +56,9 @@ const LoadTest = {
     bot.ws.onopen = () => {
       send({ type: 'join', room });
       send({ type: 'knock', id: bot.id, name: bot.name });
-      // presence heartbeat, same 2s cadence the real client uses
       bot.timers.push(setInterval(() => {
         send({ type: 'presence', id: bot.id, name: bot.name, color: bot.color, host: false, joinTs: bot.joinTs });
       }, 2000));
-      // a wandering cursor: the highest-frequency traffic a real user makes
       bot.timers.push(setInterval(() => {
         bot.x += bot.vx; bot.y += bot.vy;
         if (bot.x < 0 || bot.x > 1) { bot.vx *= -1; bot.x = Math.min(1, Math.max(0, bot.x)); }
@@ -78,7 +68,6 @@ const LoadTest = {
                over: 'c', fx: bot.x, fy: bot.y, beat: bot.x * 64, y: bot.y * 300,
                sl: 0, st: 0, zoom: 40 });
       }, 60));
-      // occasional playhead, like someone auditioning their part
       bot.timers.push(setInterval(() => {
         send({ type: 'ph', id: bot.id, name: bot.name, color: bot.color,
                beat: Math.random() * 64, playing: Math.random() < 0.5 });

@@ -1,4 +1,4 @@
-// ---------- Floating in-app windows: mixer, clip inspector, settings, help ----------
+// ---------- floating in-app windows ----------
 'use strict';
 
 const Windows = {
@@ -6,9 +6,6 @@ const Windows = {
   zTop: 30,
 
   // ---------- remembered geometry ----------
-  // Sizing a window to taste and losing it the moment you close it is its own
-  // small misery, so every window keeps its own position and size by id.
-
   GEO_KEY: 'fabu.winGeo',
 
   allGeo() {
@@ -24,8 +21,6 @@ const Windows = {
     } catch (e) { /* private mode or quota: not worth breaking a window over */ }
   },
 
-  // A window saved on a big display must not open off-screen on a small one,
-  // so everything is clamped back into the current viewport on the way out.
   loadGeo(id, fallback) {
     const g = this.allGeo()[id];
     if (!g) return fallback;
@@ -43,12 +38,7 @@ const Windows = {
     try { localStorage.removeItem(this.GEO_KEY); } catch (e) {}
   },
 
-  // A window opened over the home screen has to sit above it, and the home
-  // overlay is at 400. Raising a window used to set a bare counter starting at
-  // 30, which dropped it straight behind home: still painted, but every click
-  // landed on the home screen behind it. That was "the Account button does
-  // nothing". Windows are banded instead, so raising one can never drop it out
-  // of its own layer.
+  // home overlay sits at 400, modals 2000, ctx menu 2500. dont reshuffle these
   Z_BASE: 20,
   Z_OVER_HOME: 1000,
   raise(el) {
@@ -60,9 +50,6 @@ const Windows = {
     this.close(id);
     let { x = 120, y = 90, width = null, height = null } =
       this.loadGeo(id, { x: opts.x ?? 120, y: opts.y ?? 90, width: opts.width ?? null, height: opts.height ?? null });
-    // Saved geometry was clamped to the screen; the defaults never were, so a
-    // window with a comfortable desktop size opened wider than an iPad or a
-    // half-screen laptop window and hung off the edge.
     const vw = window.innerWidth || 1280, vh = window.innerHeight || 800;
     if (width) width = Math.min(width, vw - 16);
     if (height) height = Math.min(height, vh - 90);
@@ -72,9 +59,6 @@ const Windows = {
     el.style.top = y + 'px';
     if (width) el.style.width = width + 'px';
     if (height) { el.style.height = height + 'px'; el.style.maxHeight = 'none'; }
-    // The home screen is a full-screen overlay above the workspace, so a window
-    // parented to the workspace opens behind it. Put it on the body and lift it
-    // over the overlay while home is up.
     const overHome = typeof App !== 'undefined' && App.homeVisible && App.homeVisible();
     if (overHome) el.classList.add('fwin-over-home');
     el.innerHTML = `
@@ -89,7 +73,6 @@ const Windows = {
     el.addEventListener('mousedown', () => { this.raise(el); this.syncSheetBackdrop(); });
     el.querySelector('.fwin-close').addEventListener('click', () => this.close(id));
 
-    // drag by header
     const head = el.querySelector('.fwin-head');
     head.addEventListener('mousedown', (e) => {
       if (e.target.closest('.fwin-close')) return;
@@ -115,23 +98,12 @@ const Windows = {
     this._bindResize(el, rec, id);
     this.wins.set(id, rec);
     this.keepOnScreen(el);
-    // Most windows fill their body after create() returns, so the first
-    // measurement is of an empty box. Measure again once the caller has put
-    // its content in, which is what decides how tall the window really is.
     setTimeout(() => { if (this.wins.get(id) === rec) this.keepOnScreen(el); }, 0);
-    // A new window belongs in front, and it needs a z-index of its own from
-    // the start: the phone backdrop sits directly under the topmost sheet and
-    // works that out from their z-indexes, so a window without one is a
-    // window the backdrop can cover.
     this.raise(el);
     this.syncSheetBackdrop();
     return rec;
   },
 
-  // Windows are positioned inside the workspace, which starts below the top
-  // bar, so their coordinates are not the screen's. Rather than translating
-  // between the two, put the window where it wants to go and then measure it
-  // and nudge it back until it is actually on screen.
   keepOnScreen(el) {
     const vw = window.innerWidth, vh = window.innerHeight;
     if (!vw || !vh) return;                       // headless: nothing to fit into
@@ -149,7 +121,6 @@ const Windows = {
     if (dy) el.style.top = (el.offsetTop + dy) + 'px';
   },
 
-  // drag the right edge, bottom edge, or corner to resize a window
   _bindResize(el, rec, id) {
     const mk = (cls, mode) => {
       const h = document.createElement('div');
@@ -190,8 +161,6 @@ const Windows = {
       if (reduced) el.remove();
       else {
         el.classList.add('fwin-closing');
-        // the reference is captured, so reopening during the fade removes the
-        // old element and leaves the new one alone
         setTimeout(() => el.remove(), 130);
       }
     }
@@ -201,10 +170,6 @@ const Windows = {
 
   isOpen(id) { return this.wins.has(id); },
 
-  // On a phone a window is a sheet over the whole screen, and a sheet needs
-  // something behind it: somewhere to tap to get out, and a shield so taps
-  // meant for the sheet do not land on the timeline underneath. On a desktop
-  // windows sit beside your work and must not dim it, so there is none.
   phone() { return window.matchMedia && matchMedia('(max-width: 760px)').matches; },
 
   syncSheetBackdrop() {
@@ -217,13 +182,11 @@ const Windows = {
       b.addEventListener('click', () => this.closeTopSheet());
       document.body.appendChild(b);
     }
-    // always directly under the topmost sheet
     let top = 0;
     for (const w2 of this.wins.values()) top = Math.max(top, parseInt(w2.el.style.zIndex || '0', 10));
     b.style.zIndex = Math.max(1, top - 1);
   },
 
-  // the most recently raised window, which is the one a tap outside means
   closeTopSheet() {
     let id = null, top = -1;
     for (const [k, w2] of this.wins) {
@@ -233,17 +196,13 @@ const Windows = {
     if (id) this.close(id);
   },
 
-
   refreshAll() {
     for (const w of this.wins.values()) if (w.refresh) w.refresh();
   },
 
-  // ---------- Mixer ----------
-
+  // ---------- mixer ----------
   toggleMixer() {
     if (this.isOpen('mixer')) { this.close('mixer'); return; }
-    // fixed, readable width now that it shows one track at a time instead of
-    // a row of narrow strips per track
     const width = Math.min(360, window.innerWidth - 40);
     const x = clamp(140, 8, window.innerWidth - width - 8);
     const w = this.create('mixer', tr('win_mixer', 'Mixer'), 'i-mixer', { x, y: 96, width });
@@ -252,7 +211,6 @@ const Windows = {
     App.syncWindowButtons();
   },
 
-  // slider that pushes one undo per drag gesture
   mixSlider(parent, min, max, step, value, tip, onInput, undoLabel, lockKey) {
     const inp = document.createElement('input');
     inp.type = 'range';
@@ -268,7 +226,6 @@ const Windows = {
     return inp;
   },
 
-  // small keyframe toggle that opens the automation editor for a param
   autoDot(track, param) {
     const b = document.createElement('button');
     const has = track.autom && track.autom[param] && track.autom[param].length;
@@ -283,8 +240,6 @@ const Windows = {
     return b;
   },
 
-  // A little EQ curve you shape by dragging three points (low / mid / high).
-  // Maps straight onto the existing 3-band chain, so it applies live.
   buildEqCanvas(t, W = 132, H = 64, big = false) {
     const box = document.createElement('div');
     box.className = 'eq-canvas' + (big ? ' big' : '');
@@ -315,7 +270,6 @@ const Windows = {
       x.fillStyle = 'rgba(255,255,255,0.03)';
       x.fillRect(0, 0, W, H);
 
-      // dB gridlines + labels
       const lines = big ? [12, 6, 0, -6, -12] : [0];
       x.textBaseline = 'middle'; x.font = '600 8.5px -apple-system, sans-serif';
       for (const db of lines) {
@@ -326,7 +280,6 @@ const Windows = {
         if (big) { x.fillStyle = 'rgba(255,255,255,0.38)'; x.textAlign = 'right'; x.fillText((db > 0 ? '+' : '') + db, L - 5, y); }
       }
 
-      // the curve through the three points, with a soft fill toward the 0 line
       const pts = [[L, gainToY(t.eq.low)], [bandX.low, gainToY(t.eq.low)],
         [bandX.mid, gainToY(t.eq.mid)], [bandX.high, gainToY(t.eq.high)], [R, gainToY(t.eq.high)]];
       const trace = () => {
@@ -341,7 +294,6 @@ const Windows = {
       x.globalAlpha = 0.12; x.fillStyle = t.color; x.fill(); x.globalAlpha = 1;
       x.beginPath(); trace(); x.strokeStyle = t.color; x.lineWidth = big ? 2.5 : 2; x.stroke();
 
-      // handles + labels + live value
       x.textAlign = 'center';
       for (const b of bands) {
         const hx = bandX[b], hy = gainToY(t.eq[b]);
@@ -437,8 +389,7 @@ const Windows = {
       eqBox.innerHTML = `<div class="mixeq-empty">${tr('mixeq_pick', 'Click a track below to shape its EQ.')}</div>`;
     }
 
-    // --- the selected track's controls, roomy instead of a 116px column ---
-    // (a wall of narrow strips side by side was unreadable past a few tracks)
+    // --- the selected track's controls ---
     const focus = body.querySelector('#mixFocus');
     if (selT) {
       const row = (labelKey, labelFb, min, max, step, value, tip, apply, undoLabel, lockKey, fmt, automParam) => {
@@ -470,7 +421,7 @@ const Windows = {
         (v) => Math.round(v * 100) + '%');
     }
 
-    // --- compact track picker: switch tracks, mute/solo at a glance ---
+    // --- compact track picker ---
     const picker = body.querySelector('#mixPicker');
     for (const t of S.tracks) {
       const chip = document.createElement('div');
@@ -509,8 +460,7 @@ const Windows = {
     mw.appendChild(mrow);
   },
 
-  // ---------- Clip inspector ----------
-
+  // ---------- clip inspector ----------
   toggleInspector() {
     if (this.isOpen('inspector')) { this.close('inspector'); return; }
     const w = this.create('inspector', tr('win_clip', 'Clip'), 'i-info', { x: window.innerWidth - 360, y: 110, width: 300 });
@@ -544,7 +494,6 @@ const Windows = {
       return r;
     };
 
-    // name
     const nameRow = row(tr('insp_name', 'Name'));
     const nameInp = document.createElement('input');
     nameInp.type = 'text';
@@ -557,9 +506,6 @@ const Windows = {
     });
     nameRow.appendChild(nameInp);
 
-    // A directly editable value field (no slider) with a generous range so you
-    // are not boxed in: type any number. `read` returns the display value from
-    // the clip, `apply` writes the display value back.
     const numField = (labelText, read, { min, max, step = 1, unit = '', tip, clipAuto }, apply, undoLabel, automParam) => {
       const r = row(labelText);
       const inp = document.createElement('input');
@@ -614,7 +560,6 @@ const Windows = {
       numField(tr('insp_fade_out', 'Fade out'), () => clip.fadeOut ?? 0, { min: 0, max: 30, step: 0.05, unit: 's', tip: tr('tip_fade_out', 'Fade out to silence') },
         v => { clip.fadeOut = v; }, 'Fade out');
     } else {
-      // instrument (MIDI) clips get their own volume + transpose + fine pitch + effects
       numField(tr('insp_gain', 'Gain'), () => (clip.gain ?? 1) * 100, { min: 0, max: 6400, step: 1, unit: '%', tip: tr('tip_clip_gain', 'Clip volume') },
         v => { clip.gain = v / 100; }, 'Clip gain', 'gain');
       numField(tr('insp_transpose', 'Transpose'), () => clip.pitch ?? 0, { min: -96, max: 96, step: 1, unit: 'st', tip: tr('tip_transpose', 'Shift every note up or down') },
@@ -667,8 +612,7 @@ const Windows = {
     body.appendChild(btns);
   },
 
-  // ---------- Effects browser (drag onto clips) ----------
-
+  // ---------- effects browser ----------
   toggleFxBrowser() {
     if (this.isOpen('fxbrowser')) { this.close('fxbrowser'); return; }
     const w = this.create('fxbrowser', tr('fx_title', 'Effects'), 'i-fx', { x: window.innerWidth - 320, y: 130, width: 240 });
@@ -711,9 +655,6 @@ const Windows = {
     App.syncWindowButtons();
   },
 
-  // A loop can be a couple of minutes long and there was no way to stop one
-  // once it started: the play button only ever started things. It is a stop
-  // button while its own loop is playing.
   _preview: null,
   stopSamplePreview() {
     clearTimeout(this._previewTimer);
@@ -735,22 +676,16 @@ const Windows = {
     el.classList.add('playing');
     const u = el.querySelector('.samp-play use');
     if (u) u.setAttribute('href', '#i-stop');
-    // audition stops itself at the end, so the button has to come back on its
-    // own or it sits there offering to stop silence
     const beats = Math.max(1, sample.length || 4);
     this._previewTimer = setTimeout(() => this.stopSamplePreview(),
       (beats * 60 / (S.bpm || 120)) * 1000 + 400);
   },
 
-  // ---------- Samples browser (drag loops onto the timeline) ----------
-
+  // ---------- samples browser ----------
   toggleSampleBrowser() {
     if (this.isOpen('samples')) { this.close('samples'); return; }
     const w = this.create('samples', tr('samp_title', 'Loops'), 'i-loops',
       { x: 60, y: 130, width: 272, height: 330 });
-    // The gallery used to be a lone heart in the top bar with nothing to say what
-    // it was, and there was no way at all to reach your own profile. Both belong
-    // here, next to the loops they are about.
     w.body.innerHTML = `
       <div class="samp-links">
         <button id="sampGallery" class="fbtn" data-tip="${tr('tip_browse_gallery', 'Loops other people have shared')}">
@@ -768,7 +703,6 @@ const Windows = {
     const render = () => {
       const q = search.value.trim().toLowerCase();
       list.innerHTML = '';
-      // your own loops sit at the top, since they are the ones you went looking for
       const pool = MyLoops.asPresets().concat(SAMPLE_LIB);
       for (const cat of SAMPLE_CATS) {
         const items = pool.filter(s => s.cat === cat && (!q || s.name.toLowerCase().includes(q)));
@@ -783,7 +717,6 @@ const Windows = {
           item.draggable = true;
           item.dataset.tip = tr('tip_samp_item', 'Click to hear it, drag or double-click to add it');
           const inst = s.cat === 'fx' ? '' : `<span class="samp-inst">${instrLabel(s.instrument)}</span>`;
-          // a loop taken from the gallery keeps the name of whoever wrote it
           const credit = s.from ? `<span class="samp-from">${escapeHtml(tr('loop_by', 'by {name}', { name: s.from }))}</span>` : '';
           item.innerHTML = `<button class="samp-play" title="${tr('samp_preview', 'Preview')}"><svg class="ic"><use href="#i-play"/></svg></button>` +
             `<span class="samp-txt"><span class="samp-nm">${escapeHtml(s.name)}</span>` +
@@ -796,7 +729,6 @@ const Windows = {
             DragGhost.start(item, e);
           });
           item.addEventListener('dragend', () => { Windows._dragSample = null; item.classList.remove('card-lifted'); });
-          // click hears it (drag or double-click still adds it to the song)
           item.addEventListener('click', () => this.toggleSamplePreview(s, item));
           item.addEventListener('dblclick', () => { Engine.stopAudition(); App.addSampleToProject(s.id); });
           if (s.mine) {
@@ -810,7 +742,6 @@ const Windows = {
           }
           list.appendChild(item);
         }
-        // the tile that takes a new one, sitting with your own loops
         if (cat === 'mine' && !q) list.appendChild(this.newLoopTile(render));
       }
       if (!list.children.length) list.innerHTML = `<div style="color:var(--faint);font-size:11.5px;padding:6px 2px">${tr('samp_none', 'No loop matches that.')}</div>`;
@@ -821,9 +752,6 @@ const Windows = {
     App.syncWindowButtons();
   },
 
-  // The tile that takes a new loop: same size and shape as a loop, hollow, with
-  // a plus. Clicking it does not open anything, it just says what to do, because
-  // the thing you do here is drop something on it.
   newLoopTile(rerender) {
     const tile = document.createElement('div');
     tile.className = 'samp-new';
@@ -859,7 +787,6 @@ const Windows = {
       e.preventDefault();
       e.stopPropagation();
       tile.classList.remove('samp-new-over');
-      // a pattern dragged off the timeline
       const clipId = e.dataTransfer.getData('text/fabu-clip');
       if (clipId) {
         const f = getClip(clipId);
@@ -869,7 +796,6 @@ const Windows = {
         take(loop);
         return;
       }
-      // or a .fabloop someone sent you
       const file = [...(e.dataTransfer.files || [])].find(f => MyLoops.isLoopFile(f));
       if (!file) { toast(tr('loop_bad_file', 'That file is not a loop fabu can read.'), 'red'); return; }
       take(MyLoops.parseFile(await file.text()));
@@ -877,7 +803,6 @@ const Windows = {
     return tile;
   },
 
-  // Rename it, pick what it plays on, send it to someone, or throw it away.
   editMyLoop(id, rerender) {
     const loop = MyLoops.all().find(l => l.id === id);
     if (!loop) return;
@@ -951,8 +876,7 @@ const Windows = {
     setTimeout(() => { nameI.focus(); nameI.select(); }, 40);
   },
 
-  // ---------- Settings ----------
-
+  // ---------- settings ----------
   toggleSettings() {
     if (this.isOpen('settings')) { this.close('settings'); return; }
     const w = this.create('settings', tr('win_settings', 'Settings'), 'i-gear', { x: 220, y: 140, width: 320 });
@@ -963,10 +887,6 @@ const Windows = {
 
   buildSettings(box) {
     box.innerHTML = '';
-    // Two kinds of setting were sitting in one undivided list, so per-song
-    // ones looked like preferences that applied to everything you open.
-    // They are labelled and separated now, and the project half is simply
-    // absent when no project is open (Settings opens from the home screen).
     const inProject = !!S && !App.homeVisible();
     const head = (text, note) => {
       const h = document.createElement('div');
@@ -1008,7 +928,6 @@ const Windows = {
       tr('tip_scrub', 'Hear the notes under the playhead as you drag it (when stopped).'),
       (v) => { Engine.setScrub(v); toast(tr(v ? 'toast_scrub_on' : 'toast_scrub_off', 'Scrubbing ' + (v ? 'on' : 'off'))); });
 
-    // MIDI keyboard input
     if (typeof MIDI !== 'undefined' && MIDI.supported()) {
       mkCheck(tr('set_midi', 'MIDI keyboard input'), MIDI.enabled,
         tr('tip_midi', 'Play and record instruments from a connected MIDI keyboard.'),
@@ -1038,7 +957,6 @@ const Windows = {
     r.appendChild(inp);
     box.appendChild(r);
 
-    // microphone input picker (recording is raw, with no noise suppression)
     const micRow = document.createElement('div');
     micRow.className = 'frow';
     micRow.style.marginTop = '4px';
@@ -1054,7 +972,6 @@ const Windows = {
     micSel.addEventListener('change', () => { Engine.setMicId(micSel.value); toast(tr('toast_mic_set', 'Microphone changed')); });
     micRow.append(micLbl, micSel);
     box.appendChild(micRow);
-    // populate device list (labels appear once mic permission is granted)
     if (navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) {
       navigator.mediaDevices.enumerateDevices().then((devs) => {
         const ins = devs.filter(d => d.kind === 'audioinput');
@@ -1079,7 +996,6 @@ const Windows = {
     note.textContent = tr('set_note', 'Projects save as .fab files, sounds included. Export makes a WAV audio file.');
     box.appendChild(note);
 
-    // Account
     const acct = document.createElement('div');
     acct.className = 'frow';
     acct.style.cssText = 'margin-top:12px;border-top:1px solid var(--line);padding-top:12px';
@@ -1095,7 +1011,6 @@ const Windows = {
     acct.append(label, btn);
     box.appendChild(acct);
 
-    // version + manual update check
     const ver = document.createElement('div');
     ver.className = 'frow';
     ver.style.marginTop = '10px';
@@ -1114,7 +1029,6 @@ const Windows = {
         vBtn.textContent = tr('set_check_updates', 'Check for updates');
         if (r === 'latest') toast(tr('set_up_to_date', "You're on the latest version."), 'green');
         else if (r === 'error') toast(tr('set_check_failed', 'Could not check. Are you online?'), 'red');
-        // 'update' shows the update banner by itself
       });
       ver.append(vLabel, vBtn);
     } else {
@@ -1124,8 +1038,7 @@ const Windows = {
     box.appendChild(ver);
   },
 
-  // ---------- Help ----------
-
+  // ---------- help ----------
   toggleHelp() {
     if (this.isOpen('help')) { this.close('help'); return; }
     const w = this.create('help', tr('win_shortcuts', 'Shortcuts'), 'i-help', { x: 300, y: 80, width: 430 });

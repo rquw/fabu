@@ -1,15 +1,12 @@
-// ---------- Small helpers, toasts, tooltips ----------
+// ---------- small helpers ----------
 'use strict';
 
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => [...document.querySelectorAll(sel)];
 
 // ---------- i18n ----------
-// I18N holds the active language's strings (empty until a file loads).
 let I18N = {};
-// raw lookup: undefined when a key is missing (so DOM keeps its built-in text)
 function t(key) { return I18N[key]; }
-// lookup with an English fallback and {placeholder} substitution
 function tr(key, fallback, params) {
   let s = I18N[key];
   if (s == null) s = (fallback != null ? fallback : key);
@@ -17,22 +14,16 @@ function tr(key, fallback, params) {
   return s;
 }
 
-// instrument name: custom sampler name (project or library), else built-in label
 function instrLabel(k) {
   const inst = (typeof S !== 'undefined' && S && S.instruments && S.instruments[k])
     || (typeof LIB !== 'undefined' && LIB[k]);
   if (inst) return inst.name;
   const known = typeof INSTRUMENTS !== 'undefined' && INSTRUMENTS[k];
   if (known) return tr('instr_' + k, known);
-  // An id we do not have. A loop shared from a newer build can carry one, and
-  // showing "rbass808" to somebody is showing them our variable names.
   return tr('instr_unknown', 'Unknown instrument');
 }
-// translated drum-row name for a pitch class, or null if it has no name
 const DRUM_LABEL_KEYS = { 0: 'drum_kick', 2: 'drum_snare', 4: 'drum_clap', 6: 'drum_hat', 9: 'drum_tom', 10: 'drum_ophat' };
 function isDrumInstr(i) { return i === 'drums' || i === 'drumkit'; }
-// The drum lanes the piano roll shows for a kit: only sounds that actually play,
-// each labeled, top to bottom. The synth kit has no tom (pc 9 = open hat there).
 function drumRowsFor(instrument) {
   const all = [
     { pc: 10, key: 'drum_ophat' },
@@ -49,7 +40,6 @@ function drumLabel(pc) {
   const k = DRUM_LABEL_KEYS[pc];
   return k ? tr(k, k.replace('drum_', '')) : null;
 }
-// translated snapping label for a grid value
 function snapLabel(v) {
   const m = {
     '4': tr('snap_bar', 'Bar'), '1': tr('snap_beat', 'Beat'),
@@ -57,12 +47,10 @@ function snapLabel(v) {
   };
   return m[String(v)] || String(v);
 }
-// who to credit for new clips (multiplayer attribution)
 function authorName() {
   return (typeof Auth !== 'undefined' && Auth.user) || null;
 }
 
-// translated undo/redo action label (built from the stored English label)
 function actLabel(label) {
   if (label == null) return '';
   const slug = 'act_' + String(label).toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
@@ -82,8 +70,7 @@ function noteName(midi) {
 }
 function midiToFreq(m) { return 440 * Math.pow(2, (m - 69) / 12); }
 
-// ---------- Scales & chords (the "key helper") ----------
-// Semitone patterns from the root, one octave.
+// ---------- scales & chords ----------
 const SCALES = {
   major:      { name: 'Major',            steps: [0, 2, 4, 5, 7, 9, 11] },
   minor:      { name: 'Minor',            steps: [0, 2, 3, 5, 7, 8, 10] },
@@ -94,12 +81,10 @@ const SCALES = {
 };
 function scaleName(id) { const s = SCALES[id]; return s ? tr('scale_' + id, s.name) : id; }
 
-// Is a midi pitch inside the given key?
 function inScale(pitch, root, scaleId) {
   const s = SCALES[scaleId] || SCALES.major;
   return s.steps.includes(((pitch - root) % 12 + 12) % 12);
 }
-// Nearest in-key pitch (for snap-to-scale); ties round down.
 function nearestInScale(pitch, root, scaleId) {
   if (inScale(pitch, root, scaleId)) return pitch;
   for (let d = 1; d <= 6; d++) {
@@ -108,8 +93,6 @@ function nearestInScale(pitch, root, scaleId) {
   }
   return pitch;
 }
-// Diatonic chord (stacked thirds within the key) built on a pitch, staying in key.
-// Returns an array of midi pitches. An off-key click is pulled onto the nearest key note first.
 function diatonicChord(pitch, root, scaleId, size = 3) {
   const steps = (SCALES[scaleId] || SCALES.major).steps;
   const base = nearestInScale(pitch, root, scaleId);
@@ -133,7 +116,6 @@ function fmtSec(s) {
   return m + ':' + (sec < 10 ? '0' : '') + sec.toFixed(1);
 }
 
-// Snap a beat value to the current grid (0 = snapping off)
 function snapBeat(beat, grid) {
   if (!grid) return Math.max(0, beat);
   return Math.max(0, Math.round(beat / grid) * grid);
@@ -143,8 +125,7 @@ const TRACK_COLORS = ['#e0894a', '#5cb0a2', '#d8a13a', '#cf6f63', '#88a05c', '#c
 let _colorIdx = 0;
 function nextColor() { return TRACK_COLORS[_colorIdx++ % TRACK_COLORS.length]; }
 
-// ---------- Toasts (bottom right: "what just happened") ----------
-
+// ---------- toasts (bottom right ----------
 function toast(msg, kind = '') {
   const box = $('#toasts');
   const el = document.createElement('div');
@@ -160,8 +141,7 @@ function toast(msg, kind = '') {
 
 function setHint(msg) { const el = $('#statusHint'); if (el) el.textContent = msg; } // status bar removed; kept null-safe
 
-// ---------- Tooltips (hover any [data-tip]) ----------
-
+// ---------- tooltips ----------
 (function initTooltips() {
   const tip = document.getElementById('tooltip');
   let timer = null;
@@ -195,7 +175,6 @@ function setHint(msg) { const el = $('#statusHint'); if (el) el.textContent = ms
 })();
 
 // ---------- base64 <-> ArrayBuffer ----------
-
 function bufToB64(buf) {
   const bytes = new Uint8Array(buf);
   let bin = '';
@@ -214,8 +193,6 @@ function b64ToBuf(b64) {
 }
 
 // ---------- droppable clip effects ----------
-// One entry per effect the user can drag from the Effects browser onto a clip.
-// p = param defs: key -> { min, max, step, def, unit }
 const FX_DEFS = {
   reverb: { nameKey: 'fx_reverb', fallback: 'Reverb',
     p: { amt: { min: 0, max: 1, step: 0.01, def: 0.35, labelKey: 'fx_amount', labelFb: 'Amount' } } },
@@ -246,12 +223,8 @@ function fxName(type) {
 }
 
 // ---------- built-in sample loops ----------
-// Loops are preset note PATTERNS played by the synth engine (no bundled audio,
-// so they stay tiny AND you can open and edit them). Notes are templates without
-// ids; ids get assigned when a loop is dropped into a project.
 const DRUM_PC = { k: 0, s: 2, c: 4, h: 6, t: 9, o: 10 }; // kick snare clap hat tom ophat
 
-// build drum notes from 16-step strings (X = accent, x/o = normal, . = rest)
 function _drum(rows) {
   const notes = [];
   for (const inst in rows) {
@@ -263,11 +236,9 @@ function _drum(rows) {
   }
   return notes;
 }
-// build a line from [start, pitch, length, (vel)] tuples
 function _line(tuples) {
   return tuples.map(t => ({ start: t[0], pitch: t[1], length: t[2], vel: t[3] ?? 0.85 }));
 }
-// build chord blocks from [start, [pitches], length] tuples
 function _chords(blocks) {
   const notes = [];
   for (const [start, pitches, length] of blocks) for (const p of pitches) notes.push({ start, pitch: p, length, vel: 0.8 });
@@ -275,9 +246,8 @@ function _chords(blocks) {
 }
 
 const SAMPLE_LIB = [
+
   // --- drums (4 beats each) ---
-  // Hats carry accents on the downbeats. A row of identical 8ths reads as a
-  // machine; accenting 1 and 3 is what makes it feel like a groove.
   { id: 'dr_four', cat: 'drums', name: 'Four on the Floor', instrument: 'drums', length: 4,
     notes: _drum({ k: 'X...X...X...X...', h: 'X.x.x.x.X.x.x.x.', s: '....X.......X...' }) },
   { id: 'dr_boom', cat: 'drums', name: 'Boom Bap', instrument: 'drums', length: 4,
@@ -288,7 +258,6 @@ const SAMPLE_LIB = [
     notes: _drum({ k: 'X.........X.....', s: '........X.......', h: 'Xxxxxxx.Xxxxxxxx', o: '..............x.' }) },
   { id: 'dr_house', cat: 'drums', name: 'House Groove', instrument: 'drums', length: 4,
     notes: _drum({ k: 'X...X...X...X...', o: '..x...x...x...x.', c: '....X.......X...' }) },
-  // real recorded kit (CC0 samples in assets/oneshots)
   { id: 'dr_acoustic', cat: 'drums', name: 'Acoustic Groove', instrument: 'drumkit', length: 4,
     notes: _drum({ k: 'X.......X.......', s: '....X.......X...', h: 'X.x.x.x.X.x.x.x.' }) },
   { id: 'dr_acbap', cat: 'drums', name: 'Acoustic Boom Bap', instrument: 'drumkit', length: 4,
@@ -297,16 +266,14 @@ const SAMPLE_LIB = [
   // --- bass (low octave) ---
   { id: 'ba_walk', cat: 'bass', name: 'Walking Bass', instrument: 'bass', length: 4,
     notes: _line([[0, 40, 0.9, 0.95], [1, 43, 0.9, 0.8], [2, 45, 0.9, 0.9], [3, 47, 0.9, 0.8]]) },
-  // the 808 is a real instrument now, and this is what people mean by sub bass
   { id: 'ba_sub', cat: 'bass', name: 'Sub Bass', instrument: 'sub', length: 4,
     notes: _line([[0, 36, 1.9, 1], [2, 36, 1.9, 0.85]]) },
   { id: 'ba_off', cat: 'bass', name: 'Offbeat Bass', instrument: 'bass', length: 4,
     notes: _line([[0.5, 40, 0.45], [1.5, 40, 0.45], [2.5, 43, 0.45], [3.5, 45, 0.45]]) },
-  // sits between the kicks instead of doubling them, which is the point of it
   { id: 'ba_house', cat: 'bass', name: 'House Bass', instrument: 'bass', length: 4,
     notes: _line([[0.5, 40, 0.4], [1.5, 40, 0.4], [2.5, 40, 0.4], [3.5, 43, 0.4]]) },
 
-  // --- melodic (all in C major so anything here layers with anything else) ---
+  // --- melodic ---
   { id: 'me_chords', cat: 'melodic', name: 'Piano Chords', instrument: 'rpiano', length: 4,
     notes: _chords([[0, [60, 64, 67], 1], [1, [57, 60, 64], 1], [2, [53, 57, 60], 1], [3, [55, 59, 62], 1]]) },
   { id: 'me_pad', cat: 'melodic', name: 'String Pad', instrument: 'strings', length: 4,
@@ -324,12 +291,10 @@ const SAMPLE_LIB = [
   { id: 'me_lead', cat: 'melodic', name: 'Synth Lead', instrument: 'synth', length: 4,
     notes: _line([[0, 72, 0.4, 0.95], [0.75, 72, 0.25, 0.7], [1.25, 76, 0.5, 0.85],
                   [2, 79, 0.4, 0.95], [2.75, 76, 0.25, 0.7], [3.25, 72, 0.7, 0.85]]) },
-  // stride: root on the strong beats, chord on the weak ones
   { id: 'me_stride', cat: 'melodic', name: 'Upright Stride', instrument: 'rupright', length: 4,
     notes: [].concat(
       _line([[0, 48, 0.4, 0.95], [2, 55, 0.4, 0.9]]),
       _chords([[1, [64, 67, 72], 0.4], [3, [62, 65, 71], 0.4]])) },
-  // the glockenspiel is only sampled from G5 up, so this stays where it was recorded
   { id: 'me_glock', cat: 'melodic', name: 'Music Box', instrument: 'rglock', length: 4,
     notes: _line([[0, 84, 0.5, 1], [0.5, 88, 0.5, 0.9], [1, 91, 0.5, 1],
                   [2, 88, 0.5, 0.9], [2.5, 84, 0.5, 0.95], [3, 79, 1, 0.9]]) },
@@ -340,18 +305,14 @@ const SAMPLE_LIB = [
   { id: 'me_flute', cat: 'melodic', name: 'Flute Line', instrument: 'rflute', length: 4,
     notes: _line([[0, 72, 0.9, 0.8], [1, 76, 0.45, 0.85], [1.5, 74, 0.45, 0.7], [2, 72, 0.9, 0.85], [3, 67, 0.9, 0.75]]) },
 
-  // --- jazz: a small section that works together, ii V I in C over two bars ---
-  // Swing lives in the ride: beats 1 to 4 plus the "a" of 2 and 4, which is the
-  // nearest a 16th grid gets to a triplet and is what makes it read as jazz.
+  // --- jazz ---
   { id: 'jz_swing', cat: 'jazz', name: 'Swing Ride', instrument: 'drumkit', length: 4,
     notes: _drum({ h: 'X...X..xX...X..x', k: 'x.......x.......', s: '..........x.....' }) },
   { id: 'jz_brush', cat: 'jazz', name: 'Brush Shuffle', instrument: 'drumkit', length: 4,
     notes: _drum({ h: 'X..xx..xX..xx..x', s: '....x.......x...', k: 'x...............' }) },
-  // walks D F A B | G A B C, landing on the root of the I chord
   { id: 'jz_walk', cat: 'jazz', name: 'Jazz Walking Bass', instrument: 'bass', length: 8,
     notes: _line([[0, 38, 0.9, 0.95], [1, 41, 0.9, 0.8], [2, 45, 0.9, 0.9], [3, 47, 0.9, 0.8],
                   [4, 43, 0.9, 0.95], [5, 45, 0.9, 0.8], [6, 47, 0.9, 0.9], [7, 48, 0.9, 0.85]]) },
-  // rootless voicings, so the bass keeps the bottom to itself
   { id: 'jz_keys', cat: 'jazz', name: 'Jazz Comp (ii V I)', instrument: 'rpiano', length: 8,
     notes: _chords([[0, [65, 69, 72, 76], 1.6], [2, [59, 62, 65, 69], 1.6], [4, [64, 67, 71, 74], 3.4]]) },
   { id: 'jz_trumpet', cat: 'jazz', name: 'Trumpet Lead', instrument: 'rtrumpet', length: 8,
@@ -361,22 +322,17 @@ const SAMPLE_LIB = [
   { id: 'jz_sax', cat: 'jazz', name: 'Sax Answer', instrument: 'rsax', length: 8,
     notes: _line([[1.5, 60, 0.45, 0.8], [2, 62, 0.45, 0.85], [2.5, 65, 0.45, 0.8], [3, 67, 0.9, 0.9],
                   [4.5, 64, 0.45, 0.8], [5, 62, 0.45, 0.75], [5.5, 60, 2, 0.85]]) },
-  // both horns on the same short hits, the sound of a horn section
   { id: 'jz_vibes', cat: 'jazz', name: 'Vibes Comp', instrument: 'rvibes', length: 8,
     notes: _chords([[0, [65, 69, 72], 1.4], [2, [62, 65, 69], 1.4], [4, [64, 67, 71], 3.4]]) },
   { id: 'jz_stabs', cat: 'jazz', name: 'Horn Stabs', instrument: 'rtrumpet', length: 4,
     notes: _chords([[0, [72, 76], 0.3], [1.5, [74, 77], 0.3], [2.5, [71, 76], 0.3], [3, [72, 79], 0.7]]) },
 ];
-// Anything that came from another person goes through here before it reaches
-// innerHTML. A loop name is typed by a stranger, which is exactly the kind of
-// text that must never be read as markup.
 function escapeHtml(s) {
   return String(s == null ? '' : s)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
-// A small menu under whatever was clicked. items is [[label, fn], ...].
 function ctxMenu(ev, items) {
   const old = document.getElementById('ctxShared');
   if (old) old.remove();
@@ -406,17 +362,9 @@ function sampleCatName(c) {
 }
 
 // ---------- the card you are dragging ----------
-// The browser's own drag image is a frozen snapshot: it cannot move, so the
-// thing under your cursor was dead while the card left behind in the list did
-// the animating, which is backwards. This replaces it with a real element that
-// follows the pointer and swings like something held at the top: the further it
-// lags behind your hand, the more it trails, and it settles when you stop.
 const DragGhost = {
   el: null, x: 0, y: 0, angle: 0, vel: 0, lastX: 0, raf: null, painting: false,
 
-  // One transparent pixel, made at startup rather than on the first drag. An
-  // image that has not finished decoding has naturalWidth 0, which the OS
-  // rejects, and rejecting it is what brought back its own icon.
   pixel() {
     let px = document.getElementById('dragPixel');
     if (!px) {
@@ -429,8 +377,6 @@ const DragGhost = {
     return px;
   },
 
-  // Shift turns a drag into a brush: the card goes green with a plus, and the
-  // cursor becomes a brush, so the mode is obvious before you touch anything.
   setPaint(on) {
     if (on === this.painting) return;
     this.painting = on;
@@ -449,9 +395,6 @@ const DragGhost = {
     this.x = e.clientX; this.y = e.clientY; this.lastX = e.clientX;
     this.angle = 0; this.vel = 0;
     if (this.painting) g.classList.add('ghost-paint');
-    // Hide the native drag image. It has to be a real, rendered, in-document
-    // image: a detached canvas is never painted, so macOS discards it and falls
-    // back to its own generic icon (the globe that flies in from the corner).
     try { e.dataTransfer.setDragImage(this.pixel(), 0, 0); }
     catch (err) { /* older engines keep their own ghost, which is fine */ }
     this.draw();
@@ -467,8 +410,6 @@ const DragGhost = {
     if (!this.el) return;
     const dx = this.x - this.lastX;
     this.lastX = this.x;
-    // a pendulum: the pointer's motion pushes it, gravity pulls it back to
-    // hanging, and friction stops it ringing forever
     const target = clamp(dx * 0.53, -11, 11);
     this.vel += (target - this.angle) * 0.18;
     this.vel *= 0.82;
@@ -483,9 +424,6 @@ const DragGhost = {
       `translate(${this.x}px, ${this.y}px) translate(-50%, -8px) rotate(${this.angle.toFixed(2)}deg)`;
   },
 
-  // Let go and the card comes apart rather than blinking out: it fades and
-  // drifts while a scatter of specks lifts off it. Short enough to read as a
-  // release, not a cutscene.
   stop() {
     const wasPainting = this.painting;   // read before clearing it, for the dust colour
     this.setPaint(false);
@@ -498,13 +436,9 @@ const DragGhost = {
 
     const r = el.getBoundingClientRect();
     if (!r.width) { el.remove(); return; }
-    // the animation has to keep the position and lean it already had, so hand
-    // the current transform to the keyframes rather than overwriting it
     el.style.setProperty('--gt', el.style.transform || 'none');
     el.classList.add('ghost-dissolve');
 
-    // specks seeded across the card, weighted toward the trailing edge so it
-    // looks like it is coming apart rather than exploding from the middle
     const n = Math.min(26, Math.max(12, Math.round(r.width / 9)));
     const frag = document.createDocumentFragment();
     for (let i = 0; i < n; i++) {
@@ -525,11 +459,6 @@ const DragGhost = {
     setTimeout(() => { el.remove(); for (const d of dust) d.remove(); }, 780);
   },
 
-  // The first release of a drag used to stutter, and the second and third a
-  // little. The browser will not build the layers or compile the keyframes for
-  // an animation it has never run, so it does all of that during the first one.
-  // Running it once on something invisible at startup moves that cost to a
-  // moment when nobody is watching.
   warm() {
     if (this._warm) return;
     this._warm = true;
@@ -544,17 +473,12 @@ const DragGhost = {
     speck.style.setProperty('--dx', '10px');
     speck.style.setProperty('--dy', '-10px');
     document.body.append(box, speck);
-    // a frame between insert and animate, or the two are batched into one style
-    // pass and the layer is still built lazily
     requestAnimationFrame(() => {
       box.classList.add('ghost-dissolve');
       setTimeout(() => { box.remove(); speck.remove(); }, 900);
     });
   }
 };
-// Shift is the paint modifier, and it should be readable BEFORE you commit to a
-// drag: hold it and the effect cards show what shift-dragging them will do.
-// Tracked on the window so it survives focus moving between panels.
 (function trackShift() {
   const set = (on) => {
     if (document.body.classList.contains('shift-held') === on) return;
@@ -563,18 +487,13 @@ const DragGhost = {
   };
   window.addEventListener('keydown', (e) => { if (e.key === 'Shift') set(true); });
   window.addEventListener('keyup', (e) => { if (e.key === 'Shift') set(false); });
-  // a lost window (alt-tab, a native dialog) must not leave it stuck on
   window.addEventListener('blur', () => set(false));
 })();
 
-// decode the stand-in pixel now, so it is ready before anyone drags anything,
-// and run the release animation once while it cannot be seen
 function warmDragGhost() { DragGhost.pixel(); setTimeout(() => DragGhost.warm(), 600); }
 if (document.body) warmDragGhost();
 else document.addEventListener('DOMContentLoaded', warmDragGhost);
 
-// dragover is the event that reliably carries coordinates while a drag is live,
-// and the only one that reports the shift key during a drag
 document.addEventListener('dragover', (e) => {
   DragGhost.move(e.clientX, e.clientY);
   if (DragGhost.el) DragGhost.setPaint(e.shiftKey);
@@ -584,9 +503,6 @@ document.addEventListener('dragend', () => DragGhost.stop());
 window.DragGhost = DragGhost;
 
 // ---------- your own loops ----------
-// A loop is notes plus an instrument, which is why it costs kilobytes rather
-// than megabytes: nothing is recorded, the instruments are already in the app.
-// That is what makes saving and sharing them cheap enough to be free.
 const MyLoops = {
   KEY: 'fabu.myLoops',
   EXT: '.fabloop',
@@ -603,8 +519,6 @@ const MyLoops = {
     catch (e) { toast(tr('loop_save_fail', 'There is no room left to save loops.'), 'red'); return false; }
   },
 
-  // Build one from a pattern on the timeline. Notes are normalised to start at
-  // zero so a loop taken from bar 30 still begins at the beginning.
   fromClip(clip, track) {
     if (!clip || clip.kind !== 'midi' || !clip.notes || !clip.notes.length) return null;
     let first = Infinity;
@@ -644,8 +558,6 @@ const MyLoops = {
   },
 
   // ---------- sharing ----------
-  // A .fabloop is a small JSON file. Deliberately plain text: anyone can look
-  // inside one, and it will still open in ten years.
   toFile(loop) {
     return JSON.stringify({ fabloop: 1, name: loop.name, instrument: loop.instrument,
                             length: loop.length, notes: loop.notes, sustain: loop.sustain }, null, 1);
@@ -664,8 +576,6 @@ const MyLoops = {
         vel: clamp(+n.vel || 0.85, 0.05, 1)
       }));
     if (!clean.length) return null;
-    // nobody writes a hundred thousand notes into one loop, but a file can
-    // claim to, and drawing it would wedge the app
     if (clean.length > 4000) clean.length = 4000;
     const instr = (typeof INSTRUMENTS !== 'undefined' && INSTRUMENTS[d.instrument]) ? d.instrument : 'rpiano';
     return {
@@ -681,7 +591,6 @@ const MyLoops = {
 
   isLoopFile(f) { return /\.fabloop$/i.test(f.name) || /\.fabloop\.json$/i.test(f.name); },
 
-  // shaped like a SAMPLE_LIB entry so everything downstream treats them alike
   asPresets() {
     return this.all().map(l => ({
       id: l.id, cat: 'mine', name: l.name, instrument: l.instrument,
@@ -690,4 +599,3 @@ const MyLoops = {
   }
 };
 window.MyLoops = MyLoops;
-

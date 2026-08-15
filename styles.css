@@ -47,7 +47,6 @@ html, body {
 .ic.dim { color: var(--dim); }
 .hidden { display: none !important; }
 
-/* thin, unobtrusive scrollbars everywhere (the default ones looked heavy) */
 ::-webkit-scrollbar { width: 9px; height: 9px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
@@ -57,17 +56,8 @@ html, body {
 ::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.2); background-clip: padding-box; }
 ::-webkit-scrollbar-corner { background: transparent; }
 
-/* ---------- Top bar ---------- */
+/* ---------- top bar ---------- */
 
-/* Three columns with equal side tracks, so the transport sits in the true
-   middle of the window. space-between could never centre it: the sides hold
-   very different amounts, so the middle drifted hundreds of pixels right.
-   It also must never wrap, because a second row was what made it look broken. */
-/* Flex, never wrapping. Equal grid columns looked right on paper but the tool
-   side is far wider than the project side, so its track overflowed and sat on
-   top of the transport. Instead the two sides are balanced by content (file and
-   undo buttons live with the project name) and each side is clamped so it can
-   never grow over its neighbour. */
 #topbar {
   display: flex;
   align-items: center;
@@ -82,21 +72,15 @@ html, body {
 #topbar > .tb-group { flex: 0 1 auto; min-width: 0; }
 #topbar > .tb-transport { flex: 0 0 auto; }   /* the transport never shrinks */
 #topbar button, #topbar input, #topbar select, #posDisplay { -webkit-app-region: no-drag; }
-/* keep the top-left content clear of the macOS traffic lights when windowed */
 body.is-mac #topbar { padding-left: 82px; }
 body.is-mac.is-fullscreen #topbar { padding-left: 14px; }
 
-/* a group never splits across rows, which is what made the bar look scrambled
-   when the window wasn't fullscreen. Narrow windows drop the labels, then let
-   the tool row scroll sideways, instead of jumbling everything. */
 .tb-group { display: flex; align-items: center; gap: 6px; flex-wrap: nowrap; min-width: 0; }
-/* last resort on a very small window: scroll rather than clip or wrap */
 #topbar > .tb-group:first-child,
 #topbar > .tb-group:last-child { overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
 #topbar > .tb-group:first-child::-webkit-scrollbar,
 #topbar > .tb-group:last-child::-webkit-scrollbar { display: none; }
 #projName { min-width: 56px; flex: 0 1 auto; }
-
 
 #logo {
   font-size: 17px;
@@ -198,7 +182,6 @@ body.is-mac.is-fullscreen #topbar { padding-left: 14px; }
 }
 .tb-field input[type="number"]::-webkit-inner-spin-button { display: none; }
 .tb-unit { font-size: 10px; font-weight: 700; color: var(--faint); margin-left: -2px; }
-/* full-window capture surface while dragging a number field */
 .vdrag-overlay { position: fixed; inset: 0; z-index: 2000; cursor: ns-resize; }
 .tb-field select, select {
   background: var(--panel);
@@ -209,7 +192,7 @@ body.is-mac.is-fullscreen #topbar { padding-left: 14px; }
   cursor: pointer;
 }
 
-/* ---------- Workspace / timeline ---------- */
+/* ---------- workspace / timeline ---------- */
 
 #workspace { position: relative; flex: 1; overflow: hidden; display: flex; }
 body { display: flex; flex-direction: column; }
@@ -352,8 +335,6 @@ input[type="range"]::-webkit-slider-thumb {
 }
 input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.2); }
 
-/* the "add a track" slot lives inline under the last track, like an empty
-   half-height track slot with a dotted outline */
 .thead-add {
   height: calc(var(--track-h) / 2);
   display: flex;
@@ -432,7 +413,6 @@ input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.2); }
   pointer-events: none;
   display: none;
 }
-/* translucent preview of a loop/audio clip while dragging it in */
 #dropGhost.preview {
   width: auto;
   border-radius: 8px;
@@ -448,7 +428,6 @@ input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.2); }
 }
 #dropGhost.preview canvas { display: block; position: absolute; left: 0; bottom: 0; }
 
-/* "release here for a new track" indicator, between/around tracks */
 #trackInsert {
   position: absolute; left: 0; height: 0; z-index: 30;
   display: none; align-items: center; gap: 7px;
@@ -469,7 +448,7 @@ input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.2); }
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
 }
 
-/* ---------- Clips ---------- */
+/* ---------- clips ---------- */
 
 .clip {
   position: absolute;
@@ -526,7 +505,7 @@ input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.2); }
   pointer-events: none;
 }
 
-/* ---------- Floating windows ---------- */
+/* ---------- floating windows ---------- */
 
 .fwin {
   position: absolute;
@@ -590,8 +569,6 @@ input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.2); }
   border-right: 2px solid var(--faint); border-bottom: 2px solid var(--faint); border-bottom-right-radius: 2px;
 }
 
-/* The window body is the scroller. This used to scroll too, so a long loop list
-   showed two scrollbars side by side. */
 .samp-scroll { overflow: visible; }
 
 /* rows inside windows */
@@ -648,7 +625,6 @@ input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.2); }
 .auto-dot.on { background: var(--accent); border-color: var(--accent); color: #fff; }
 .auto-fx-label { font-size: 12.5px; font-weight: 700; color: var(--accent); padding: 2px 4px; }
 
-/* editable clip-setting value fields (no sliders) */
 .insp-num {
   flex: 1; min-width: 0; width: auto;
   background: var(--panel2); border: 1px solid var(--line); border-radius: 7px;
@@ -686,7 +662,7 @@ kbd {
   margin-right: 3px;
 }
 
-/* ---------- Piano roll ---------- */
+/* ---------- piano roll ---------- */
 
 .proll-body { display: flex; flex-direction: column; padding: 0 !important; }
 .proll-tools {
@@ -737,7 +713,7 @@ kbd {
 .proll-canvas-wrap { position: relative; }
 .proll-canvas-wrap canvas { display: block; cursor: crosshair; }
 
-/* ---------- Keys panel ---------- */
+/* ---------- keys panel ---------- */
 
 #keysPanel {
   position: absolute;
@@ -845,9 +821,8 @@ kbd {
   color: #b6ab99;
 }
 
-/* ---------- Count-in overlay ---------- */
+/* ---------- count-in overlay ---------- */
 
-/* subtle count-in badge, top-center, visible but not blocking the view */
 #countOverlay {
   position: fixed;
   top: 74px;
@@ -880,7 +855,7 @@ kbd {
   to { transform: scale(1); opacity: 1; }
 }
 
-/* ---------- Toasts ---------- */
+/* ---------- toasts ---------- */
 
 #toasts {
   position: fixed;
@@ -913,7 +888,7 @@ kbd {
   to { opacity: 1; transform: translateX(0); }
 }
 
-/* ---------- Tooltip ---------- */
+/* ---------- tooltip ---------- */
 
 #tooltip {
   position: fixed;
@@ -935,7 +910,7 @@ kbd {
   to { opacity: 1; transform: translateY(0); }
 }
 
-/* ---------- Homescreen ---------- */
+/* ---------- homescreen ---------- */
 
 #home {
   position: fixed;
@@ -945,15 +920,12 @@ kbd {
   display: flex;
   align-items: stretch;
   justify-content: flex-start;
-  /* warm, cohesive glow instead of a flat black void */
   background:
     radial-gradient(1200px 700px at 50% -10%, rgba(224, 122, 63, 0.10), transparent 60%),
     radial-gradient(900px 600px at 50% 115%, rgba(216, 161, 58, 0.06), transparent 60%),
     var(--bg);
   animation: homeIn 0.24s var(--ease);
 }
-/* One warm bloom out of the top right corner, with concentric arcs sweeping
-   from it. Quiet enough to sit behind text and still be there. */
 #home::before, #home::after { content: ''; position: absolute; pointer-events: none; z-index: 0; }
 #home::before {
   width: 78vw; height: 78vw; max-width: 1000px; max-height: 1000px;
@@ -1012,7 +984,6 @@ kbd {
   display: inline-block;
   cursor: default;
 }
-/* little easter egg: the wordmark hops when you hover it */
 .home-logo:hover { animation: logoJump 0.5s var(--ease); }
 @keyframes logoJump {
   0% { transform: translateY(0) rotate(0); }
@@ -1023,9 +994,6 @@ kbd {
 }
 .home-tag { font-size: 14px; color: var(--dim); font-weight: 500; margin-left: 3px; }
 
-/* The four ways in. Tall cards with the icon on top, the sub under the title,
-   and a strip of quiet artwork along the bottom so the row reads as a shelf of
-   things rather than a row of buttons. */
 .home-actions { display: flex; gap: 20px; align-self: stretch; }
 .home-go {
   position: relative;
@@ -1035,8 +1003,6 @@ kbd {
   height: 250px;
   border-radius: 16px;
   border: 1px solid rgba(255, 255, 255, 0.07);
-  /* A surface, not a flat rectangle: light falls from above, so the top edge is
-     a shade lighter than the bottom and carries a hairline highlight. */
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.004) 55%),
     var(--panel);
@@ -1069,16 +1035,12 @@ kbd {
   min-height: 2.8em; max-width: 15ch;
 }
 
-/* the artwork sits behind the text, bleeding off the bottom edge */
 .hc-art {
   position: absolute; left: 0; right: 0; bottom: 0; height: 62px;
   color: var(--accent); opacity: 0.14; pointer-events: none;
 }
 .hc-art-mp { color: #b07bd6; opacity: 0.3; }
 
-/* The one you are meant to press. Light from the top left, deepening toward the
-   bottom right, with the same hairline along the top edge as the others so it
-   sits on the same shelf rather than floating in front of it. */
 .home-go.primary {
   background:
     linear-gradient(158deg, #ef8f57 0%, #e07a3f 34%, #c8632e 72%, #ae5325 100%);
@@ -1211,7 +1173,7 @@ kbd {
 .lang-flag:hover { opacity: 1; transform: translateY(-2px); }
 .lang-flag.active { opacity: 1; border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
 
-/* ---------- Update banner ---------- */
+/* ---------- update banner ---------- */
 
 #updateBanner {
   position: fixed;
@@ -1253,7 +1215,7 @@ kbd {
 .upd-x:hover { color: var(--text); background: var(--panel3); }
 .upd-x .ic { width: 13px; height: 13px; }
 
-/* ---------- Context menu ---------- */
+/* ---------- context menu ---------- */
 
 .ctx-menu {
   position: fixed;
@@ -1282,7 +1244,7 @@ kbd {
 .ctx-item.danger { color: var(--red); }
 .ctx-item.danger:hover { background: rgba(216, 89, 79, 0.12); }
 
-/* ---------- Modals (export, account, confirm) ---------- */
+/* ---------- modals ---------- */
 
 .modal-back {
   position: fixed; inset: 0; z-index: 2000;
@@ -1352,7 +1314,7 @@ kbd {
 .auth-tab.on { border-color: var(--accent); color: var(--accent); }
 .auth-err { color: var(--red); font-size: 11.5px; min-height: 14px; margin-bottom: 4px; }
 
-/* ---------- Account management ---------- */
+/* ---------- account management ---------- */
 .acct-section {
   margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line);
 }
@@ -1361,7 +1323,7 @@ kbd {
 .acct-danger .acct-head { color: var(--red); }
 .acct-danger .acct-note { color: var(--faint); }
 
-/* ---------- Jam (multiplayer) panel ---------- */
+/* ---------- jam ---------- */
 
 #jamPanel {
   position: absolute;
@@ -1528,7 +1490,6 @@ kbd {
 #cursorLayer { position: absolute; inset: 0; pointer-events: none; z-index: 7; }
 .mp-cursor { position: absolute; transform: translate(-2px, -2px); transition: left 0.11s linear, top 0.11s linear; }
 
-/* other players' playheads: a thin coloured line in their colour, see-through */
 #remotePhLayer { position: absolute; inset: 0; pointer-events: none; z-index: 6; }
 .mp-playhead {
   position: absolute; top: 0; width: 2px;
@@ -1566,7 +1527,7 @@ input[type="range"].locked { opacity: 0.45; filter: saturate(0.4); }
 .mp-proj { text-align: left; }
 .mp-proj.on { border-color: var(--accent); color: var(--accent); }
 
-/* ---------- Snap coach ---------- */
+/* ---------- snap coach ---------- */
 
 #snapCoach {
   position: absolute;
@@ -1605,7 +1566,7 @@ input[type="range"].locked { opacity: 0.45; filter: saturate(0.4); }
   * { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; }
 }
 
-/* ---- Support link on the homescreen (subtle, not forced) ---- */
+/* ---- support link on the homescreen ---- */
 #homeKofi {
   position: absolute;
   right: 18px;
@@ -1627,7 +1588,6 @@ input[type="range"].locked { opacity: 0.45; filter: saturate(0.4); }
 #homeKofi:hover { opacity: 1; color: var(--accent); border-color: var(--accent); transform: translateY(-1px); }
 #homeKofi .kofi-cup { font-size: 13px; }
 
-/* quiet version tag + update check in the corner of the homescreen */
 #homeVerWrap {
   position: absolute;
   left: 18px;
@@ -1651,7 +1611,7 @@ input[type="range"].locked { opacity: 0.45; filter: saturate(0.4); }
 }
 .home-check-upd:hover { border-color: var(--accent); color: var(--accent); }
 
-/* ---- Web-only mobile nudge ---- */
+/* ---- web-only mobile nudge ---- */
 #webNudge {
   position: fixed;
   left: 10px;
@@ -1697,18 +1657,15 @@ input[type="range"].locked { opacity: 0.45; filter: saturate(0.4); }
 }
 #webNudge .wn-x:hover { background: var(--panel); color: var(--text); }
 
-/* ---- Phones / narrow screens (mostly the /web version) ---- */
+/* ---- phones / narrow screens ---- */
 @media (max-width: 760px) {
   #logo { padding-left: 8px; }               /* no macOS traffic lights in the browser */
   #topbar { padding: 6px 10px 8px; gap: 8px; }
   #projName { width: 108px; }
 
-  /* the home screen's own phone rules live at the end of this file, after the
-     sidebar is defined, or they lose to it on source order */
 }
 
-
-/* ---- Effects browser + per-clip effects ---- */
+/* ---- effects browser + per-clip effects ---- */
 .fx-item {
   display: flex; align-items: center; gap: 8px;
   padding: 8px 10px; margin-bottom: 6px;
@@ -1722,13 +1679,10 @@ input[type="range"].locked { opacity: 0.45; filter: saturate(0.4); }
 .fx-item .ic { width: 14px; height: 14px; color: var(--accent); }
 .clip.fx-over { outline: 2px dashed var(--accent); outline-offset: 1px; }
 /* ---- a pattern carrying effects ---- */
-/* Marked, not animated: a quiet gold edge you can pick out across the timeline
-   without anything moving. The only motion is the one flash when it lands. */
 .clip.has-fx {
   box-shadow: inset 0 0 0 1.5px rgba(255, 211, 94, .7);
 }
 
-/* the single sweep when an effect is dropped on */
 @keyframes fxLanded {
   0%   { opacity: 0;   background-position: 130% 0; }
   12%  { opacity: 1; }
@@ -1759,15 +1713,12 @@ input[type="range"].locked { opacity: 0.45; filter: saturate(0.4); }
   pointer-events: auto;
   backdrop-filter: blur(3px);
 }
-/* the names are only shown while the effect is fresh; after that the badge is
-   just the sparkle, so a timeline of processed clips stays calm */
 .clip-fx-badge .fx-names {
   overflow: hidden; white-space: nowrap;
   max-width: 0; opacity: 0; margin-left: -4px;
   transition: max-width .32s ease, opacity .25s ease, margin-left .32s ease;
 }
 .clip-fx-badge.fresh .fx-names { max-width: 130px; opacity: 1; margin-left: 0; }
-/* a small four-point sparkle, drawn rather than an icon font */
 .fx-spark {
   flex: 0 0 auto; width: 9px; height: 9px;
   background: currentColor;
@@ -1791,7 +1742,7 @@ input[type="range"].locked { opacity: 0.45; filter: saturate(0.4); }
 .eq-canvas canvas { display: block; }
 .eq-dots { display: flex; align-items: center; justify-content: space-around; gap: 6px; margin-top: 5px; width: 300px; max-width: 100%; font-size: 9px; color: var(--faint); font-weight: 700; }
 
-/* ---- recent-project cards: listen / edit halves ---- */
+/* ---- recent-project cards ---- */
 .home-card-art { position: relative; }
 .card-acts {
   position: absolute; inset: 0;
@@ -1808,7 +1759,7 @@ input[type="range"].locked { opacity: 0.45; filter: saturate(0.4); }
 .card-act:hover { background: rgba(0, 0, 0, 0.62); color: var(--accent); }
 .card-act .ic { width: 20px; height: 20px; }
 
-/* ---- global cursors (over the whole UI) + follow mode ---- */
+/* ---- global cursors ---- */
 #cursorLayerWin { position: fixed; inset: 0; pointer-events: none; z-index: 950; }
 .mp-cursor.mp-cursor-win { transition: left 0.09s linear, top 0.09s linear; }
 .jam-player.clickable { cursor: pointer; border-radius: 7px; }
@@ -1835,7 +1786,7 @@ input[type="range"].locked { opacity: 0.45; filter: saturate(0.4); }
   box-shadow: var(--shadow);
 }
 
-/* ---- home "now playing" bar (listen from home) ---- */
+/* ---- home "now playing" bar ---- */
 #homePlayer {
   position: absolute; left: 50%; bottom: 78px; transform: translateX(-50%);
   display: flex; align-items: center; gap: 12px; z-index: 2;
@@ -1883,7 +1834,7 @@ input[type="range"].locked { opacity: 0.45; filter: saturate(0.4); }
 .samp-play:hover { background: var(--accent); border-color: var(--accent); color: #fff; }
 .samp-play .ic { width: 12px; height: 12px; color: currentColor; }
 
-/* ---- mixer: one clear EQ for the selected track ---- */
+/* ---- mixer ---- */
 #mixEq { margin-bottom: 12px; }
 .mixeq-head { font-size: 12px; color: var(--dim); margin-bottom: 6px; }
 .mixeq-head b { font-weight: 700; }
@@ -1924,7 +1875,7 @@ input[type="range"].locked { opacity: 0.45; filter: saturate(0.4); }
 .hist-time { color: var(--faint); font-size: 10.5px; font-variant-numeric: tabular-nums; flex-shrink: 0; width: 34px; }
 .hist-text { flex: 1; min-width: 0; color: var(--dim); }
 
-/* ---- Mixer: one track at a time, plus a compact picker ---- */
+/* ---- mixer ---- */
 #mixFocus { margin: 10px 0 4px; display: flex; flex-direction: column; gap: 7px; }
 .mixf-row { display: flex; align-items: center; gap: 8px; }
 .mixf-lbl { width: 46px; flex-shrink: 0; font-size: 9.5px; font-weight: 800; letter-spacing: 0.06em; color: var(--faint); }
@@ -1944,7 +1895,6 @@ input[type="range"].locked { opacity: 0.45; filter: saturate(0.4); }
 }
 .auth-inline:hover { filter: brightness(1.08); }
 
-/* delayed-restart countdown bar (used to be a modal that blocked everything) */
 #restartBar {
   position: fixed; right: 16px; bottom: 16px; z-index: 5000;
   display: flex; align-items: center; gap: 10px;
@@ -1959,16 +1909,13 @@ input[type="range"].locked { opacity: 0.45; filter: saturate(0.4); }
 .ask-presets { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 2px; }
 .ask-preset { padding: 4px 10px; font-size: 11.5px; }
 
-/* ---- Top bar: shrink in steps instead of wrapping ----
-   Kept at the end of the file on purpose: these are single-class rules and the
-   base .tbtn rule above would otherwise win on source order. */
+/* ---------- top bar ---------- */
 @media (max-width: 1500px) {
   #topbar .tbtn-label { display: none; }
   #topbar .tbtn.labeled { padding: 0 7px; }
 }
 @media (max-width: 1240px) { #topbar #posTime { display: none; } }
 @media (max-width: 1180px) { #topbar .tb-zoom, #topbar .tb-zoom-sep { display: none; } }
-/* the ruler and playhead already show the position, so the readout can go */
 @media (max-width: 1150px) { #topbar #posDisplay { display: none; } }
 @media (max-width: 1100px) {
   #topbar { gap: 10px; padding-left: 10px; padding-right: 10px; }
@@ -2004,7 +1951,6 @@ input[type="range"].locked { opacity: 0.45; filter: saturate(0.4); }
 .lt-row { display: flex; gap: 5px; margin-top: 5px; }
 .lt-row .fbtn { flex: 1; padding: 4px 0; font-size: 11.5px; }
 
-/* multiplayer connection banner: problems stay on screen until they are fixed */
 #mpBanner {
   position: fixed; top: 54px; left: 50%; transform: translateX(-50%);
   z-index: 4500; display: flex; align-items: center; gap: 11px;
@@ -2033,10 +1979,8 @@ input[type="range"].locked { opacity: 0.45; filter: saturate(0.4); }
 #keysPedal { padding: 4px 12px; font-size: 12px; }
 #keysPedal.on { background: var(--accent); color: #16130f; border-color: var(--accent); }
 
-/* the BPM field is drag-to-change, but a click should let you just type */
 #bpmInput { user-select: text; -webkit-user-select: text; }
 
-/* Settings is split into per-song and app-wide, so neither looks like the other */
 .set-head { display: flex; align-items: baseline; gap: 7px; margin: 12px 0 5px;
   padding-bottom: 4px; border-bottom: 1px solid var(--line); }
 .set-head:first-child { margin-top: 0; }
@@ -2045,48 +1989,36 @@ input[type="range"].locked { opacity: 0.45; filter: saturate(0.4); }
 .set-head em { font-style: normal; font-size: 10.5px; color: var(--faint); }
 .set-note { font-size: 11px; color: var(--faint); margin: 2px 0 4px 26px; line-height: 1.4; }
 
-/* the bar counter doubles as the time signature control */
 #posDisplay { cursor: pointer; }
 #posDisplay:hover { background: var(--panel2); border-color: var(--accent); }
-/* time and signature share one line under the bar counter, so the box keeps
-   its height instead of growing a cramped third row */
 .pos-sub { display: flex; align-items: baseline; gap: 6px; line-height: 1; }
 #posSig { font-size: 9.5px; font-weight: 700; color: var(--faint); letter-spacing: .02em; }
 @media (max-width: 1240px) { #topbar #posSig { display: none; } }
 
-/* a dialog whose buttons mean different things: recommended, risky, neutral */
 .choice-btns { flex-wrap: wrap; gap: 7px; }
 .choice-btns .fbtn { flex: 1 1 auto; min-width: 110px; }
 .fbtn.danger-outline { border-color: var(--red); color: var(--red); background: transparent; }
 .fbtn.danger-outline:hover { background: color-mix(in srgb, var(--red) 16%, transparent); }
 
-
-/* a floating window opened from the home screen has to clear that overlay */
 .fwin.fwin-over-home { position: fixed; z-index: 1000; }
 
-/* The card that follows the cursor is the one that moves. The one still in the
-   list just dims, so you can see where it came from. */
 .card-lifted { opacity: 0.35; }
 #dragGhostCard {
   position: fixed; left: 0; top: 0; z-index: 9999;
   pointer-events: none;
-  transform-origin: 50% -6px;          /* hangs from a point above it, like a tag on a string */
+  transform-origin: 50% -6px;          
   box-shadow: 0 14px 30px rgba(0,0,0,.5);
   opacity: .95;
   will-change: transform;
 }
 @media (prefers-reduced-motion: reduce) { #dragGhostCard { transform-origin: 50% 50%; } }
 
-/* A dragged clip snaps between two lean angles; the transition is what makes
-   that a glide rather than a jump. */
 .clip { transition: transform 160ms cubic-bezier(.22,.9,.3,1); }
 .clip.resizing { transition: none; }
 
-/* the transparent stand-in handed to the OS in place of its own drag icon */
 #dragPixel { position: fixed; top: 0; left: 0; width: 1px; height: 1px; opacity: 0.01; pointer-events: none; }
 
-/* ---- painting effects (hold shift while dragging one) ---- */
-/* the brush cursor, drawn inline so there is no asset to load or go missing */
+/* ---- painting effects ---- */
 body.fx-painting, body.fx-painting * {
   cursor: url("data:image/svg+xml;utf8,\
 <svg xmlns='http://www.w3.org/2000/svg' width='30' height='30' viewBox='0 0 30 30'>\
@@ -2096,7 +2028,6 @@ body.fx-painting, body.fx-painting * {
 <path d='M11.5 18 L15 27 L18.5 18 Z' fill='%234ad991' stroke='%23202430' stroke-width='1.2' stroke-linejoin='round'/>\
 </g></svg>") 15 27, copy !important;
 }
-/* the card in hand turns green with a plus, so the mode is unmistakable */
 #dragGhostCard.ghost-paint {
   outline: 2px solid var(--green, #4ad991);
   outline-offset: -2px;
@@ -2115,8 +2046,6 @@ body.fx-painting, body.fx-painting * {
 .clip.fx-over { outline: 2px solid var(--accent); outline-offset: -2px; }
 body.fx-painting .clip.fx-over { outline-color: var(--green, #4ad991); }
 
-/* Shift held: effect cards show what dragging them will do before you start.
-   Loop cards are left alone, since painting is an effects idea. */
 body.shift-held .fx-item:not(.samp-item) {
   border-color: var(--green);
   box-shadow: 0 0 0 1px var(--green) inset, 0 0 14px rgba(120, 181, 106, .25);
@@ -2158,7 +2087,6 @@ body.shift-held .fx-item:not(.samp-item) { position: relative; overflow: visible
 .ghost-dust.paint { background: var(--green); }
 
 /* ---- your own loops ---- */
-/* the tile that takes a new one: a loop-shaped hole waiting to be filled */
 .samp-new {
   display: flex; align-items: center; justify-content: center; position: relative;
   min-height: 30px; margin-top: 4px; padding: 6px 9px;
@@ -2191,17 +2119,12 @@ body.shift-held .fx-item:not(.samp-item) { position: relative; overflow: visible
 }
 .loop-meta { font-size: 11px; color: var(--faint); margin: 9px 0 2px; }
 
-/* the pattern's name strip is the handle for taking it out to the loop panel */
 .clip-label { cursor: grab; }
 .clip-label:active { cursor: grabbing; }
 
-/* the little shape previews in the automation curve menu */
 .curve-ico { display: inline-flex; margin-right: 7px; vertical-align: -3px; color: var(--accent); }
 #curveMenu .ctx-item { display: flex; align-items: center; }
 
-/* a rejoin the room refused because of who else is on that connection */
-/* Two buttons and a reason do not fit one line at this width, so the row is
-   allowed to wrap rather than squeezing the name down to nothing. */
 .req-row.req-blocked { border-left: 2px solid var(--red); padding-left: 8px; flex-wrap: wrap; }
 .req-row .req-who { flex: 1 1 100%; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
 .req-row.req-blocked .fbtn { margin-left: auto; }
@@ -2273,20 +2196,16 @@ body.shift-held .fx-item:not(.samp-item) { position: relative; overflow: visible
 .prof-bio i { color: var(--faint); }
 .prof-stats { display: flex; gap: 14px; flex-wrap: wrap; font-size: 11px; color: var(--faint); margin-bottom: 4px; }
 .prof-stats b { color: var(--text); font-size: 13px; margin-right: 3px; }
-/* The credit gives way before the loop's own name does: whose loop it is
-   matters, but not more than which loop it is. */
 .samp-from {
   font-size: 9px; color: var(--faint); flex: 0 1 auto;
   min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
-
-/* ---------- phones ----------
+/* ---------- phones 
    fabu is a desktop tool and stays one, but a phone should be able to open a
    song, hear it, and move things around rather than showing a sliver of
-   timeline behind a track list that eats the whole screen. */
+   timeline behind a track list that eats the whole screen ---------- */
 @media (max-width: 760px) {
-  /* The headers took 415 of 375 available pixels, leaving the music offscreen. */
   :root { --heads-w: 132px; }
   .thead { padding: 6px 7px; gap: 4px; }
   .thead select { max-width: 100%; font-size: 10.5px; }
@@ -2294,17 +2213,11 @@ body.shift-held .fx-item:not(.samp-item) { position: relative; overflow: visible
   .thead-add { flex-direction: column; align-items: stretch; gap: 5px; padding: 6px 7px; }
   .thead-add > * { width: 100%; justify-content: center; }
 
-  /* The desktop breakpoints drop tools one at a time assuming a wider screen is
-     coming. On a phone there is no wider screen and no second place to find
-     them, so the bar wraps onto a second row and keeps everything. Sideways
-     scrolling would hide half the app behind a gesture nobody would guess. */
   #topbar { flex-wrap: wrap; height: auto; row-gap: 6px; padding-bottom: 8px; }
   #topbar .tb-group { flex: 0 0 auto; }
   #topbar .tbtn { min-width: 34px; height: 34px; }
   #topbar .tb-sep { display: none; }
 
-  /* A floating window on a 375px screen is a window with nothing around it, so
-     it becomes a sheet along the bottom edge instead. */
   .fwin {
     position: fixed !important;
     left: 0 !important; right: 0; top: auto !important; bottom: 0;
@@ -2316,14 +2229,10 @@ body.shift-held .fx-item:not(.samp-item) { position: relative; overflow: visible
   .fwin-body { max-height: calc(76vh - 44px); overflow-y: auto; }
   .fwin-rz { display: none; }             /* nothing to resize when it spans the screen */
 
-  /* A toolbar group is one nowrap unit, and one unit is wider than a phone, so
-     the group has to be allowed to break inside itself too. */
   .proll-tools .pt-group { flex-wrap: wrap; }
   .proll-tools { gap: 6px; }
   .fwin-head { padding: 12px 12px; }      /* a drag handle you can actually hit */
 
-  /* Windows are sheets along the bottom edge now, and the nudge used to sit
-     there too, covering whatever was open. */
   #webNudge { bottom: auto; top: 10px; }
   #webNudge { transform: translateY(-14px); }
   #webNudge.in { transform: translateY(0); }
@@ -2333,13 +2242,6 @@ body.shift-held .fx-item:not(.samp-item) { position: relative; overflow: visible
   .gal-acts .fbtn { padding: 7px 12px; }
 }
 
-/* A finger on a drag surface means "move this", so the browser must not also
-   scroll, pan or zoom underneath it. Without this the clip slides while the
-   timeline slides the other way.
-
-   Scoped to touch screens on purpose. A trackpad reports as a fine pointer and
-   its two-finger scroll IS how you move around the timeline on a laptop, so
-   switching this on everywhere would take that away. */
 @media (pointer: coarse) {
   #lanes, #ruler, .clip,
   .proll-grid, .proll-keys, .proll-ruler, .proll-vel,
@@ -2348,15 +2250,14 @@ body.shift-held .fx-item:not(.samp-item) { position: relative; overflow: visible
   }
 }
 
-/* the gallery and profile entry points, at the top of the Loops window */
 .samp-links { display: flex; gap: 6px; margin-bottom: 8px; }
 .samp-links .fbtn { display: flex; align-items: center; gap: 6px; padding: 6px 10px; font-size: 11.5px; }
 .samp-links .fbtn { flex: 1; justify-content: center; }
 .samp-links .ic { width: 14px; height: 14px; }
 
-/* ---------- home sidebar ----------
+/* ---------- home sidebar 
    Everything the app can do used to be behind either a card or nothing at all,
-   which is how the gallery and profiles ended up unreachable. */
+   which is how the gallery and profiles ended up unreachable ---------- */
 #homeNav {
   position: relative; z-index: 1;
   flex: 0 0 264px;
@@ -2408,8 +2309,6 @@ body.shift-held .fx-item:not(.samp-item) { position: relative; overflow: visible
 .hn-new-title { font-size: 12.5px; font-weight: 700; }
 .hn-new-sub { font-size: 10.5px; color: var(--faint); margin-top: 1px; }
 
-/* It lives in the sidebar's flow now. The old rule pinned it to the corner of
-   the screen, where it landed on top of the What's new card. */
 #homeNav #homeVerWrap {
   position: static; left: auto; bottom: auto;
   display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
@@ -2431,7 +2330,6 @@ body.shift-held .fx-item:not(.samp-item) { position: relative; overflow: visible
 .home-viewall:hover { text-decoration: underline; }
 .home-viewall.hidden { display: none; }
 
-/* the quiet row along the bottom: example song, languages, ko-fi */
 .home-foot {
   margin-top: auto; padding-top: 20px;
   border-top: 1px solid var(--line);
@@ -2455,8 +2353,6 @@ body.shift-held .fx-item:not(.samp-item) { position: relative; overflow: visible
 .news-title { font-size: 13px; font-weight: 700; margin-bottom: 3px; }
 .news-body { font-size: 12px; color: var(--dim); line-height: 1.55; }
 
-/* The thumbnail hue is derived from the name, but a free-running hue put
-   greens and teals next to a warm orange app. Keep it in fabu's band. */
 .home-card-art {
   background: linear-gradient(152deg, hsl(var(--h) 66% 44%), hsl(var(--h) 60% 24%));
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
@@ -2471,28 +2367,23 @@ body.shift-held .fx-item:not(.samp-item) { position: relative; overflow: visible
 .home-card:hover .home-card-more { color: var(--dim); }
 .home-card-more:hover { background: var(--panel3); color: var(--text); }
 
-/* the Loops window while a pattern is being dragged over it */
 .fwin.samp-catch {
   outline: 2px dashed var(--accent);
   outline-offset: -3px;
   background: var(--accent-soft);
 }
 
-/* ---------- home pages (All projects, Loops, Profile, Settings) ---------- */
+/* ---------- home pages ---------- */
 .home-page.hidden, #pageHome.hidden { display: none; }
 .hp-head { margin-bottom: 4px; }
 .hp-title { font-size: 34px; font-weight: 700; letter-spacing: -0.8px; margin: 0; }
 .hp-sub { font-size: 14px; color: var(--dim); margin-top: 8px; }
-/* A list stretched to a 1600px window puts the name and the date at opposite
-   ends of the screen, so every page is capped at a readable measure. */
 .hp-body { flex: 1; min-height: 0; max-width: 900px; }
 .hp-head { max-width: 900px; }
 
-/* the settings page is a form, not a floating panel, so it gets a column */
 .hp-settings { max-width: 560px; }
 .hp-settings .frow { margin-bottom: 4px; }
 
-/* the loops page: wider cards, more of them across */
 .hp-loops .gal-list { gap: 10px; }
 .hp-loops { max-width: 820px; }
 .hp-loops .gal-bar { max-width: 720px; }
@@ -2545,8 +2436,6 @@ body.shift-held .fx-item:not(.samp-item) { position: relative; overflow: visible
   color: var(--faint); margin: 4px 0 12px;
 }
 
-/* Keyboard focus has to be visible. Every one of these is a real button that
-   somebody may reach with Tab rather than a mouse. */
 .hn-item:focus-visible, .home-go:focus-visible, .home-card:focus-visible,
 .home-viewall:focus-visible, .hn-new:focus-visible, .proj-row:focus-visible,
 .gal-tab:focus-visible, .fbtn:focus-visible, .samp-item:focus-visible {
@@ -2554,12 +2443,9 @@ body.shift-held .fx-item:not(.samp-item) { position: relative; overflow: visible
   outline-offset: 2px;
 }
 
-/* ---------- the home screen on a phone ----------
-   Kept at the end on purpose: these have the same specificity as the sidebar
-   rules above, so they only win by coming after them. */
+/* ---------- the home screen on a phone 
+   Kept at the end on purpose ---------- */
 @media (max-width: 760px) {
-  /* The sidebar becomes a strip of tabs across the top, because 264px of nav
-     next to 110px of content is not a screen. */
   #home { flex-direction: column; align-items: stretch; justify-content: flex-start; overflow-y: auto; }
   #homeNav {
     flex: 0 0 auto; padding: 16px 14px 10px;
@@ -2598,17 +2484,15 @@ body.shift-held .fx-item:not(.samp-item) { position: relative; overflow: visible
   #homeVerWrap { position: static; align-self: center; margin: 8px 0 20px; }
 }
 
-/* ---------- movement between home pages ----------
+/* ---------- movement between home pages 
    Switching pages was an instant swap, which reads as a redraw rather than as
-   going somewhere. A short rise and fade is enough to say the page changed. */
+   going somewhere ---------- */
 @keyframes pageIn {
   from { opacity: 0; transform: translateY(8px); }
   to   { opacity: 1; transform: translateY(0); }
 }
 #pageHome, .home-page { animation: pageIn 0.22s var(--ease) both; }
 
-/* Rows and cards arrive in order rather than all at once. The delay is capped
-   so a list of eighty projects does not take four seconds to appear. */
 @keyframes rowIn {
   from { opacity: 0; transform: translateY(6px); }
   to   { opacity: 1; transform: translateY(0); }
@@ -2625,19 +2509,16 @@ body.shift-held .fx-item:not(.samp-item) { position: relative; overflow: visible
 .home-viewall { transition: color 0.12s var(--ease); }
 .samp-links .fbtn, .pf-btns .fbtn { transition: border-color 0.12s var(--ease), background 0.12s var(--ease); }
 
-/* The tab strip's selected item used to jump. It slides. */
 .gal-tab.on { transition: background 0.16s var(--ease), color 0.16s var(--ease); }
 
-/* Nothing above is load bearing, so all of it goes when motion is turned down. */
 @media (prefers-reduced-motion: reduce) {
   #pageHome, .home-page, .proj-row, .gal-card { animation: none; }
   #home::before { animation: none; }
 }
 
-/* ---------- automation lanes under a track ----------
+/* ---------- automation lanes under a track 
    The curve used to be in a floating window, so you could not see what a track
-   was doing without going to look. It sits under the track it belongs to now,
-   at the same zoom as the clips. */
+   was doing without going to look ---------- */
 .autom-lane {
   position: relative;
   border-bottom: 1px solid var(--line);
@@ -2663,7 +2544,6 @@ body.shift-held .fx-item:not(.samp-item) { position: relative; overflow: visible
 .al-del:hover { color: var(--red); }
 .ms-btn.autom.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
 
-/* the strip between a track's patterns and its automation */
 .autom-head {
   position: relative;
   display: flex; align-items: center; gap: 7px;
@@ -2679,8 +2559,6 @@ body.shift-held .fx-item:not(.samp-item) { position: relative; overflow: visible
   display: flex; align-items: center; justify-content: center;
   background: none; border: 0; padding: 0; cursor: pointer; color: var(--dim);
 }
-/* the chevron points down when open and right when folded, so it reads as
-   "this is what folds away" rather than as decoration */
 .ah-fold .ic { width: 12px; height: 12px; transform: rotate(90deg); transition: transform 0.15s var(--ease); }
 .autom-head.collapsed .ah-fold .ic { transform: rotate(0deg); }
 .autom-head:hover .ah-fold { color: var(--accent); }
@@ -2698,7 +2576,6 @@ body.shift-held .fx-item:not(.samp-item) { position: relative; overflow: visible
 }
 @media (prefers-reduced-motion: reduce) { .ah-fold .ic { transition: none; } }
 
-/* A quiet way out of a dialog: a second choice, not a second primary button. */
 .modal-link {
   align-self: flex-start;
   background: none; border: 0; padding: 2px 0; margin: -2px 0 4px;
@@ -2710,39 +2587,25 @@ body.shift-held .fx-item:not(.samp-item) { position: relative; overflow: visible
 .modal-link:hover { color: var(--accent); text-decoration-color: var(--accent); }
 
 /* ---- the loop editor ---- */
-/* .modal-card forces every text input to full width with a bottom margin,
-   which is right for a stacked form and wrong inside this label row. */
 .loop-field input[type="text"] { width: auto; margin-bottom: 0; }
 .loop-field { margin-top: 10px; }
 .loop-field > span { flex: 0 0 62px; }
 
-/* the two ways of sending a loop somewhere, side by side and equal */
 .loop-send { display: flex; gap: 8px; margin-top: 16px; }
 .loop-send .fbtn { flex: 1; justify-content: center; }
-/* leaving, and the one destructive thing, kept apart from each other */
 .modal-btns.loop-end { justify-content: space-between; margin-top: 8px; }
 .gal-play { padding: 5px 8px; display: flex; align-items: center; }
 .gal-play .ic { width: 13px; height: 13px; }
 .gal-play.on { border-color: var(--accent); color: var(--accent); }
 .gal-play.loading { opacity: 0.5; pointer-events: none; }
-/* the keyboard button carries a word, so it is wider than the toggles beside it */
 .pt-toggle.pt-wide { display: inline-flex; align-items: center; gap: 6px; }
 .pt-toggle.pt-wide .ic { width: 13px; height: 13px; }
 
+/* ========================================================================== touch screens ========================================================================== */
 
-/* ==========================================================================
-   Touch screens: phones and tablets
-   ========================================================================== */
-
-/* The page itself must never scroll sideways. Eight pixels of overflow from one
-   toolbar group was enough to let the whole app slide left, taking the close
-   button of whatever was open off the edge of the screen with it. Everything
-   that scrolls horizontally in fabu does so inside its own box. */
 html, body { overflow-x: hidden; max-width: 100%; }
 
 @media (pointer: coarse) {
-  /* Apple's guidance is 44px and it is right; 24px close buttons are a coin
-     toss with a thumb. */
   .fwin-close { width: 40px; height: 40px; }
   .fwin-close .ic { width: 18px; height: 18px; }
   .tbtn { min-height: 38px; }
@@ -2753,20 +2616,17 @@ html, body { overflow-x: hidden; max-width: 100%; }
   .al-del, .home-card-more, .proj-more, .gal-more { min-width: 34px; min-height: 34px; }
 }
 
-/* ---- tablets: a real screen, but fingers ---- */
+/* ---- tablets ---- */
 @media (min-width: 761px) and (max-width: 1180px) and (pointer: coarse) {
   :root { --heads-w: 180px; }
   #topbar { flex-wrap: wrap; height: auto; row-gap: 6px; padding-bottom: 8px; }
   #topbar .tb-group { flex: 0 0 auto; }
-  /* a floating window on a tablet is fine, it just needs to be reachable */
   .fwin { max-height: 78vh; }
   .fwin-body { overscroll-behavior: contain; }
 }
 
 /* ---- phones ---- */
 @media (max-width: 760px) {
-  /* A sheet is only useful if you can see all of it and get out of it. The
-     piano roll sets its own height, so the sheet has to out-rank that. */
   .fwin {
     top: auto !important; bottom: 0 !important;
     left: 0 !important; right: 0 !important;
@@ -2794,35 +2654,27 @@ html, body { overflow-x: hidden; max-width: 100%; }
   }
   .fwin-rz { display: none; }
 
-  /* Backdrop behind an open sheet: tapping it closes, and it stops the
-     timeline underneath reacting to taps meant for the sheet. */
   #sheetBack {
     position: fixed; inset: 0; z-index: 999;
     background: rgba(8, 7, 6, 0.55);
     backdrop-filter: blur(2px);
   }
 
-  /* the piano roll is the thing people could not get out of */
   .proll-tools { padding: 8px 10px; gap: 6px; }
   .proll-tools .pt-group { flex-wrap: wrap; }
   .proll-tools .pt-track { width: 100%; }
   .pt-toggle, .pt-btn, .pt-seg { min-height: 34px; padding: 6px 10px; }
   .proll-tools select { min-height: 34px; }
 
-  /* the track header column, which had been eating a third of the screen */
   :root { --heads-w: 118px; }
   .thead { padding: 6px; }
   .thead-top { gap: 4px; }
   .thead .tname { font-size: 11.5px; }
 
-  /* modals get room to breathe and never run off the bottom */
   .modal-card { max-width: calc(100vw - 20px); max-height: 86vh; overflow-y: auto; }
 }
 
 @media (max-width: 760px) {
-  /* A sheet comes up from the bottom edge. The desktop animation nudges a
-     window down eight pixels and back, which on a bottom sheet is the wrong
-     direction and leaves it hanging over the edge if it never finishes. */
   .fwin { animation: sheetIn 0.2s var(--ease) both; }
   @keyframes sheetIn {
     from { transform: translateY(14px); opacity: 0; }
@@ -2841,9 +2693,6 @@ html, body { overflow-x: hidden; max-width: 100%; }
 }
 
 @media (max-width: 760px) {
-  /* The piano roll's tools were wrapping onto five rows and taking half the
-     sheet, leaving a sliver for the notes. One row that scrolls sideways keeps
-     every control reachable and gives the grid the space it needs. */
   .proll-tools {
     flex-wrap: nowrap;
     overflow-x: auto;
@@ -2857,27 +2706,20 @@ html, body { overflow-x: hidden; max-width: 100%; }
   .proll-tools .pt-spacer { display: none; }
   .pt-toggle.pt-wide { white-space: nowrap; }
 
-  /* and the grid gets whatever is left, never less than this */
   .proll-wrap, .proll-scroll { min-height: 220px; }
 }
 
 @media (max-width: 760px) {
-  /* The instrument picker was squeezed to a chevron by the mute/solo/automation
-     buttons sharing its row. It gets its own line. */
   .thead-mid { flex-wrap: wrap; row-gap: 4px; }
   .thead-mid .tinst-btn { flex: 1 1 100%; min-width: 0; }
   .thead select { max-width: 100%; }
   .thead-mid .ms-btn { flex: 0 0 auto; }
 
-  /* A toolbar group that refuses to wrap will run off the edge no matter how
-     many rows the bar itself is allowed. */
   #topbar .tb-group { flex-wrap: wrap; row-gap: 5px; }
   #topbar .tb-field { flex-wrap: nowrap; }
   #topbar > * { max-width: 100%; }
 }
 
-/* A narrow window is a narrow window whether it is an iPad or a laptop with
-   the app on half the screen. The bar wraps rather than running off the edge. */
 @media (max-width: 1180px) {
   #topbar { flex-wrap: wrap; height: auto; row-gap: 6px; padding-bottom: 8px; }
   #topbar .tb-group { flex: 0 0 auto; }
@@ -2886,13 +2728,11 @@ html, body { overflow-x: hidden; max-width: 100%; }
 @media (min-width: 761px) and (max-width: 1180px) {
   :root { --heads-w: 176px; }
 }
-/* which octave is at the top of the grid, between the two octave buttons */
 .pt-oct {
   min-width: 30px; text-align: center;
   font-size: 11px; font-weight: 700; color: var(--dim);
   font-variant-numeric: tabular-nums;
 }
-/* the keys column is a handle for moving through the octaves */
 .proll-keys { cursor: ns-resize; }
 
 /* the feedback button, beside support fabu */
@@ -2919,8 +2759,6 @@ html, body { overflow-x: hidden; max-width: 100%; }
 .samp-item.playing { border-color: var(--accent); }
 .samp-item.playing .samp-play { color: var(--accent); }
 
-/* A card with nothing behind it stays in the row and goes quiet, so the shape
-   of the screen does not change depending on whether you have work to resume. */
 .home-go.disabled {
   opacity: 0.42;
   cursor: default;

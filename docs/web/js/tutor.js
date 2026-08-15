@@ -1,6 +1,4 @@
-// First-project tutorial. A short, skippable walkthrough that points at the
-// real controls one at a time. Shows once, the first time someone adds a
-// pattern to an empty project. No em dashes, no jargon.
+// no next button, every step ends when the thing actually happens
 const Tutor = {
   SEEN_KEY: 'fabu.tutorSeen',
   active: false,
@@ -10,7 +8,6 @@ const Tutor = {
   seen() { return localStorage.getItem(this.SEEN_KEY) === '1'; },
   markSeen() { try { localStorage.setItem(this.SEEN_KEY, '1'); } catch (e) {} },
 
-  // called after a pattern is added; only fires for a fresh user
   maybeStart(clipId) {
     if (this.active || this.seen()) return;
     if (UI.playing) return;
@@ -18,14 +15,9 @@ const Tutor = {
     setTimeout(() => this.start(), 380); // let the clip settle in first
   },
 
-  // A new project has no tracks at all now, so there is nothing to double
-  // click and the old entry point could never fire. Start here instead and
-  // point at the button that gets them their first instrument.
   maybeStartEmpty() {
     if (this.active || this.seen()) return;
     if (UI.playing || !S || S.tracks.length) return;
-    // newProject() also runs at startup, while the home screen is still up.
-    // Firing there pointed at a button nobody could see yet.
     setTimeout(() => {
       if (this.active || this.seen() || !S || S.tracks.length) return;
       if (this.homeVisible()) return;
@@ -43,14 +35,8 @@ const Tutor = {
     if (this.active) return;
     this.active = true;
     this.step = 0;
-    // What the sound was when we started, so "pick another instrument" can tell
-    // that they picked another one rather than opening the menu and closing it.
     this._instr0 = (S.tracks[0] && S.tracks[0].instrument) || null;
 
-    // Every step ends when the thing it asks for actually happens. There is no
-    // Next button: a walkthrough you can click past without doing anything
-    // teaches nothing, and the click you are being asked to make is right
-    // there under the spotlight.
     this.steps = [
       {
         target: () => document.querySelector('.thead-add button'),
@@ -93,8 +79,6 @@ const Tutor = {
                     || (typeof Sync !== 'undefined' && Sync.connected)
       }
     ];
-    // Coming in from "you just made a pattern" means the first two are already
-    // done, so they are dropped rather than shown as things to go and do.
     if (!fromEmpty) this.steps.splice(0, 2);
 
     this._buildDom();
@@ -102,8 +86,6 @@ const Tutor = {
     this._watch();
   },
 
-  // One timer does both jobs: notice the step is finished, and keep the
-  // spotlight on the target while the layout moves under it.
   _watch() {
     clearInterval(this._timer);
     this._timer = setInterval(() => {
@@ -124,10 +106,6 @@ const Tutor = {
   },
 
   show() {
-    // Steps point at things that may not exist yet: click Next without adding
-    // an instrument and there is no track to mute or lane to double click. Skip
-    // straight past anything with nothing to point at rather than showing a
-    // card about a control the user cannot see.
     let guard = 0;
     while (this.steps[this.step] && guard++ < this.steps.length) {
       const t = this.steps[this.step].target;
@@ -138,7 +116,6 @@ const Tutor = {
     if (!s) return this.finish();
     const el = s.target && s.target();
 
-    // move the spotlight over the target (or hide it if the target is gone)
     if (el) {
       const r = el.getBoundingClientRect();
       const pad = 6;
@@ -169,7 +146,6 @@ const Tutor = {
     this._position(el);
   },
 
-  // keep the spotlight on the target as things move around it
   _place(el) {
     if (!this._hl) return;
     if (!el) { this._hl.style.display = 'none'; return; }
@@ -182,7 +158,6 @@ const Tutor = {
     this._hl.style.height = (r.height + pad * 2) + 'px';
   },
 
-  // place the card near the target without running off screen
   _position(el) {
     const card = this._card;
     card.style.visibility = 'hidden';
@@ -192,7 +167,6 @@ const Tutor = {
     let left, top;
     if (el) {
       const r = el.getBoundingClientRect();
-      // prefer below, then above, then beside
       if (r.bottom + ch + 16 < vh) { top = r.bottom + 12; left = r.left; }
       else if (r.top - ch - 16 > 0) { top = r.top - ch - 12; left = r.left; }
       else { top = r.top; left = r.right + 12; }
@@ -209,8 +183,6 @@ const Tutor = {
   next() {
     this.step++;
     if (this.step >= this.steps.length) return this.finish();
-    // the target for the next step often does not exist for a frame or two
-    // after the click that finished this one
     setTimeout(() => { if (this.active) this.show(); }, 260);
   },
 

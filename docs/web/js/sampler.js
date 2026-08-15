@@ -1,4 +1,4 @@
-// ---------- Sampler: build / edit a playable instrument from an audio file ----------
+// ---------- sampler ----------
 'use strict';
 
 const Sampler = {
@@ -90,7 +90,6 @@ const Sampler = {
     body.appendChild(this.cv);
     this.bindWave();
 
-    // timestamps + zoom hint
     const times = document.createElement('div');
     times.id = 'sampTimes';
     times.style.cssText = 'display:flex;justify-content:space-between;font-size:10.5px;color:var(--dim);font-variant-numeric:tabular-nums;margin-bottom:12px';
@@ -244,12 +243,10 @@ const Sampler = {
       }
       g.fillRect(x, mid - mx * mid * 0.9, 1, Math.max(1, (mx - mn) * mid * 0.9));
     }
-    // dim outside the trimmed region
     const sx = this.timeToX(this.start, W), ex = this.timeToX(this.end, W);
     g.fillStyle = 'rgba(10,9,7,0.66)';
     if (sx > 0) g.fillRect(0, 0, sx, H);
     if (ex < W) g.fillRect(ex, 0, W - ex, H);
-    // handles
     g.fillStyle = '#78b56a'; g.fillRect(clamp(sx, 0, W) - 1, 0, 2, H);
     g.fillStyle = '#d8594f'; g.fillRect(clamp(ex, 0, W) - 1, 0, 2, H);
   },
@@ -273,7 +270,6 @@ const Sampler = {
       move(e);
     });
 
-    // scroll to zoom (centered on cursor); two-finger horizontal pans
     this.cv.addEventListener('wheel', (e) => {
       if (!this.buffer) return;
       e.preventDefault();
@@ -281,14 +277,12 @@ const Sampler = {
       const W = r.width;
       const dur = this.buffer.duration;
       if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
-        // pan
         const shift = (e.deltaX / W) * this.viewLen();
         let vs = this.viewStart + shift, ve = this.viewEnd + shift;
         if (vs < 0) { ve -= vs; vs = 0; }
         if (ve > dur) { vs -= (ve - dur); ve = dur; }
         this.viewStart = Math.max(0, vs); this.viewEnd = Math.min(dur, ve);
       } else {
-        // zoom around the cursor time
         const cursorT = this.xToTime(e.clientX - r.left, W);
         const factor = Math.pow(1.0015, e.deltaY);
         let len = clamp(this.viewLen() * factor, 0.02, dur);

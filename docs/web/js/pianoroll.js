@@ -1,4 +1,4 @@
-// ---------- Piano roll: the MIDI note editor (floating window) ----------
+// ---------- piano roll ----------
 'use strict';
 
 function isDrumInstrSafe(i){ try { return isDrumInstr(i); } catch (e) { return false; } }
@@ -30,7 +30,6 @@ const PianoRoll = {
   playEl: null,
   _viewBeats: 0,      // grows as you scroll past the pattern end
 
-  // key helper (session preference, remembered across projects)
   keyRoot: 0,         // 0..11 (C..B)
   keyScale: 'major',
   scaleOn: false,     // tint in-key rows
@@ -61,8 +60,6 @@ const PianoRoll = {
     return f ? f : null;
   },
 
-  // Where the keyboard should sit when the roll opens. Landing on C4-C6 for a
-  // bass meant the 808 only ever got played in the register it sounds worst in.
   INSTR_CENTER: { sub: 33, bass: 40, rharp: 60, rvibes: 72, rglock: 88, bell: 76, pluck: 64 },
   defaultTopPitch(track, clip) {
     const rows = Math.max(6, Math.floor(this.gridH() / this.rowH));
@@ -97,7 +94,6 @@ const PianoRoll = {
     tools.className = 'proll-tools';
     const rootOpts = NOTE_NAMES.map((nm, i) => `<option value="${i}"${i === this.keyRoot ? ' selected' : ''}>${nm}</option>`).join('');
     const scaleOpts = Object.keys(SCALES).map(id => `<option value="${id}"${id === this.keyScale ? ' selected' : ''}>${scaleName(id)}</option>`).join('');
-    // the key/scale/chord helper is meaningless on drum lanes, so hide it there
     const keyGroup = drumTrack ? '' : `
       <div class="pt-group pt-key">
         <label>${tr('proll_key', 'KEY')}</label>
@@ -159,8 +155,6 @@ const PianoRoll = {
       wireToggle('#pkScaleOn', 'scaleOn');
       wireToggle('#pkSnapScale', 'snapScale');
       wireToggle('#pkChord', 'chordMode');
-      // Opening the keyboard from inside a pattern should play into that
-      // pattern, not into whichever track happened to be selected last.
       const od = q('#pkOctDown'), ou = q('#pkOctUp');
       if (od) od.addEventListener('click', () => this.scrollPitch(12));   // lower
       if (ou) ou.addEventListener('click', () => this.scrollPitch(-12));  // higher
@@ -211,7 +205,6 @@ const PianoRoll = {
     this.playEl.className = 'proll-playhead';
     this.inner.append(this.rulerCv, this.gridCv, this.velCv, this.playEl);
     this.wrap.append(this.inner);
-    // scrolling toward the right edge reveals more empty bars to write into
     this.wrap.addEventListener('scroll', () => {
       const w = this.wrap;
       if (w.scrollLeft + w.clientWidth > this.gridWidth() - 160) {
@@ -246,18 +239,12 @@ const PianoRoll = {
   },
 
   // ---------- geometry ----------
-
   gridWidth() {
     const f = this.clip();
     const len = f ? f.clip.length : 4;
-    // always keep a couple of empty bars past the end so you can scroll further
-    // and write there; _viewBeats grows as you scroll toward the edge. This is
-    // only a div width now (the canvases window themselves), so the cap is
-    // just a sanity bound, not a browser canvas limit.
     const beats = Math.min(16384, Math.max(len + 8, this._viewBeats || 0));
     return Math.max(384, beats * this.pxb);
   },
-  // drum tracks use a fixed set of labeled lanes; melodic tracks are chromatic
   setupRows() {
     const f = this.clip();
     if (f && isDrumInstr(f.track.instrument)) {
@@ -270,7 +257,6 @@ const PianoRoll = {
   },
   gridH() {
     if (this._rowMap) return this._rowMap.length * this._rh;   // drum lanes: fixed set of rows
-    // fill the window: grow the grid to the body height so resizing shows more keys
     const body = this.wrap ? this.wrap.closest('.fwin-body') : null;
     if (body && body.clientHeight) {
       const tools = body.querySelector('.proll-tools');
@@ -279,7 +265,6 @@ const PianoRoll = {
     }
     return this.GRID_H;
   },
-  // coalesce redraws to one per frame (scroll fires many events)
   scheduleRedraw() {
     if (this._raf) return;
     this._raf = requestAnimationFrame(() => { this._raf = null; this.redraw(); });
@@ -303,7 +288,6 @@ const PianoRoll = {
     const pitch = this.yToPitch(y);
     const beat = this.xToBeat(x);
     const drum = !!this._rowMap;
-    // topmost drawn last wins
     for (let i = f.clip.notes.length - 1; i >= 0; i--) {
       const n = f.clip.notes[i];
       const hit = drum ? (n.pitch % 12 === pitch % 12) : (n.pitch === pitch);
@@ -313,10 +297,6 @@ const PianoRoll = {
   },
 
   // ---------- drawing ----------
-
-  // Resize a canvas only when its size actually changes. Reallocating the
-  // (potentially huge) backing store every frame was what made scrolling a long
-  // pattern lag. setTransform is idempotent whether or not we reallocated.
   sizeCanvas(cv, w, h, dpr) {
     const cw = Math.round(w * dpr), ch = Math.round(h * dpr);
     if (cv.width !== cw || cv.height !== ch) {
@@ -328,13 +308,6 @@ const PianoRoll = {
     return ctx;
   },
 
-  // Allocate only the slice of a wide canvas that can actually be seen.
-  // A canvas as wide as the clip dies past the browser limit (65,535 device
-  // px, which a long song crosses easily: this is what broke Bohemian
-  // Rhapsody) and lags long before that from sheer backing-store size. The
-  // window is quantized to 256px so scrolling reuses the allocation instead
-  // of reallocating every frame, and the context is translated so all
-  // drawing keeps using absolute content coordinates.
   windowCanvas(cv, W, H, dpr) {
     const sc = this.wrap;
     const vw = sc ? sc.clientWidth : W;
@@ -355,8 +328,6 @@ const PianoRoll = {
     return ctx;
   },
 
-  // content-space x for an event on a windowed canvas (its rect starts at the
-  // window's margin, not at content 0)
   evX(e, rect) { return e.clientX - rect.left + (this._winX0 || 0); },
 
   redraw() {
@@ -396,10 +367,6 @@ const PianoRoll = {
     }
 
     // --- grid ---
-    // Only paint the horizontal window that's actually on screen (plus a margin).
-    // A long pattern's grid can be many thousands of px wide; painting all of it
-    // every frame is what made up/down scrolling lag. The canvas keeps a matching
-    // CSS background so the unpainted parts look identical.
     const gc = this.gridCv;
     gc.style.background = '#161927';
     const sc = this.wrap;
@@ -446,8 +413,6 @@ const PianoRoll = {
       g.fillStyle = isBar ? 'rgba(255,255,255,0.16)' : isBeat ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.03)';
       g.fillRect(x, 0, 1, H);
     }
-    // shade the area past the pattern end so you can see where it stops (drawing
-    // a note out there extends the pattern automatically)
     const endX = f.clip.length * this.pxb;
     if (endX < x1) {
       const sx = Math.max(endX, x0);
@@ -456,7 +421,6 @@ const PianoRoll = {
       if (endX >= x0) { g.fillStyle = 'rgba(224,122,63,0.5)'; g.fillRect(endX, 0, 1, H); }
     }
 
-    // notes (only those inside the painted window)
     for (const n of f.clip.notes) {
       const y = this.pitchToY(n.pitch);
       if (y < -rh || y > H) continue;
@@ -493,7 +457,6 @@ const PianoRoll = {
     this.syncPlayhead();
   },
 
-  // top ruler: bar/beat ticks you can click and drag to move the playhead
   drawRuler(W) {
     const rc = this.rulerCv;
     if (!rc) return;
@@ -522,8 +485,6 @@ const PianoRoll = {
 
   PEDAL_H: 7,   // the strip along the bottom of the ruler you paint the pedal on
 
-  // Sustain pedal spans. Drawn where you can always see them against the bars,
-  // and paintable: drag along the strip to hold the pedal, right-click to lift.
   drawPedal(x, H) {
     const f = this.clip();
     if (!f) return;
@@ -541,7 +502,6 @@ const PianoRoll = {
     }
   },
 
-  // move the playhead line to the song position, in clip-local coordinates
   syncPlayhead(beat) {
     const f = this.clip();
     const el = this.playEl;
@@ -571,7 +531,6 @@ const PianoRoll = {
       const r = this.rulerCv.getBoundingClientRect();
       return clamp((clientX - r.left + (this._winX0 || 0)) / this.pxb, 0, f ? f.clip.length : 0);
     };
-    // right-click the strip lifts the pedal over whatever you drag across
     this.rulerCv.addEventListener('contextmenu', (e) => {
       if (!onPedalStrip(e)) return;
       e.preventDefault();
@@ -617,7 +576,6 @@ const PianoRoll = {
     });
   },
 
-  // velocity lane: one bar per note, height = how loud it is; drag to reshape dynamics
   drawVel(W) {
     const f = this.clip();
     const vc = this.velCv;
@@ -630,7 +588,6 @@ const PianoRoll = {
     const vX0 = Math.max(0, scL - vw), vX1 = Math.min(W, scL + vw * 2);
     v.fillStyle = '#12151f';
     v.fillRect(vX0, 0, vX1 - vX0, H);
-    // faint quarter/full markers so it lines up with the grid
     for (let b = 0; b <= f.clip.length + 0.001; b += 1) {
       const x = b * this.pxb;
       v.fillStyle = Math.abs(b % 4) < 1e-6 ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.06)';
@@ -649,23 +606,17 @@ const PianoRoll = {
       v.globalAlpha = sel ? 1 : 0.85;
       v.fillRect(x, y, nw, barH);
       v.globalAlpha = 1;
-      // a cap line so short bars are still visible
       v.fillStyle = 'rgba(255,255,255,0.5)';
       v.fillRect(x, y, nw, 1.5);
     }
   },
 
   // ---------- interaction ----------
-
-  // the octave currently at the top of the grid, so the buttons say where
-  // pressing them will take you
   showOctave() {
     const el = document.getElementById('pkOctLabel');
     if (el) el.textContent = noteName(this.topPitch).replace(/[#]/, '');
   },
 
-  // Move the visible pitch window. Everything that scrolls goes through here
-  // so the limits are decided once.
   scrollPitch(rows) {
     if (this._rowMap || !rows) return;      // drum lanes are a fixed set
     const rowsVisible = Math.floor(this.gridH() / this.rowH);
@@ -684,8 +635,6 @@ const PianoRoll = {
       if (this._rowMap) return;   // drum lanes are fixed; nothing to scroll to
       if (Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;
       e.preventDefault();
-      // normalise wheel units to pixels, then move whole rows as they accumulate,
-      // so scrolling is smooth and proportional (not a fixed 2-semitone jump)
       let dy = e.deltaY;
       if (e.deltaMode === 1) dy *= 16;            // lines -> px
       else if (e.deltaMode === 2) dy *= this.gridH(); // pages -> px
@@ -696,10 +645,6 @@ const PianoRoll = {
       this.scrollPitch(rows);
     }, { passive: false });
 
-    // A mouse wheel was the only way to reach another octave, which means
-    // there was no way at all on a phone or a tablet. Dragging the piano keys
-    // up and down moves the range, which is the gesture the keys look like
-    // they should have, and it cannot be confused with drawing a note.
     const keys = this.keysCv;
     if (keys) {
       let dragging = false, lastY = 0, acc = 0, moved = 0;
@@ -732,7 +677,6 @@ const PianoRoll = {
       const n = this.noteAt(this.evX(e, r), e.clientY - r.top);
       if (n) {
         const f = this.clip();
-        // delete the whole selection if the note is part of a multi-selection
         const ids = (this.selNoteIds.has(n.id) && this.selNoteIds.size > 1) ? new Set(this.selNoteIds) : new Set([n.id]);
         Undo.push(ids.size > 1 ? 'Delete notes' : 'Delete note');
         f.clip.notes = f.clip.notes.filter(nn => !ids.has(nn.id));
@@ -753,7 +697,6 @@ const PianoRoll = {
       const y = e.clientY - r.top;
       let n = this.noteAt(x, y);
 
-      // shift toggles a note, or draws a marquee over empty grid
       if (e.shiftKey) {
         if (n) {
           if (this.selNoteIds.has(n.id)) this.selNoteIds.delete(n.id); else this.selNoteIds.add(n.id);
@@ -786,23 +729,18 @@ const PianoRoll = {
       let pushed = false;
 
       if (n) {
-        // in a room, a note someone else is dragging is locked for you
         if (typeof Sync !== 'undefined' && Sync.admitted) {
           const l = Sync.lockedBy('note:' + n.id);
           if (l) { toast(tr('mp_locked_by', '{name} is using this', { name: l.name })); return; }
           Sync.setLock('note:' + n.id, true);
         }
-        // right edge = resize
         if (x > (n.start + n.length) * this.pxb - 7) mode = 'resize';
-        // clicking an unselected note selects just it; keep the group otherwise
         if (!this.selNoteIds.has(n.id)) this.selNoteIds = new Set([n.id]);
         this.selNoteId = n.id;
         Engine.previewNote(f.track, n.pitch, 0.25);
       } else {
-        // add note (or a whole chord in chord mode)
         const isDrums = isDrumInstr(f.track.instrument);
         const beat = this.snap ? Math.floor(this.xToBeat(x) / this.snap) * this.snap : this.xToBeat(x);
-        // no upper clamp: writing past the end grows the pattern (extendClipIfNeeded)
         const start = Math.max(0, beat);
         let pitch = this.yToPitch(y);
         if (this.snapScale && !isDrums) pitch = nearestInScale(pitch, this.keyRoot, this.keyScale);
@@ -830,7 +768,6 @@ const PianoRoll = {
 
       const startX = e.clientX, startY = e.clientY;
       const orig = { start: n.start, pitch: n.pitch, length: n.length };
-      // the rest of the selection moves along with the primary note
       const groupNotes = [...this.selNoteIds].filter(id => id !== n.id)
         .map(id => f.clip.notes.find(nn => nn.id === id)).filter(Boolean)
         .map(nn => ({ note: nn, start: nn.start, pitch: nn.pitch, length: nn.length }));
@@ -849,12 +786,10 @@ const PianoRoll = {
           n.length = Math.max(this.snap || 0.05,
             this.snap ? Math.round(raw / this.snap) * this.snap : raw);
           this.lastLen = n.length;
-          // resizing one note fits every selected note to the same length
           for (const gr of groupNotes) gr.note.length = n.length;
         } else {
           const raw = orig.start + dx;
           n.start = Math.max(0, this.snap ? Math.round(raw / this.snap) * this.snap : raw);
-          // drum notes stay on their lane; melodic notes move in pitch
           n.pitch = this._rowMap ? orig.pitch : clamp(orig.pitch - dy, 12, 120);
           if (this.snapScale && !isDrumInstr(f.track.instrument)) n.pitch = nearestInScale(n.pitch, this.keyRoot, this.keyScale);
           if (n.pitch !== lastPreview) {
@@ -901,8 +836,6 @@ const PianoRoll = {
     });
   },
 
-  // drag in the velocity lane to shape how loud notes are. With several notes
-  // selected it sets them together; otherwise it paints the notes under the cursor.
   bindVel() {
     const vc = this.velCv;
     const velFromY = (y) => clamp((this.VEL_H - 5 - y) / (this.VEL_H - 10), 0.05, 1);
@@ -936,7 +869,6 @@ const PianoRoll = {
     });
   },
 
-  // tighten note starts onto the current grid. scope: 'sel' = selected notes, 'all' = whole clip
   quantize(scope) {
     const f = this.clip();
     if (!f) return;
@@ -955,19 +887,6 @@ const PianoRoll = {
   },
 
   // ---------- what chord comes next ----------
-  // Reads the chords already in the pattern, works out where the last one sits
-  // in the key, and offers the chord that usually follows it. Tab accepts,
-  // and it never does anything on its own.
-
-  // group notes that start together into chords, in time order
-  // Nudge timing and loudness a little. Perfectly gridded notes at one velocity
-  // are the main thing that makes a pattern sound programmed, and a real player
-  // is never exactly on the beat or exactly as loud twice.
-  //
-  // Two rules keep it musical rather than sloppy: the nudge is a fraction of the
-  // grid rather than a fixed number of beats, so it stays proportional at any
-  // resolution, and the first note of a bar is nudged less, because that is the
-  // one the ear uses to find the beat.
   humanize(scope) {
     const f = this.clip();
     if (!f) return;
@@ -981,8 +900,6 @@ const PianoRoll = {
     const timeAmt = grid * 0.11;        // about a hundredth of a bar at 1/16
     const velAmt = 0.13;
     const bpb = beatsPerBar();
-    // triangular rather than flat: small nudges common, large ones rare, which
-    // is how human timing actually scatters
     const jitter = () => (Math.random() + Math.random() - 1);
 
     Undo.push('Humanize');
@@ -993,7 +910,6 @@ const PianoRoll = {
       const v = (n.vel ?? 0.85) + jitter() * velAmt;
       n.vel = +clamp(v, 0.15, 1).toFixed(3);
     }
-    // notes must not end up sitting past the end of their own pattern
     for (const n of targets) if (n.start > f.clip.length - 0.01) n.start = Math.max(0, f.clip.length - 0.01);
     this.redraw();
     Timeline.drawClip(this.clipId);
@@ -1001,8 +917,6 @@ const PianoRoll = {
     toast(tr('toast_humanized', 'Loosened {n} notes', { n: targets.length }));
   },
 
-  // note operations used by global shortcuts (only while the roll is open,
-  // otherwise the shortcut should fall through to the clip-level action)
   selectedNotes() {
     const f = this.clip();
     if (!f) return [];
@@ -1049,13 +963,11 @@ const PianoRoll = {
     if (!this.isOpen()) return false;
     const f = this.clip();
     if (!f || !UI.clipboard) return false;
-    // accept both a single legacy note and a group of notes
     let notes;
     if (UI.clipboard.type === 'notes') notes = UI.clipboard.data;
     else if (UI.clipboard.type === 'note') notes = [{ ...UI.clipboard.data, start: 0 }];
     else return false;
     Undo.push(notes.length > 1 ? 'Paste notes' : 'Paste note');
-    // drop the group at the playhead (or at the start of the clip)
     const at = this.snap ? Math.round((this.selNoteId ? 0 : 0) / this.snap) * this.snap : 0;
     const newIds = new Set();
     for (const src of notes) {

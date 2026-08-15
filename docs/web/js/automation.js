@@ -1,4 +1,4 @@
-// ---------- Automation: keyframe editor for volume, EQ and pan over time ----------
+// ---------- automation ----------
 'use strict';
 
 const Automation = {
@@ -33,9 +33,7 @@ const Automation = {
     drive: 'Drive', crush: 'Crush', filter: 'Filter', transpose: 'Transpose'
   },
 
-  // where a parameter "rests", drawn as a dashed guide so it's always findable
   DEFAULTS: { volume: 1, gain: 1, low: 0, mid: 0, high: 0, pan: 0, drive: 0, crush: 0, filter: 20000, transpose: 0, pitch: 0, speed: 1 },
-  // initial visible slice of the huge no-limit ranges; scroll to reach the rest
   VIEWS: { transpose: [-12, 12], pitch: [-12, 12], speed: [0, 2], gain: [0, 2], volume: [0, 2] },
   viewLo: null, viewHi: null,   // current value-axis window
 
@@ -56,7 +54,6 @@ const Automation = {
     if (this.viewLo == null || this.viewHi == null || !(this.viewHi > this.viewLo)) this.resetView();
     return [this.viewLo, this.viewHi];
   },
-  // the editor fills whatever height the window is dragged to (like the piano roll)
   editorH() {
     const body = this.wrap ? this.wrap.closest('.fwin-body') : null;
     if (body && body.clientHeight) {
@@ -66,7 +63,6 @@ const Automation = {
     }
     return this.H;
   },
-  // 1/2/5-style steps so the axis reads 0, 5, 10 rather than 0, 48, 96
   niceStep(raw) {
     if (!(raw > 0)) return 1;
     const p = Math.pow(10, Math.floor(Math.log10(raw)));
@@ -80,25 +76,22 @@ const Automation = {
 
   track() { return getTrack(this.trackId); },
 
-  // ----- target abstraction: a track param OR a dropped-effect param -----
+  // ----- target abstraction -----
   fxDef() {
     if (!this.fxTarget) return null;
     const d = FX_DEFS[this.fxTarget.fx.type];
     return d && d.p[this.fxTarget.key] ? d.p[this.fxTarget.key] : null;
   },
-  // the [lo, hi] range of whatever we're editing
   range() {
     if (this.fxTarget) { const pd = this.fxDef(); return pd ? [pd.min, pd.max] : [0, 1]; }
     if (this.clipTarget) return this.RANGES[this.clipTarget.prop];
     return this.RANGES[this.param];
   },
-  // the track we colour by / show the playhead against
   curTrack() {
     if (this.fxTarget) { const f = getClip(this.fxTarget.clipId); return f ? f.track : null; }
     if (this.clipTarget) { const f = getClip(this.clipTarget.clipId); return f ? f.track : null; }
     return getTrack(this.trackId);
   },
-  // heading label for the current target
   targetLabel() {
     if (this.fxTarget) {
       const pd = this.fxDef();
@@ -121,7 +114,6 @@ const Automation = {
     this._openEditor();
   },
 
-  // automate a dropped effect's parameter over time
   openFx(clipId, fx, key) {
     const found = getClip(clipId);
     if (!found || !fx) return;
@@ -130,7 +122,6 @@ const Automation = {
     this._openEditor();
   },
 
-  // automate an audio clip's own pitch or speed over time
   openClip(clipId, prop) {
     const found = getClip(clipId);
     if (!found) return;
@@ -181,7 +172,6 @@ const Automation = {
     }
 
     tools.querySelector('#autoClear').addEventListener('click', () => this.clear());
-    // snap on/off toggle
     const snapBtn = document.createElement('button');
     snapBtn.className = 'fbtn pt-toggle' + (this.snapOn ? ' on' : '');
     snapBtn.style.cssText = 'padding:4px 10px';
@@ -210,7 +200,6 @@ const Automation = {
 
   onStateRestore() {
     if (this.isOpen()) {
-      // the automated target may be gone after a remote/undo state swap
       if (this.fxTarget) {
         const f = getClip(this.fxTarget.clipId);
         if (!f || !(f.clip.fx || []).includes(this.fxTarget.fx)) { Windows.close('autom'); return; }
@@ -221,8 +210,6 @@ const Automation = {
     }
   },
 
-  // the span the automation actually covers: a dropped effect only exists for
-  // the length of its clip, so keyframes can't sit before or after it
   contentRange() {
     const cid = this.fxTarget ? this.fxTarget.clipId : (this.clipTarget ? this.clipTarget.clipId : null);
     if (cid) { const f = getClip(cid); if (f) return [f.clip.start, f.clip.start + clipBeats(f.clip)]; }
@@ -270,7 +257,6 @@ const Automation = {
     return automPoints(this.track(), this.param);
   },
 
-  // faint melodic reference: the notes of the relevant clip(s), by pitch
   drawNoteBg(g, W, H, b0, b1) {
     if (this.clipTarget) return;   // audio clip has no notes to show
     const clips = [];
@@ -317,13 +303,10 @@ const Automation = {
     const [b0, b1] = this.contentRange();
     const [vlo, vhi] = this.view();
 
-    // faint notes behind the curve so you can line keyframes up to the music
     this.drawNoteBg(g, W, H, b0, b1);
 
-    // left value-axis gutter, so labels never sit on the graph
     g.fillStyle = '#120f0c'; g.fillRect(0, 0, this.GUTTER, H);
     g.fillStyle = 'rgba(255,255,255,0.08)'; g.fillRect(this.GUTTER - 1, 0, 1, H);
-    // value gridlines at friendly 1/2/5 steps across the visible window
     g.textBaseline = 'middle'; g.textAlign = 'right'; g.font = '9px -apple-system, sans-serif';
     const vstep = this.niceStep((vhi - vlo) / Math.max(3, Math.round(H / 46)));
     for (let i = Math.ceil(vlo / vstep - 1e-9); i * vstep <= vhi + 1e-9; i++) {
@@ -334,12 +317,10 @@ const Automation = {
       g.fillStyle = 'rgba(255,255,255,0.4)'; g.fillText(this.fmtVal(v), this.GUTTER - 5, y);
     }
     g.textAlign = 'left';
-    // bar lines, aligned to real bars inside the clip's span
     for (let bb = Math.ceil(b0 / 4) * 4; bb <= b1 + 1e-6; bb += 4) {
       g.fillStyle = 'rgba(255,255,255,0.10)';
       g.fillRect(this.beatToX(bb), 0, 1, H);
     }
-    // dashed guide at the parameter's resting value (1x speed, 0 st, ...)
     const dv = this.defaultVal();
     if (dv >= vlo && dv <= vhi) {
       const zy = this.valueToY(dv);
@@ -356,8 +337,6 @@ const Automation = {
       g.beginPath();
       g.moveTo(this.GUTTER, this.valueToY(pts[0].v));
       g.lineTo(this.beatToX(pts[0].beat), this.valueToY(pts[0].v));
-      // each segment is sampled along its own shape, so what you see is exactly
-      // what interpPoints will hand the audio engine
       for (let i = 0; i < pts.length - 1; i++) {
         const p = pts[i], q = pts[i + 1];
         const x0 = this.beatToX(p.beat), x1 = this.beatToX(q.beat);
@@ -384,7 +363,6 @@ const Automation = {
       g.fillText(tr('auto_empty', 'No keyframes. Click to add one.'), this.GUTTER + 10, H - 12);
     }
 
-    // playhead
     const phx = this.beatToX(Engine.ctx && UI.playing ? Engine.currentBeat() : UI.playhead);
     g.fillStyle = 'rgba(86,182,166,0.9)';
     g.fillRect(phx, 0, 1.5, H);
@@ -399,8 +377,6 @@ const Automation = {
   },
 
   bind() {
-    // scroll = pan the value window up/down (how you reach the far ends of the
-    // no-limit ranges); ctrl/cmd+scroll zooms the window around the cursor
     this.cv.addEventListener('wheel', (e) => {
       if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;   // sideways = lane scroll
       e.preventDefault();
@@ -435,7 +411,6 @@ const Automation = {
       }
     });
 
-    // right-click ON a point picks how the line leaves it
     this.cv.addEventListener('contextmenu', (e) => {
       const r = this.cv.getBoundingClientRect();
       const p = this.pointAt(e.clientX - r.left, e.clientY - r.top);
@@ -475,8 +450,6 @@ const Automation = {
     });
   },
 
-  // The shape of the line leaving this keyframe. Named for what they sound like
-  // rather than what they are called in maths.
   CURVE_LABELS: {
     lin:  ['curve_lin',  'Straight'],
     ease: ['curve_ease', 'Smooth'],
@@ -513,7 +486,6 @@ const Automation = {
     setTimeout(() => window.addEventListener('mousedown', close, true), 0);
   },
 
-  // a tiny drawing of the shape, so the menu is readable without the words
   curveIcon(shape) {
     const pts = [];
     for (let i = 0; i <= 12; i++) {
@@ -538,14 +510,10 @@ const Automation = {
     UI.dirty = true;
     UI.fileDirty = true;
     this.redraw();
-    // light up the "A" dot in the clip settings right away (it reflects whether
-    // the param has keyframes) instead of only after reselecting the clip
     if (typeof Windows !== 'undefined' && Windows.isOpen && Windows.isOpen('inspector')) {
       const w = Windows.wins.get('inspector'); if (w && w.refresh) w.refresh();
     }
     if (this.fxTarget || this.clipTarget) {
-      // speed/pitch keyframes change the clip's real length: resize + redraw
-      // its block live so the timeline always shows what will actually play
       if (this.clipTarget) {
         const f = getClip(this.clipTarget.clipId);
         if (f) {
@@ -556,8 +524,6 @@ const Automation = {
           }
         }
       }
-      // effect / audio-source nodes are rebuilt from scratch, so re-collect the
-      // schedule to pick up the new keyframes (and re-voice any sounding notes)
       if (UI.playing) { Engine.reschedule(); Engine.applyLiveClipEdits && Engine.applyLiveClipEdits(); }
       if (typeof Sync !== 'undefined' && Sync.admitted && !Sync.applyingRemote) Sync.broadcast();
     } else {

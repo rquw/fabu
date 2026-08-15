@@ -1,17 +1,10 @@
-// ---------- Timeline: the song view. Tracks, clips, waveforms, drag & drop ----------
+// ---------- timeline ----------
 'use strict';
 
 const TRACK_H = 84;
-// One automation lane's height. Tall enough that a curve reads at a glance,
-// short enough that opening three of them does not push the song off screen.
 const AUTOM_H = 52;
-// The strip that separates a track's patterns from its automation, and holds
-// the switch that folds the automation away.
 const AUTOM_HEAD_H = 22;
 
-// Tracks used to be a fixed height each, so a track's position was its index
-// times that. With automation lanes underneath them a track is as tall as it
-// needs to be, and everything that used to multiply by TRACK_H asks here.
 function autoLanes(track) { return (track && track.autoLanes) || []; }
 function automOpen(track) { return autoLanes(track).length > 0 && !track.autoCollapsed; }
 function trackHeight(track) {
@@ -25,7 +18,6 @@ function trackTop(idx) {
   return y;
 }
 function tracksHeight() { return trackTop(S.tracks.length); }
-// which track a y offset inside the lanes column falls in
 function trackAtY(y) {
   let acc = 0;
   for (let i = 0; i < S.tracks.length; i++) {
@@ -36,7 +28,6 @@ function trackAtY(y) {
   return Math.max(0, S.tracks.length - 1);
 }
 
-// grouped, readable instrument picker (replaces the long flat dropdown)
 const INSTR_CATS = [
   { key: 'cat_keys', label: 'Keys & Piano', ids: ['rpiano', 'rupright', 'epiano', 'organ'] },
   { key: 'cat_mallets', label: 'Mallets & Bells', ids: ['rvibes', 'rglock', 'bell'] },
@@ -61,28 +52,22 @@ const Timeline = {
     this.scroller.addEventListener('scroll', () => {
       $('#trackHeads').scrollTop = this.scroller.scrollTop;
       this.drawRuler();
-      // scrolled past the margin of what we built? bring the next clips in
       const vw = this.scroller.clientWidth;
       const from = (this.scroller.scrollLeft - vw * 0.4) / UI.zoom;
       const to = (this.scroller.scrollLeft + vw * 1.4) / UI.zoom;
       if (this._viewFrom == null || from < this._viewFrom || to > this._viewTo) this.renderSoon();
     });
 
-    // scrolling while the pointer is over the track-headers column (which is
-    // itself clipped) should still scroll the timeline vertically.
     $('#headsCol').addEventListener('wheel', (e) => {
       this.scroller.scrollTop += e.deltaY;
     }, { passive: true });
 
-    // trackpad pinch (ctrl+wheel) zooms the timeline around the cursor
     this.scroller.addEventListener('wheel', (e) => {
       if (!e.ctrlKey) return; // let normal two-finger scrolling through
       e.preventDefault();
       this.setZoom(UI.zoom * (e.deltaY < 0 ? 1.1 : 1 / 1.1));
     }, { passive: false });
 
-    // click ruler = move playhead; drag while stopped = scrub (hear it);
-    // shift-drag (or dragging the top strip) sets the loop region
     this.ruler.addEventListener('mousedown', (e) => {
       if (e.button !== 0) return;        // right-click is the marker menu, not a drag
       const inLoopStrip = (e.clientY - this.ruler.getBoundingClientRect().top) < 11;
@@ -99,9 +84,6 @@ const Timeline = {
         const done = () => {
           window.removeEventListener('mousemove', setLoop);
           window.removeEventListener('mouseup', done);
-          // Marking a region is not the same as asking to repeat it, so this no
-          // longer switches looping on behind your back. Only the button and L
-          // do that.
           this.drawRuler();
           UI.dirty = UI.fileDirty = true;
           if (!S.loopOn) App.hintLoop('made');
@@ -126,14 +108,11 @@ const Timeline = {
       window.addEventListener('mouseup', up);
     });
 
-    // right-click the ruler: a real menu. It used to call prompt() straight away,
-    // which Electron does not implement, so it silently did nothing.
     this.ruler.addEventListener('contextmenu', (e) => {
       e.preventDefault();
       this.openRulerMenu(e.clientX, e.clientY);
     });
 
-    // background: click deselects, drag draws a selection box (marquee)
     this.lanes.addEventListener('mousedown', (e) => {
       if (e.button !== 0) return;
       if (!(e.target === this.lanes || e.target.classList.contains('lane'))) return;
@@ -175,7 +154,6 @@ const Timeline = {
       window.addEventListener('mouseup', up);
     });
 
-    // double-click empty lane on an instrument track = new pattern clip
     this.lanes.addEventListener('dblclick', (e) => {
       if (!e.target.classList.contains('lane')) return;
       const idx = trackAtY(e.clientY - this.lanes.getBoundingClientRect().top);
@@ -199,8 +177,6 @@ const Timeline = {
       }
     });
 
-    // Tell a scroll we caused from one the user did. Only the second kind
-    // should stop the playhead being followed.
     this.scroller.addEventListener('scroll', () => {
       if (this._following) return;
       if (this._followLeft != null && Math.abs(this.scroller.scrollLeft - this._followLeft) < 2) return;
@@ -221,8 +197,6 @@ const Timeline = {
     return Math.max(songEndBeat() + 32, viewportBeats + 8, 64);
   },
 
-  // the free span [left, right) on a track that `clip` can occupy without
-  // overlapping its neighbours, classified by the clip's original position
   laneBounds(track, clip, origStart, origEnd) {
     let left = 0, right = Infinity;
     for (const o of track.clips) {
@@ -233,8 +207,6 @@ const Timeline = {
     }
     return { left, right };
   },
-  // the free start closest to `desired` (searching both directions) where a clip
-  // of `len` beats fits without overlapping. Used to snap a dragged clip on drop
   nearestFreeStart(track, len, desired, ignore) {
     desired = Math.max(0, desired);
     const overlaps = (s) => track.clips.some(c => c !== ignore &&
@@ -250,7 +222,6 @@ const Timeline = {
     valid.sort((a, b) => Math.abs(a - desired) - Math.abs(b - desired));
     return valid.length ? valid[0] : desired;
   },
-  // first start >= `from` on `track` where a clip of `len` beats fits with no overlap
   firstFreeStart(track, len, from, ignore) {
     const spans = track.clips
       .filter(c => c !== ignore)
@@ -265,14 +236,11 @@ const Timeline = {
   },
 
   // ---------- full render ----------
-
-  // coalesce a burst of edits into one render on the next frame
   renderSoon() {
     if (this._renderRaf) return;
     this._renderRaf = requestAnimationFrame(() => { this._renderRaf = null; this.render(); });
   },
 
-  // repaint one clip's block without rebuilding the timeline around it
   redrawClip(clip) {
     const el = this.lanes.querySelector(`[data-clip-id="${clip.id}"]`);
     if (!el) return;
@@ -282,7 +250,6 @@ const Timeline = {
 
   render() {
     if (this._renderRaf) { cancelAnimationFrame(this._renderRaf); this._renderRaf = null; }
-    // drop selection entries whose clips no longer exist
     for (const id of [...UI.selClipIds]) if (!getClip(id)) UI.selClipIds.delete(id);
     if (UI.selClipId && !UI.selClipIds.has(UI.selClipId)) UI.selClipId = [...UI.selClipIds].pop() || null;
 
@@ -290,7 +257,6 @@ const Timeline = {
     this.lanes.style.width = width + 'px';
     this.ruler.style.width = width + 'px';
 
-    // remove stale lanes/clips (keep playhead, dropGhost and the live overlays)
     for (const el of [...this.lanes.children]) {
       if (el.id !== 'playhead' && el.id !== 'dropGhost' && el.id !== 'cursorLayer' && el.id !== 'remotePhLayer') el.remove();
     }
@@ -299,9 +265,6 @@ const Timeline = {
     const bar = UI.zoom * beatsPerBar();
     let clipCount = 0;
     const firstMidiIdx = S.tracks.findIndex(t => t.kind === 'midi');
-    // Only build the clips inside (or near) the visible window. A long song can
-    // hold hundreds of clips, and building every one of them, each with its own
-    // canvas, on every edit was the main source of slowdown.
     const vw = this.scroller ? this.scroller.clientWidth : 1200;
     const sl = this.scroller ? this.scroller.scrollLeft : 0;
     const viewFrom = (sl - vw) / UI.zoom;          // one screen of margin each side
@@ -320,8 +283,6 @@ const Timeline = {
         if (c.start > viewTo || c.start + clipBeats(c) < viewFrom) continue;   // off screen
         lane.appendChild(this.buildClip(c, t));
       }
-      // the automation lanes belong to this track and sit under it, behind a
-      // header that says so and can fold them away
       if (autoLanes(t).length) {
         this.lanes.appendChild(this.buildAutomHead(t, width));
         if (!t.autoCollapsed) {
@@ -330,7 +291,6 @@ const Timeline = {
       }
     }
 
-    // brand-new/empty project: gentle "double-click to add a pattern" nudge
     if (clipCount === 0 && firstMidiIdx >= 0) {
       const hint = document.createElement('div');
       hint.className = 'empty-hint';
@@ -339,9 +299,6 @@ const Timeline = {
       this.lanes.appendChild(hint);
     }
 
-    // extra bottom room so the track-headers column can scroll far enough to
-    // fully reveal its "add track" slot past the sticky ruler + h-scrollbar
-    // (the CSS padding-bottom is eaten by border-box on an explicit height)
     this.lanes.style.height = (tracksHeight() + 90) + 'px';
     $('#playhead').style.height = (tracksHeight() + 30) + 'px';
     this.renderHeads();
@@ -351,21 +308,11 @@ const Timeline = {
   },
 
   // ---------- automation lanes ----------
-  // The curve used to live in a floating window, which meant you could not see
-  // what a track was doing without going and opening it. It belongs under the
-  // track it applies to, at the same zoom, so a fade reads as a shape you can
-  // point at rather than something you have to remember.
-
-  // RANGES holds [min, max] pairs, and a point is { beat, v, c }: v for the
-  // value, c for the curve shape. Same shapes the engine and the old editor
-  // already use, so a lane edited here sounds the same as one edited there.
   automRange(param) {
     const r = Automation.RANGES[param] || [0, 1];
     return { min: r[0], max: r[1] };
   },
 
-  // The strip between the patterns and the curves. Without it the lanes read as
-  // more track rather than as something belonging to the track above them.
   buildAutomHead(track, width) {
     const el = document.createElement('div');
     el.className = 'autom-head' + (track.autoCollapsed ? ' collapsed' : '');
@@ -386,7 +333,6 @@ const Timeline = {
       this.render();
     };
     el.querySelector('.ah-fold').addEventListener('click', (e) => { e.stopPropagation(); fold(); });
-    // the whole strip folds, since a 16px chevron is a small thing to hit
     el.addEventListener('click', fold);
     return el;
   },
@@ -420,8 +366,6 @@ const Timeline = {
 
   drawAutomLane(track, param, cv, width) {
     const dpr = window.devicePixelRatio || 1;
-    // the same 65,535 device-pixel ceiling the clip canvases ran into: past it
-    // the canvas silently fails to allocate and the lane just goes blank
     const w = Math.min(width, Math.floor(32000 / dpr));
     const h = AUTOM_H;
     cv.width = Math.max(1, Math.round(w * dpr));
@@ -440,7 +384,6 @@ const Timeline = {
     };
     const xOf = (b) => b * UI.zoom;
 
-    // a middle line, so "louder than it started" is readable without counting
     g.strokeStyle = 'rgba(255,255,255,0.07)';
     g.lineWidth = 1;
     g.beginPath(); g.moveTo(0, Math.round(yOf((min + max) / 2)) + 0.5);
@@ -449,8 +392,6 @@ const Timeline = {
     const pts = (track.autom && track.autom[param]) || [];
     const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#e07a3f';
 
-    // Sample the real curve rather than joining the points with straight lines,
-    // so an eased point looks on screen like what it sounds like.
     g.beginPath();
     const step = Math.max(1, Math.round(1 / (UI.zoom / 8)));
     let started = false;
@@ -466,7 +407,6 @@ const Timeline = {
       g.lineWidth = 2;
       g.lineJoin = 'round';
       g.stroke();
-      // a wash under the line, which is what makes a rise read as a rise
       g.lineTo(w, h); g.lineTo(0, h); g.closePath();
       g.fillStyle = accent.startsWith('#')
         ? accent + '22'
@@ -489,7 +429,6 @@ const Timeline = {
     }
   },
 
-  // click adds a point, drag moves one, right-click removes it
   wireAutomLane(el, cv, track, param) {
     const { min, max } = this.automRange(param);
     const pad = 7;
@@ -549,7 +488,6 @@ const Timeline = {
       Undo.push('Automation');
       let i = hit(x, y);
       if (i < 0) {
-        // a fresh point where you clicked, kept in beat order
         const beat = Math.max(0, snapBeat(x / UI.zoom, S.snap));
         pts.push({ beat, v: valueAtY(y) });
         pts.sort((a, b) => a.beat - b.beat);
@@ -578,8 +516,6 @@ const Timeline = {
     });
   },
 
-  // Remove the automation, not just the view of it. Undo has it if that was
-  // the wrong call.
   deleteAutomLane(track, param) {
     const had = track.autom && track.autom[param] && track.autom[param].length;
     Undo.push('Automation');
@@ -592,7 +528,6 @@ const Timeline = {
     if (had) toast(tr('toast_autom_deleted', '{name} automation deleted', { name: Automation.paramLabel(param) }));
   },
 
-  // show or hide a param's lane under a track
   toggleAutomLane(trackId, param, on) {
     const t = getTrack(trackId);
     if (!t) return;
@@ -605,7 +540,6 @@ const Timeline = {
     this.render();
   },
 
-  // the menu behind the track header's automation button
   openAutomMenu(e, track) {
     const open = autoLanes(track);
     const items = Engine.AUTOM_PARAMS.map(p => [
@@ -651,7 +585,6 @@ const Timeline = {
       }
     }
 
-    // loop region: the section that repeats while you work on it
     if (S.loopEnd > S.loopStart) {
       const lx = S.loopStart * UI.zoom - scrollX;
       const lw = (S.loopEnd - S.loopStart) * UI.zoom;
@@ -663,7 +596,6 @@ const Timeline = {
       ctx.fillRect(lx + lw - 2, 0, 2, 11);
     }
 
-    // section markers
     for (const mk of (S.markers || [])) {
       const mx = mk.beat * UI.zoom - scrollX;
       if (mx < -60 || mx > w + 60) continue;
@@ -679,7 +611,6 @@ const Timeline = {
   },
 
   // ---------- track headers ----------
-
   renderHeads() {
     const box = $('#trackHeads');
     box.innerHTML = '';
@@ -723,7 +654,6 @@ const Timeline = {
         btn.innerHTML = `<span class="tinst-name">${instrLabel(t.instrument)}</span><span class="tinst-chev">▾</span>`;
         btn.addEventListener('click', (e) => { e.stopPropagation(); this.openInstrMenu(t, btn); });
         mid.appendChild(btn);
-        // edit + delete buttons for custom (sampler) instruments
         if (resolveInstrument(t.instrument)) {
           const edit = document.createElement('button');
           edit.className = 'tinst-edit';
@@ -780,7 +710,6 @@ const Timeline = {
       box.appendChild(el);
     }
 
-    // the "add a track" slot sits right below the last track, like an empty slot
     const slot = document.createElement('div');
     slot.className = 'thead-add';
     const mkAdd = (kind, icon, key, fb) => {
@@ -794,9 +723,6 @@ const Timeline = {
     box.appendChild(slot);
   },
 
-  // Time signature lives with the bar counter, not in Settings. It belongs to
-  // the song, and sitting in a settings window made it look like a preference
-  // that applied to everything you ever open.
   openTimeSigMenu(anchor) {
     const old = document.getElementById('sigMenu');
     if (old) { old.remove(); return; }
@@ -815,8 +741,6 @@ const Timeline = {
         const [n, d] = sig.split('/').map(Number);
         S.timeSig = [n, d];
         UI.dirty = UI.fileDirty = true;
-        // repaint the label straight away instead of waiting for the next
-        // playhead tick, which never comes while the transport is stopped
         const lbl = document.getElementById('posSig');
         if (lbl) lbl.textContent = sig;
         this.drawRuler();
@@ -834,7 +758,6 @@ const Timeline = {
     setTimeout(() => window.addEventListener('mousedown', close, true), 0);
   },
 
-  // pick a track colour: the swatches, or any colour you like
   openColorMenu(track, anchor) {
     const old = document.getElementById('colorMenu');
     if (old) old.remove();
@@ -869,7 +792,6 @@ const Timeline = {
     window.addEventListener('mousedown', close, true);
   },
 
-  // live = dragging the colour wheel, so do not spam the undo stack
   setTrackColor(track, color, live) {
     if (!live) Undo.push('Track colour');
     track.color = color;
@@ -878,10 +800,8 @@ const Timeline = {
     if (typeof Windows !== 'undefined') Windows.refreshAll();
   },
 
-  // apply an instrument choice to a track (shared by the picker)
   setInstrument(track, id) {
     Undo.push('Change instrument');
-    // pulling a library instrument into the project makes it self-contained
     if (!S.instruments[id] && LIB[id]) S.instruments[id] = JSON.parse(JSON.stringify(LIB[id]));
     track.instrument = id;
     if (id === 'drumkit') Engine.ensureDrumkit();
@@ -892,7 +812,6 @@ const Timeline = {
     KeysPanel.refreshTracks();
   },
 
-  // a grouped, searchable instrument picker so the sound list is easy to read
   openInstrMenu(track, anchor) {
     const old = document.getElementById('instrMenu');
     if (old) old.remove();
@@ -933,10 +852,8 @@ const Timeline = {
       for (const [id, def] of Object.entries(S.instruments || {})) customs[id] = def;
       const cl = Object.values(customs);
       if (cl.length) addCat(tr('samp_custom_group', 'Your instruments'), cl.map(inst => [inst.id, inst.name]));
-      // a sound not in any list (e.g. a loop FX) still shows as the current pick
       const known = new Set([...INSTR_CATS.flatMap(c => c.ids), ...cl.map(i => i.id)]);
       if (!known.has(track.instrument)) addCat(tr('cat_other', 'Other'), [[track.instrument, instrLabel(track.instrument)]]);
-      // always-available action
       const nb = document.createElement('button');
       nb.className = 'instr-item instr-new';
       nb.innerHTML = `<svg class="ic"><use href="#i-mic"/></svg><span>${tr('instr_new', 'New from audio…')}</span>`;
@@ -957,7 +874,6 @@ const Timeline = {
   },
 
   syncHeads() {
-    // light refresh of mute/solo/volume without rebuilding inputs
     for (const el of $$('#trackHeads .thead')) {
       const t = getTrack(el.dataset.trackId);
       if (!t) continue;
@@ -969,7 +885,6 @@ const Timeline = {
   },
 
   // ---------- clips ----------
-
   buildClip(clip, track) {
     const el = document.createElement('div');
     el.className = 'clip' + (clip.kind === 'group' ? ' group' : '') + (UI.selClipIds.has(clip.id) ? ' sel' : '');
@@ -992,15 +907,9 @@ const Timeline = {
       badge.textContent = (clip.pitch > 0 ? '+' : '') + clip.pitch + 'st';
       el.appendChild(badge);
     }
-    // A pattern with effects on it should look different at a glance, not just
-    // carry a small label. The clip gets a lit edge, and the badge names what is
-    // actually on it rather than counting to two.
     if (clip.fx && clip.fx.length) {
       el.classList.add('has-fx');
       const fxb = document.createElement('div');
-      // Named while it is fresh, then collapsed to the sparkle. Reading the
-      // effect names matters right after you add one and never again, and a row
-      // of clips each spelling out their effects is just noise.
       const fresh = this._fxFresh === clip.id;
       fxb.className = 'clip-fx-badge' + (fresh ? ' fresh' : '');
       const names = clip.fx.map(f => fxName(f.type));
@@ -1017,7 +926,6 @@ const Timeline = {
       el.appendChild(gb);
     }
 
-    // effects from the browser can be dropped straight onto the clip
     el.addEventListener('dragover', (e) => {
       if (clip.kind === 'group') return;   // groups are containers, not fx targets
       if (![...e.dataTransfer.types].includes('text/fabu-fx')) return;
@@ -1025,10 +933,6 @@ const Timeline = {
       e.stopPropagation();
       e.dataTransfer.dropEffect = 'copy';
       el.classList.add('fx-over');
-      // Holding shift paints: the effect lands as you pass over each clip rather
-      // than on drop. Each clip takes it once per stroke, so dragging back over
-      // one you already covered does nothing. Let go and start again to apply
-      // the same effect a second time.
       if (e.shiftKey) Timeline.paintFx(clip);
     });
     el.addEventListener('dragleave', () => el.classList.remove('fx-over'));
@@ -1038,7 +942,6 @@ const Timeline = {
       e.preventDefault();
       e.stopPropagation();
       el.classList.remove('fx-over');
-      // a painted stroke has already applied it everywhere it passed, here too
       if (Timeline._brush && Timeline._brush.painted.size) return;
       App.addFxToClip(clip, type);
     });
@@ -1055,9 +958,6 @@ const Timeline = {
     rsR.dataset.tip = clip.kind === 'midi' ? tr('tip_pattern_len', 'Drag to change length') : tr('tip_trim_end', 'Drag to trim the end');
     el.append(rsL, rsR);
 
-    // Dragging a pattern OUT (to the loop browser) has to coexist with dragging
-    // it around the timeline. The label strip is the handle for taking it out;
-    // everywhere else keeps the ordinary move and trim behaviour.
     if (clip.kind === 'midi') {
       const label = el.querySelector('.clip-label');
       if (label) {
@@ -1088,7 +988,6 @@ const Timeline = {
     return el;
   },
 
-  // right-click menu on a clip: everything you can do with it, in one place
   openClipMenu(x, y, clip) {
     const old = document.getElementById('clipMenu');
     if (old) old.remove();
@@ -1107,8 +1006,6 @@ const Timeline = {
       add(tr('insp_delete', 'Delete group'), () => App.deleteSelectedClip(), true);
     } else {
       if (clip.kind === 'midi') add(tr('menu_pianoroll', 'Open piano roll'), () => PianoRoll.open(clip.id));
-      // Dragging the pattern into the Loops window does the same thing. This is
-      // the route that works when the window is not open.
       if (clip.kind === 'midi') add(tr('menu_save_loop', 'Save to my loops'), () => App.saveClipAsLoop(clip.id));
       if (clip.bounce) add(tr('menu_ungroup', 'Ungroup'), () => App.ungroupClip(clip.id));
       add(tr('menu_settings', 'Clip settings'), () => Windows.openInspector());
@@ -1133,9 +1030,6 @@ const Timeline = {
   },
 
   // ---------- painting effects across clips ----------
-  // A stroke lasts from picking an effect up to letting it go. Each clip takes
-  // the effect once per stroke: passing over the same one again is the hand
-  // wobbling, not a request for a second copy.
   beginBrush(type) { this._brush = { type, painted: new Set() }; },
   endBrush() { this._brush = null; },
 
@@ -1146,11 +1040,7 @@ const Timeline = {
     App.addFxToClip(clip, b.type);
   },
 
-  // A single sweep across the clip the moment an effect is dropped on it, so you
-  // see WHERE it landed. It takes the class off again when the animation ends,
-  // because a permanent animation is decoration, not information.
   flashFx(clipId) {
-    // keep the names on show for a moment, then let the badge shrink back
     this._fxFresh = clipId;
     clearTimeout(this._fxFreshTimer);
     this._fxFreshTimer = setTimeout(() => {
@@ -1160,17 +1050,12 @@ const Timeline = {
     }, 3000);
     const el = this.lanes.querySelector(`[data-clip-id="${clipId}"]`);
     if (!el) return;
-    // the badge was built by the render that ran just before this, so open it
-    // here rather than relying on the next one
     const badge = el.querySelector('.clip-fx-badge');
     if (badge) badge.classList.add('fresh');
     el.classList.remove('fx-landed');
     void el.offsetWidth;                 // restart it if one is already running
     el.classList.add('fx-landed');
     const done = () => { clearTimeout(timer); el.classList.remove('fx-landed'); };
-    // animationend is the normal path, but it never fires if the animation is
-    // suppressed (reduced motion) or the tab is not painting, and the class must
-    // not be able to stick. The timer is the guarantee.
     const timer = setTimeout(done, 900);
     el.addEventListener('animationend', done, { once: true });
   },
@@ -1182,11 +1067,6 @@ const Timeline = {
   },
 
   drawClipCanvas(clip, el, cv) {
-    // `w` stays the FULL clip width, because every waveform and note position
-    // is mapped against it. Only the visible slice is allocated and painted:
-    // zoomed in on a long song a clip is hundreds of thousands of pixels wide,
-    // and a canvas past 65,535 device px fails to allocate SILENTLY, which is
-    // what made clips go blank when you zoomed in on a big project.
     const w = Math.max(2, el.clientWidth);
     const h = Math.max(2, el.clientHeight - 17);
     const dpr = window.devicePixelRatio || 1;
@@ -1194,7 +1074,6 @@ const Timeline = {
     const vw = sc ? sc.clientWidth : w;
     const clipLeft = clip.start * UI.zoom;
     const scL = sc ? sc.scrollLeft : 0;
-    // one viewport of margin each side, quantized so small scrolls reuse it
     let x0 = Math.max(0, Math.floor(((scL - clipLeft) - vw) / 256) * 256);
     let x1 = Math.min(w, Math.ceil(((scL - clipLeft) + vw * 2) / 256) * 256);
     if (x1 <= x0) { x0 = 0; x1 = Math.min(w, 256); }
@@ -1203,13 +1082,10 @@ const Timeline = {
     cv.style.width = cw + 'px'; cv.style.height = h + 'px';
     cv.style.marginLeft = x0 + 'px';
     const ctx = cv.getContext('2d');
-    // absolute clip coordinates keep working; the window is just a translation
     ctx.setTransform(dpr, 0, 0, dpr, -x0 * dpr, 0);
     ctx.clearRect(x0, 0, cw, h);
 
     if (clip.kind === 'group') {
-      // a faux waveform built from the density of the grouped material, so it
-      // reads like a bounced audio block
       const len = clip.length || 1;
       const buckets = new Array(Math.ceil(cw)).fill(0);   // window-sized, not clip-sized
       for (const child of clip.children || []) {
@@ -1243,9 +1119,6 @@ const Timeline = {
         ctx.fillText(tr('clip_missing', 'missing sample'), 6, h / 2);
         return;
       }
-      // waveform of the trimmed window only (min/max per pixel). With speed or
-      // pitch automation the pixel -> source mapping follows the rate integral,
-      // so stretched parts of the wave look stretched exactly where they sound it.
       const data = s.buffer.getChannelData(0);
       const sr = s.buffer.sampleRate;
       const first = Math.floor(clipOffSec(clip) * sr);
@@ -1272,7 +1145,6 @@ const Timeline = {
         ctx.rect(x, mid - mx * mid * 0.92 * g, 1, Math.max(1, (mx - mn) * mid * 0.92 * g));
       }
       ctx.fill();
-      // fade triangles
       const durOut = auto ? auto.durSec : clipDurSec(clip) / (clip.speed || 1);
       const fiX = ((clip.fadeIn || 0) / durOut) * w;
       const foX = ((clip.fadeOut || 0) / durOut) * w;
@@ -1285,7 +1157,6 @@ const Timeline = {
         ctx.beginPath(); ctx.moveTo(w, h); ctx.lineTo(w - foX, 0); ctx.stroke();
       }
     } else {
-      // midi note preview
       const notes = clip.notes;
       if (!notes.length) {
         ctx.fillStyle = 'rgba(0,0,0,0.35)';
@@ -1308,24 +1179,18 @@ const Timeline = {
     }
   },
 
-  // drag to move (and vertical re-track), drag either edge to trim
   clipMouseDown(e, clip, track, el) {
     if (e.button !== 0) return;
     e.stopPropagation();
-    // shift-click just toggles this clip in the selection, no drag
     if (e.shiftKey) { App.selectClip(clip.id, true); return; }
-    // in a room, a clip someone else is dragging is locked for you
     const clipLock = 'clip:' + clip.id;
     if (typeof Sync !== 'undefined' && Sync.admitted) {
       const l = Sync.lockedBy(clipLock);
       if (l) { toast(tr('mp_locked_by', '{name} is using this', { name: l.name })); return; }
       Sync.setLock(clipLock, true);
     }
-    // clicking an unselected clip selects just it; clicking one that's already in
-    // a multi-selection keeps the group so you can drag them all together
     if (!UI.selClipIds.has(clip.id)) App.selectClip(clip.id);
     else App.selectTrack(track.id);
-    // the other selected clips that move/resize along with this one
     const group = [...UI.selClipIds]
       .filter(id => id !== clip.id).map(getClip).filter(Boolean)
       .map(f => ({ clip: f.clip, start: f.clip.start, len: f.clip.kind === 'midi' ? f.clip.length : clipBeats(f.clip) }));
@@ -1344,8 +1209,6 @@ const Timeline = {
       trackIdx: S.tracks.indexOf(track)
     };
     let moved = false;
-    // if the snapped position keeps landing on the same spot, the user is
-    // fighting the grid, so nudge them to change the snapping
     const snapSeen = new Map();
     let lastSnapKey = null, coached = false;
 
@@ -1361,14 +1224,12 @@ const Timeline = {
       drawEl(clip);
       for (const g of group) drawEl(g.clip);
     };
-    // move/resize the rest of the selection along with the primary clip
     const applyGroup = () => {
       if (!group.length) return;
       if (mode === 'move') {
         const delta = clip.start - orig.start;
         for (const g of group) g.clip.start = Math.max(0, g.start + delta);
       } else if (mode === 'right') {
-        // resizing one pattern fits every selected pattern to the same length
         for (const g of group) if (g.clip.kind === 'midi') g.clip.length = clip.length;
       } else if (mode === 'left') {
         const delta = clip.start - orig.start;
@@ -1376,10 +1237,6 @@ const Timeline = {
       }
     };
 
-    // Lean the clip the way it is being dragged. Not a physics toy: it snaps to
-    // one of two angles and stays there until the direction changes, so it reads
-    // as a deliberate lean rather than something wobbling around. Five degrees
-    // is enough to feel, and a wide clip tilted further looks broken.
     let tilt = 0, lastTiltX = startX;
     const applyTilt = () => {
       const els = [el, ...group.map(g => this.lanes.querySelector(`[data-clip-id="${g.clip.id}"]`))];
@@ -1396,14 +1253,6 @@ const Timeline = {
     };
     const clearTilt = () => { tilt = 0; applyTilt(); };
 
-    // Dragging a pattern into the Loops window to keep it.
-    //
-    // The label strip has been an HTML5 drag handle for a while, but it is 17
-    // pixels tall and nothing marks it, so what people actually do is grab the
-    // pattern and drag it over there, which did nothing. The timeline's own
-    // drag is a plain mousedown/mousemove, not an HTML5 drag, so the two never
-    // met. This watches for the pointer entering the Loops window during an
-    // ordinary clip move and treats letting go there as "keep this".
     const loopsBox = () => {
       const w = Windows.wins && Windows.wins.get('samples');
       return w && w.el ? w.el : null;
@@ -1458,7 +1307,6 @@ const Timeline = {
             .filter(n => n.start + n.length > 0.01)
             .map(n => n.start < 0 ? { ...n, length: n.length + n.start, start: 0 } : n);
         } else {
-          // can't reveal material before the sample's own start
           const minStart = orig.start - orig.offset / (rate * spb);
           newStart = clamp(newStart, Math.max(0, minStart), orig.start + orig.length - 0.1);
           const d = newStart - orig.start;
@@ -1467,10 +1315,7 @@ const Timeline = {
           clip.dur = orig.dur - d * spb * rate;
         }
       } else {
-        // drag freely (can pass over other clips); it snaps to the nearest free
-        // slot on drop, so you can move a clip past its neighbours
         clip.start = Math.max(0, snapBeat(orig.start + dxBeats, S.snap));
-        // vertical move between tracks (single clip only)
         if (!group.length) {
           const N = S.tracks.length;
           const py = ev.clientY - this.lanes.getBoundingClientRect().top;
@@ -1478,7 +1323,6 @@ const Timeline = {
           const nb = Math.round(laneF);                 // nearest track boundary
           const nearBoundary = Math.abs(py - trackTop(nb)) < 18;
           if (nearBoundary && nb >= 0 && nb <= N && py > -40 && py < tracksHeight() + 60) {
-            // hovering a gap between/around tracks -> offer to make a new track here
             this._clipInsertAt = nb;
             this.showTrackInsert(nb);
           } else {
@@ -1523,8 +1367,6 @@ const Timeline = {
       markLoops(false);
       if (typeof Sync !== 'undefined') Sync.setLock(clipLock, false);
       this.hideTrackInsert();
-      // Let go over the Loops window: keep the pattern and put it back where it
-      // was, because you were copying it out, not moving it.
       if (intoLoops) {
         clip.start = orig.start;
         if (clip.kind === 'midi') clip.length = orig.length;
@@ -1535,14 +1377,12 @@ const Timeline = {
         return;
       }
       if (moved) {
-        // dropped in a gap between tracks -> spin up a fresh track for it
         if (this._clipInsertAt != null && !group.length && mode === 'move') {
           const idx = this._clipInsertAt; this._clipInsertAt = null;
           this.createTrackForClip(clip, idx);
           return;
         }
         this._clipInsertAt = null;
-        // snap to the nearest free slot so a single clip never lands overlapping
         if (!group.length) {
           const track = getClip(clip.id).track;
           clip.start = this.nearestFreeStart(track, clipBeats(clip), clip.start, clip);
@@ -1592,7 +1432,6 @@ const Timeline = {
     window.addEventListener('mousedown', close, true);
   },
 
-  // the "release here to make a new track" indicator between/around tracks
   showTrackInsert(idx) {
     let el = document.getElementById('trackInsert');
     if (!el) {
@@ -1610,7 +1449,6 @@ const Timeline = {
     if (el) el.style.display = 'none';
   },
 
-  // move a clip out onto a brand-new track inserted at `idx`
   createTrackForClip(clip, idx) {
     const found = getClip(clip.id);
     if (!found) return;
@@ -1632,7 +1470,6 @@ const Timeline = {
   },
 
   // ---------- OS drag & drop of audio files ----------
-
   initDropZone() {
     const ghost = $('#dropGhost');
     const area = this.scroller;
@@ -1645,15 +1482,12 @@ const Timeline = {
       const beat = snapBeat(this.xToBeat(e.clientX), S.snap);
       const laneIdx = trackAtY(e.clientY - this.lanes.getBoundingClientRect().top);
       const samp = types.includes('text/fabu-sample') ? (typeof Windows !== 'undefined' && Windows._dragSample) : null;
-      // files aren't readable during dragover, but their names/types are, so
-      // the ghost can say MIDI instead of promising an audio file
       const items = e.dataTransfer.items;
       let isMidi = false;
       if (!samp && items) for (const it of items) {
         if (it.kind === 'file' && /midi/.test(it.type || '')) { isMidi = true; break; }
       }
       const lenB = samp ? samp.length : 4; // audio: real length unknown until dropped, show a placeholder
-      // translucent preview of exactly how big it'll be and where it starts
       ghost.className = 'preview';
       ghost.style.display = 'block';
       ghost.style.left = (beat * UI.zoom) + 'px';
@@ -1673,12 +1507,9 @@ const Timeline = {
       ghost.style.display = 'none'; ghost.className = ''; ghost.innerHTML = '';
       const beat = snapBeat(this.xToBeat(e.clientX), S.snap);
       const laneIdx = trackAtY(e.clientY - this.lanes.getBoundingClientRect().top);
-      // a loop from the Samples browser
       const sampleId = e.dataTransfer.getData('text/fabu-sample');
       if (sampleId) { App.addSampleToProject(sampleId, beat, S.tracks[laneIdx] ? laneIdx : null); return; }
       const dropped = [...e.dataTransfer.files];
-      // .mid becomes editable patterns, not audio, so it is checked first (a
-      // MIDI file's type can read as audio/midi and get caught by the filter)
       const midis = dropped.filter(f => MidiFile.isMidiFile(f));
       if (midis.length) { await MidiFile.importFiles(midis, beat); return; }
       const files = dropped.filter(f =>
@@ -1688,7 +1519,6 @@ const Timeline = {
     });
   },
 
-  // little note-block preview inside the drag ghost so you see the pattern
   drawGhostNotes(ghost, samp, w) {
     const h = TRACK_H - 6;
     const cv = document.createElement('canvas');
@@ -1713,11 +1543,8 @@ const Timeline = {
   },
 
   // ---------- playhead ----------
-
   startPlayheadLoop() {
     const loop = () => {
-      // one stray error must never kill the rAF chain (that froze the playhead
-      // until the next play/pause); catch and keep going.
       try { this.updatePlayhead(); } catch (e) { /* keep looping */ }
       this.rafId = requestAnimationFrame(loop);
     };
@@ -1725,15 +1552,12 @@ const Timeline = {
   },
 
   updatePlayhead() {
-    // when idle (not playing, no pending move), skip the work entirely, which saves
-    // battery/CPU since this fires ~60x a second forever
     if (!UI.playing && this._lastX === UI.playhead * UI.zoom) return;
 
     const beat = Engine.ctx && UI.playing ? Engine.currentBeat() : UI.playhead;
     const x = beat * UI.zoom;
     this._lastX = x;
     if (typeof PianoRoll !== 'undefined' && PianoRoll.isOpen()) PianoRoll.syncPlayhead(beat);
-    // cached refs + throttled text: this runs every frame, so keep it lean
     if (!this._phEl || !this._phEl.isConnected) {
       this._phEl = $('#playhead');
       this._posBars = $('#posBars');
@@ -1741,7 +1565,6 @@ const Timeline = {
     }
     if (this._phEl) this._phEl.style.left = x + 'px';
 
-    // let the others see where our playhead is (in our colour) while we play
     if (typeof Sync !== 'undefined' && Sync.admitted) {
       if (UI.playing) Sync.sendPlayhead(beat, true);
       else if (Sync._phWasPlaying) Sync.sendPlayhead(beat, false);
@@ -1774,7 +1597,6 @@ const Timeline = {
         this._followLeft = this.scroller.scrollLeft;
         this._following = false;
       }
-      // grow lanes if we run past the end (next frame, never from inside render)
       if (x > this.lanes.clientWidth - 200) this.renderSoon();
       if (typeof Automation !== 'undefined' && Automation.isOpen()) Automation.redraw();
     }

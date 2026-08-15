@@ -1,6 +1,4 @@
-// ---------- Multiplayer: rooms, presence, cursors, host powers, locks ----------
-// The relay (wss://fabu-relay.onrender.com) is a dumb room broadcaster that
-// forwards messages as binary and excludes the sender, so all logic lives here.
+// ---------- multiplayer ----------
 'use strict';
 
 function hashColor(name) {
@@ -48,10 +46,6 @@ const Sync = {
   rev: 0,             // state revision: rejects late/stale states that would undo newer edits
 
   // ---------- connection health ----------
-  // The relay is a free Render instance. It sleeps when idle (a cold start was
-  // measured at 13 seconds), it gets swapped out on deploys, and a swap drops
-  // every socket on it at once. So the client assumes the connection WILL die
-  // and is built to come back on its own instead of dumping people out.
   lastRx: 0,          // when we last heard anything from the relay
   lastTx: 0,
   rtt: null,          // ms, from ping/pong
@@ -63,8 +57,6 @@ const Sync = {
   sendFails: 0,
   banner: null,
 
-  // Every way the room can break, in plain words. No silent failures: if one of
-  // these happens the user is told which one, and what happens next.
   FAIL: {
     no_socket:    ['Could not open a connection', 'Your browser or network blocked the connection to the server.'],
     dns:          ['Cannot reach the server', 'The multiplayer server did not answer. It may be restarting.'],
@@ -98,9 +90,6 @@ const Sync = {
     };
   },
 
-  // A toast disappears. A connection problem should stay on screen until it is
-  // actually resolved, so this is a persistent banner instead.
-  // kind: 'working' (spinner, we are retrying) | 'bad' (stopped, offer Retry) | 'ok' (auto-hides)
   showBanner(code, kind, params, onRetry) {
     const t = this.failText(code, params);
     let b = this.banner;
@@ -142,14 +131,11 @@ const Sync = {
     if (this.banner) { this.banner.remove(); this.banner = null; }
   },
 
-  // The relay enforces its own limits now, and says so when it drops something.
-  // Those are real conditions the user should see rather than silent weirdness.
   onRefused(reason) {
     const map = { rate: 'relay_rate', too_big: 'relay_big', too_many: 'relay_many',
                   full: 'relay_full', bad_code: 'bad_code' };
     const code = map[reason];
     if (!code) return;
-    // a rate nudge is not worth a banner every time it happens
     if (reason === 'rate' || reason === 'too_big') {
       const now = Date.now();
       if (this._lastRefuse && now - this._lastRefuse < 10000) return;
@@ -160,7 +146,6 @@ const Sync = {
     this.fail(code);
   },
 
-  // Single funnel for everything that can go wrong, so nothing fails silently.
   fail(code, params, opts = {}) {
     const t = this.failText(code, params);
     if (opts.banner === false) toast(t.title, opts.tone || 'red');
@@ -168,8 +153,6 @@ const Sync = {
     if (opts.log !== false) console.warn('[jam] ' + code, params || '');
   },
 
-  // don't yank the project out from under someone mid-interaction: typing a
-  // name, an open dropdown (re-render closes it), or an open context menu
   typingBusy() {
     const a = document.activeElement;
     if (a && (a.tagName === 'TEXTAREA' ||
@@ -180,7 +163,6 @@ const Sync = {
   },
 
   // ---------- connection ----------
-
   generateCode() {
     const A = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
     let c = '';
@@ -191,15 +173,6 @@ const Sync = {
   banKey(room) { return 'fabu.ban.' + room + '.' + ((Auth && Auth.user) || ''); },
 
   // ---------- identity ----------
-  // A name is what somebody types, not who they are, so moderation cannot key
-  // on it. Two things stand in for identity instead:
-  //
-  //   installId  a random id kept in this browser's storage. Survives renaming,
-  //              which is the whole of the old hole. Clearing storage clears it.
-  //   _relayPk   a key the relay derives from the connection and stamps onto
-  //              knocks itself. The client never writes it, so it survives
-  //              clearing storage too. It is shared by everyone behind one
-  //              router, which is why it is only ever used as a second line.
   installId() {
     try {
       let v = localStorage.getItem('fabu.installId');
@@ -213,19 +186,12 @@ const Sync = {
     } catch (e) { return 'anon'; }
   },
 
-  // ---------- per-user permissions (host is the source of truth) ----------
-  // A user's effective right = their per-name override if set, else the room
-  // default. The host broadcasts settings (incl. perms) via presence/admit, so
-  // every client can gate its own actions. This is host-enforced moderation:
-  // the relay is a dumb broadcaster, so the client refuses disallowed actions.
+  // ---------- per-user permissions ----------
   permOverride(name) {
     const perms = (this.settings && this.settings.perms) || {};
     return perms[name] || null;
   },
-  // is a customAudio override still in force, or has its timer run out?
   overrideLive(ov) { return ov && !(ov.customAudioUntil && ov.customAudioUntil < Date.now()); },
-  // pure per-user resolution (ignores who the local user is), used by the
-  // management panel to show any user's real permission state
   micRight(name) {
     const ov = this.permOverride(name);
     if (ov && ov.mic != null) return !!ov.mic;
@@ -235,16 +201,10 @@ const Sync = {
     if (!this.connected || !this.admitted || this.isHost) return true;
     return this.micRight(name || (this.me && this.me.name));
   },
-  // Effective custom-audio right for a user: true (add directly),
-  // 'approve' (must be reviewed by the host), or false (not allowed at all).
-  // An explicit per-user override wins: true = trusted bypass, false = banned
-  // (optionally until customAudioUntil).
   customAudioRight(name) {
     name = name || (this.me && this.me.name);
     const ov = this.permOverride(name);
     if (ov && ov.customAudio != null && this.overrideLive(ov)) return ov.customAudio ? true : false;
-    // the two rules are independent: approval-mode routes sounds past the host
-    // even when free adding is off, so it never needs "allow" to be on first
     if (this.settings.approveAudio) return 'approve';
     if (this.settings.allowCustomAudio === false) return false;
     return true;
@@ -253,14 +213,11 @@ const Sync = {
     if (!this.connected || !this.admitted || this.isHost) return true;
     return this.customAudioRight(name) === true;
   },
-  // what happens when the local user tries to add a custom sound
   audioAction() {
     if (!this.connected || !this.admitted || this.isHost) return 'allow';
     const r = this.customAudioRight(this.me.name);
     return r === true ? 'allow' : (r === 'approve' ? 'approve' : 'block');
   },
-  // Gate for entry points that can't route through approval (the sampler).
-  // Returns true if the caller must STOP.
   blockCustomAudio() {
     const a = this.audioAction();
     if (a === 'allow') return false;
@@ -285,9 +242,6 @@ const Sync = {
     this.room = room;
     this.isHost = asHost;
     this.admitted = asHost;
-    // the host is the source of truth from the start; a joiner must NOT broadcast
-    // its own (possibly empty) project until it has received the room's state once,
-    // otherwise it wipes everyone's work the moment it connects.
     this.synced = asHost;
     this.started = false;
     if (settings) this.settings = Object.assign({ allowLate: true, approve: false, maxPlayers: 100, allowMic: true, allowCustomAudio: true, approveAudio: false, perms: {} }, settings);
@@ -318,13 +272,10 @@ const Sync = {
     }
     this.wireSocket();
 
-    // the free relay sleeps when idle; a cold start was measured at 13 seconds,
-    // so say so rather than leaving the user staring at nothing
     clearTimeout(this._slowTimer);
     this._slowTimer = setTimeout(() => {
       if (!this.connected) this.showBanner('server_sleep', 'working');
     }, 3000);
-    // and if it never comes up at all, say that too instead of hanging forever
     clearTimeout(this._openTimer);
     this._openTimer = setTimeout(() => {
       if (this.connected) return;
@@ -342,15 +293,12 @@ const Sync = {
       this.send({ type: 'join', room });
       if (asHost) {
         this.setStatus('online');
-        // never surface the code here (streamers) - it only appears in the reveal control
         toast(tr('mp_room_created', 'Room created'), 'green');
         this.warnIfHostOutdated();
         this.afterAdmit();
       } else {
         this.setStatus('connecting');
         this.send({ type: 'knock', id: this.me.id, name: this.me.name, iid: this.installId(), gz: this.gzSupported ? 1 : 0, ver: App.version });
-        // nobody answers = the code goes nowhere. Silent disconnect, or the
-        // "Left the room" toast instantly buries the "Invalid Code" one.
         this.knockTimer = setTimeout(() => {
           if (!this.admitted) {
             this.disconnect(true);
@@ -362,16 +310,7 @@ const Sync = {
     };
   },
 
-  // shared wiring for first connect and reconnects
   // ---------- compressed state frames ----------
-  // A state message re-serializes the whole project on every change, which made
-  // it ~95% of the relay bill (measured: 31 KB per edit, 1.9 KB gzipped, 16x).
-  // Compressed frames are BINARY with a magic prefix, so an old client can
-  // never half-parse one as JSON; and they are only sent at all when everyone
-  // in the room has advertised support (via presence and knock), so an old
-  // client never receives one in the first place. The rev counter already
-  // rejects stale states, which also covers async compressions finishing out
-  // of order.
   GZ_MAGIC: [0x46, 0x5a, 0x30, 0x31],   // "FZ01"
   gzSupported: typeof CompressionStream !== 'undefined' && typeof DecompressionStream !== 'undefined',
   knockGz: new Map(),                    // id -> gz flag from a knock we have seen
@@ -379,8 +318,6 @@ const Sync = {
   canGz() {
     if (!this.gzSupported || !this.peers.size) return false;
     for (const [, p] of this.peers) if (!p.gz) return false;
-    // someone announced themselves but has not shown up in presence yet: until
-    // they do, only send what we know they can read
     for (const [, g] of this.knockGz) if (!g) return false;
     return true;
   },
@@ -428,7 +365,6 @@ const Sync = {
         this.send({ type: 'pong', to: msg.id, t: msg.t });
         return;
       }
-      // the relay itself refusing something, rather than another player
       if (msg.type === 'relay_refused') {
         this.onRefused(msg.reason);
         return;
@@ -436,15 +372,11 @@ const Sync = {
       this.onMessage(msg);
     };
     this.ws.onclose = (ev) => {
-      // An unexpected drop (relay hiccup, instance swap on deploy, sleep, wifi
-      // blip) tries to get back in quietly instead of dumping the user out.
       if (this._manualClose) { this.teardown(); return; }
       if (this.room) this.tryReconnect(ev);
       else this.teardown();
     };
     this.ws.onerror = () => {
-      // onerror always precedes onclose; let onclose decide what to do, but
-      // stop pretending the connection is fine in the meantime
       this.connected = false;
       this.setStatus('connecting');
       this.updatePill();
@@ -452,10 +384,6 @@ const Sync = {
   },
 
   // ---------- reconnect ----------
-  // Sized for the real failure modes: a Render cold start took 13s when
-  // measured, and an instance swap drops everyone at once, so a handful of
-  // 1.5s attempts would give up before the server is even awake. This backs
-  // off up to 30s between tries and keeps trying for about four minutes.
   MAX_RETRIES: 14,
 
   retryDelay() {
@@ -463,8 +391,6 @@ const Sync = {
     return base + Math.random() * 600;   // jitter, so 100 clients don't all hit at once
   },
 
-  // a socket we are done with must be silenced, not just abandoned: a half-dead
-  // one still delivers messages and would duplicate everything it handles
   killSocket(sock) {
     if (!sock) return;
     sock.onopen = sock.onmessage = sock.onclose = sock.onerror = null;
@@ -482,10 +408,7 @@ const Sync = {
     clearInterval(this.periodTimer); clearInterval(this.presenceTimer);
     clearInterval(this.healthTimer); this.healthTimer = null;
     this.updatePill();
-    // whatever happens next, the project is not lost
     this.saveRecovery();
-    // give the host a grace window before anyone elects a replacement, since
-    // the host is probably reconnecting through this exact same code path
     this.hostGraceUntil = Date.now() + 45000;
 
     if (!navigator.onLine) this.showBanner('offline', 'working');
@@ -499,8 +422,6 @@ const Sync = {
     clearTimeout(this.retryTimer); this.retryTimer = null;
     if (this._manualClose || !this.room) return;
 
-    // no point burning attempts while the machine has no internet at all;
-    // the 'online' listener kicks this straight back off
     if (!navigator.onLine) {
       this.showBanner('offline', 'working');
       this.retryTimer = setTimeout(() => this.attemptReconnect(), 2000);
@@ -524,8 +445,6 @@ const Sync = {
     this.ws = sock;
     this.wireSocket();
 
-    // an attempt that neither opens nor closes (silently blackholed) must not
-    // stall the whole loop
     const giveUpOnThis = setTimeout(() => {
       if (sock.readyState === 1) return;
       try { sock.onclose = null; sock.close(); } catch (e) {}
@@ -540,7 +459,6 @@ const Sync = {
 
     sock.onopen = () => {
       clearTimeout(giveUpOnThis);
-      // keep the same identity, so from everyone else's side we never left
       this.connected = true;
       this.lastRx = this.lastTx = Date.now();
       this.room = room; this.me = me; this.isHost = wasHost;
@@ -558,7 +476,6 @@ const Sync = {
         clearTimeout(this.knockTimer);
         this.knockTimer = setTimeout(() => {
           if (this.admitted) return;
-          // socket is up but nobody answered: the room itself is gone
           if (this.retryTries >= this.MAX_RETRIES) { this.giveUp('room_gone'); return; }
           try { this.ws.close(); } catch (e) {}
         }, 12000);
@@ -566,7 +483,6 @@ const Sync = {
     };
   },
 
-  // called from 'admit' once a reconnecting guest is back in
   reconnectSucceeded() {
     this.retryTries = 0;
     clearTimeout(this.retryTimer); this.retryTimer = null;
@@ -584,9 +500,6 @@ const Sync = {
   },
 
   // ---------- health ----------
-  // A WebSocket can sit at readyState 1 long after the other end is gone
-  // (instance swap, NAT timeout, laptop lid). Nothing tells us; we have to
-  // notice ourselves, or the user sits in a room that stopped existing.
   startHealth() {
     clearInterval(this.healthTimer);
     this.healthTimer = setInterval(() => this.checkHealth(), 4000);
@@ -600,11 +513,9 @@ const Sync = {
       if (!this._manualClose && this.room) this.tryReconnect();
       return;
     }
-    // keep the free instance from idling out, and give us a liveness signal
     if (now - this.lastTx > 15000) this.send({ type: 'ping', id: this.me && this.me.id, t: now });
 
     const silent = now - this.lastRx;
-    // alone in the room there is nobody to answer, so silence is normal
     const expectReplies = this.peers.size > 0;
     if (expectReplies && silent > 45000) {
       this.fail('timeout', null, { kind: 'working' });
@@ -615,7 +526,6 @@ const Sync = {
     if (q !== this.quality) { this.quality = q; this.updatePill(); }
   },
 
-  // A lobby death must never cost anyone their work.
   saveRecovery() {
     try {
       if (!S || !S.tracks || !S.tracks.length) return;
@@ -627,8 +537,6 @@ const Sync = {
 
   clearRecovery() { try { localStorage.removeItem('fabu.jamRecovery'); } catch (e) {} },
 
-  // If the app died while the room was falling apart, the work is still here.
-  // Only offer it when there is nothing to lose by asking (empty project).
   offerRecovery() {
     let r;
     try { r = JSON.parse(localStorage.getItem('fabu.jamRecovery') || 'null'); } catch (e) { return; }
@@ -662,18 +570,12 @@ const Sync = {
     clearInterval(this.periodTimer);
     clearInterval(this.presenceTimer);
     this.periodTimer = setInterval(() => {
-      // apply a deferred remote state once the user stops dragging/typing
       if (this.pending && !this.busy && !this.typingBusy()) {
         const m = this.pending; this.pending = null;
         this.applyRemote(m.state, m.samples);
       }
       this.broadcast();
     }, 150);
-    // Presence is also fanned out to everyone, so it is quadratic too. Measured
-    // against the real relay, 100 players heartbeating every 2s was ~4,950
-    // messages a second, more than three times what all the cursors cost. It
-    // slows down as the room fills; the peer timeout grows with it so nobody
-    // gets swept for being quiet.
     this._lastPresence = 0;
     this.presenceTimer = setInterval(() => {
       const now = Date.now();
@@ -732,8 +634,6 @@ const Sync = {
       this.lastTx = Date.now();
       return true;
     } catch (e) {
-      // the socket claims to be open but will not take messages: our edits are
-      // silently not reaching anyone, which is the worst way for this to fail
       if (++this.sendFails === 3) this.fail('send_fail', null, { kind: 'working' });
       if (this.sendFails > 6) { try { this.ws.close(); } catch (e2) {} }
       return false;
@@ -741,28 +641,17 @@ const Sync = {
   },
 
   // ---------- message handling ----------
-
   onMessage(m) {
-    // Never process our own message. The relay excludes the sending SOCKET, not
-    // the sending user, so during a reconnect the old socket (not yet reaped by
-    // the server) receives what the new socket sends, and we would file
-    // ourselves as a second player, complete with our own host crown.
     if (m.id && this.me && m.id === this.me.id) return;
-    // a kicked client that simply ignores the kick still gets ignored here
     if (this.isHost && m.id && this.kicked && this.kicked.has(m.id)) return;
     if (this.isHost && m.from && this.kicked && this.kicked.has(m.from)) return;
     switch (m.type) {
       case 'state': {
         if (!this.admitted) return;
-        // The host is the authority on the project. Without this any client,
-        // including a modified one that skips its own permission checks, could
-        // broadcast whatever it liked and everyone would apply it.
         if (this.isHost) {
           const why = this.judgeState(m);
           if (why) { this.rejectState(m, why); return; }
         }
-        // a state that raced through the relay slower than a newer one must not
-        // roll the project back (this was "you place something and it disappears")
         if (m.rev && m.rev < this.rev) return;
         if (m.rev) this.rev = m.rev;
         if (this.busy || this.typingBusy()) { this.pending = m; return; }
@@ -771,9 +660,6 @@ const Sync = {
       }
 
       case 'presence': {
-        // Presence is the other way into the peer list, so it gets the same
-        // check the knock does. Otherwise being removed only lasts until the
-        // next presence tick.
         if (this.isHost && m.id !== this.me.id && this.banCheck(m)) {
           this.kicked.add(m.id);
           this.send({ type: 'kick', to: m.id, until: (m.iid && this.banInstalls[m.iid]) || 0 });
@@ -788,9 +674,6 @@ const Sync = {
           this.started = !!m.started;
         }
         if (m.host) this.hostSeen();   // a host is alive, so stop the "host gone" wait
-        // two hosts can briefly coexist after a false host-loss; the earliest
-        // joiner keeps the crown and everyone else steps down, so we self-heal
-        // instead of getting stuck with two hosts.
         if (m.host && this.isHost && m.id !== this.me.id) {
           const iLose = (m.joinTs < this.me.joinTs) || (m.joinTs === this.me.joinTs && m.id < this.me.id);
           if (iLose) {
@@ -810,7 +693,6 @@ const Sync = {
       }
 
       case 'relay_hello':
-        // the relay introducing the connection to itself, not a peer message
         this._relaySid = m.sid; this._relayPk = m.pk;
         return;
 
@@ -843,12 +725,10 @@ const Sync = {
         break;
 
       case 'act':
-        // a guest reporting something notable they did, for the host's history
         if (this.isHost && m.entry && m.entry.name) this.pushHistory(m.entry);
         break;
 
       case 'soundban':
-        // the host told this person their sound privileges were pulled
         if (m.to === this.me.id) this.showSoundBanNotice(m.until);
         break;
 
@@ -866,9 +746,6 @@ const Sync = {
 
       case 'cursor':
         if (m.id !== this.me.id) {
-          // name and colour are not on the wire any more: presence already told
-          // us both, and repeating them on the highest-frequency message in the
-          // app was most of its size. Fall back only if a cursor beats presence.
           const p = this.peers.get(m.id);
           const prev = this.cursors.get(m.id);
           const name = m.name || (p && p.name) || (prev && prev.name) || '';
@@ -903,8 +780,6 @@ const Sync = {
         break;
 
       case 'migrate':
-        // host is rotating the room code: move to the new channel but stay in.
-        // Only trust it from the known host (a peer flagged host in our map).
         if (!this.isHost && m.to && m.from) {
           const src = this.peers.get(m.from);
           if (src && src.host && m.to !== this.room) {
@@ -934,10 +809,6 @@ const Sync = {
   },
 
   // ---------- host-side validation ----------
-  // Everything a guest is "not allowed" to do is enforced on the guest's own
-  // machine, which is only a speed bump: the app is readable JavaScript. So the
-  // host checks incoming project states too, and undoes anything that breaks a
-  // rule. Returns a reason string when the state should be refused.
   judgeState(m) {
     if (!this.isHost) return null;
     const from = m.from;
@@ -945,13 +816,10 @@ const Sync = {
     const peer = from ? this.peers.get(from) : null;
     const name = (peer && peer.name) || m.by;
     if (!name || name === this.me.name) return null;   // our own / unattributable
-    // sending audio they are not allowed to add
     if (m.samples && Object.keys(m.samples).length && this.customAudioRight(name) !== true) return 'audio';
     return null;
   },
 
-  // refuse it and immediately re-assert our own state, so the change is undone
-  // for everyone within one broadcast cycle
   rejectState(m, why) {
     const who = ((this.peers.get(m.from) || {}).name) || m.by || '?';
     this.rev = Math.max(this.rev, m.rev || 0) + 1;
@@ -966,18 +834,12 @@ const Sync = {
     }
   },
 
-  // Is this knock from somebody the host already removed? Returns the deny
-  // reason, or null to let them through.
   banCheck(m) {
     const now = Date.now();
     const iid = m.iid || null, pk = m._pk || null;
     if (iid && this.allowInstalls[iid]) return null;   // the host let this one back in
     if (iid && this.banInstalls[iid] > now) return 'banned';
 
-    // Same connection as somebody who was removed, but a different install:
-    // storage was cleared, or a fresh browser was opened. Refusing costs a
-    // housemate on the same router one round trip, and the host is told about
-    // it by name so they can wave them through.
     const c = pk ? this.banConns[pk] : null;
     if (c && c.until > now && iid && !c.iids.includes(iid)) {
       c.iids.push(iid);
@@ -987,7 +849,6 @@ const Sync = {
     return null;
   },
 
-  // Record who was removed, in a way a rename cannot undo.
   rememberBan(peer, until) {
     if (peer.iid) {
       this.banInstalls[peer.iid] = until;
@@ -1002,7 +863,6 @@ const Sync = {
     }
   },
 
-  // Tell the host, once, that a removal was worked around, and offer the undo.
   noteEvasion(name, iid, wasName) {
     this.pushHistory({ ts: Date.now(), name: name || 'someone', action: 'evaded', what: wasName || '' });
     if (this._evadeSeen && this._evadeSeen.has(iid)) return;
@@ -1014,7 +874,6 @@ const Sync = {
     this.renderPanel();
   },
 
-  // the host decided the block was collateral: let that install back in
   allowEvader(iid) {
     if (!this.isHost || !iid) return;
     this.allowInstalls[iid] = true;
@@ -1027,21 +886,11 @@ const Sync = {
     if (this.kicked && this.kicked.has(m.id)) { this.send({ type: 'deny', to: m.id, reason: 'banned' }); return; }
     const why = this.banCheck(m);
     if (why) { this.send({ type: 'deny', to: m.id, reason: why, until: (m.iid && this.banInstalls[m.iid]) || 0 }); return; }
-    // Everyone in a room has to be on the same build. The project format and
-    // the sync protocol both move between versions, so a mismatched client
-    // does not fail cleanly, it corrupts things quietly. Send our version back
-    // so they can be told exactly what they need.
     if (App.cmpVersion(m.ver || '0.0.0', App.version) !== 0) {
       this.send({ type: 'deny', to: m.id, reason: 'version', hostVer: App.version });
-      // A client older than 1.2.3 has no code for this and will only see a
-      // generic "the host declined your request". Nothing we send can change
-      // that: every string it shows comes from its own language file. So tell
-      // the HOST instead, who is usually the one talking to them anyway.
       this.noteVersionRefusal(m.name, m.ver);
       return;
     }
-    // someone we already know is just reconnecting: let them straight back in,
-    // no approval round-trip, no "X joined" spam
     if (this.peers.has(m.id)) {
       const ex = this.peers.get(m.id);
       if (m.iid) ex.iid = m.iid;
@@ -1081,9 +930,7 @@ const Sync = {
     this.renderRequests();
   },
 
-  // ---------- custom-audio approval (host reviews sounds from guests) ----------
-
-  // guest: hand the files to the host for review instead of adding them ourselves
+  // ---------- custom-audio approval ----------
   async requestAudioFiles(files, place) {
     const hostEntry = [...this.peers].find(([, p]) => p.host);
     const hostId = hostEntry ? hostEntry[0] : null;
@@ -1104,7 +951,6 @@ const Sync = {
     if (sent) toast(tr('mp_audio_sent', 'Sent to the host for review'));
   },
 
-  // host: a review request arrived
   async handleAudioReq(m) {
     if (!m.sample || !m.sample.data) return;
     const ov = this.permOverride(m.name);
@@ -1283,19 +1129,16 @@ const Sync = {
     });
   },
 
-  // revoke a user's custom-audio right for a while (0 = until the room closes)
   setAudioBan(name, durMs) {
     if (!this.settings.perms) this.settings.perms = {};
     const prev = this.settings.perms[name] || {};
     const until = durMs > 0 ? Date.now() + durMs : 0;
     this.settings.perms[name] = Object.assign({}, prev, { customAudio: false, customAudioUntil: until });
     this.sendPresence();
-    // tell them directly, so it isn't a silent "why can't I add anything?"
     for (const [id, p] of this.peers) if (p.name === name) this.send({ type: 'soundban', to: id, until });
     toast(tr('mp_audio_banned', '{name} can no longer add sounds', { name }), 'red');
   },
 
-  // banned person's own notice: what happened and for how long
   showSoundBanNotice(until) {
     const old = document.getElementById('soundBanModal');
     if (old) old.remove();
@@ -1317,7 +1160,6 @@ const Sync = {
     wrap.querySelector('button').addEventListener('click', () => wrap.remove());
   },
 
-  // host: let expired audio bans lapse and tell everyone
   pruneAudioBans() {
     if (!this.isHost || !this.settings.perms) return;
     const now = Date.now();
@@ -1332,12 +1174,7 @@ const Sync = {
     if (changed) this.sendPresence();
   },
 
-  // ---------- change history (host sees who did what) ----------
-  // Only the notable, hard-to-undo things: adding or deleting clips, tracks and
-  // sounds. Note edits, parameter tweaks and undo/redo are far too noisy.
-
-  // called locally whenever something notable happens; the host records it,
-  // everyone else reports it up so the host's log is complete
+  // ---------- change history ----------
   logAction(action, what) {
     if (!this.connected || !this.admitted || !this.me) return;
     const entry = { ts: Date.now(), name: this.me.name, action, what: String(what || '').slice(0, 60) };
@@ -1407,11 +1244,9 @@ const Sync = {
     }
   },
 
-  // ---------- manage people (host): permissions + bans ----------
-
+  // ---------- manage people (host) ----------
   openManage() { this.renderManage(true); },
 
-  // set or clear a per-user permission override (mic / customAudio)
   setPerm(name, key, val) {
     if (!this.isHost) return;
     if (!this.settings.perms) this.settings.perms = {};
@@ -1429,8 +1264,6 @@ const Sync = {
   },
   liftRoomBan(name) {
     if (this.bans) delete this.bans[name];
-    // The name ban is the visible one, but the identity bans are the ones that
-    // actually hold, so lifting has to reach them as well.
     for (const [id, p] of this.peers) { if (p.name === name && p.iid) delete this.banInstalls[p.iid]; }
     for (const iid of Object.keys(this.banInstalls)) {
       if (this._banNames && this._banNames[iid] === name) delete this.banInstalls[iid];
@@ -1462,8 +1295,6 @@ const Sync = {
     }
     const filter = ((wrap.querySelector('#mgSearch') || {}).value || '').toLowerCase();
     const now = Date.now();
-    // build the shell once; re-rendering it on every keystroke stole focus from
-    // the search box after each letter
     const fresh = !wrap.querySelector('#mgList');
     const inRoom = new Set([this.me && this.me.name, ...[...this.peers.values()].map(p => p.name)]);
     const names = new Set([...inRoom]);
@@ -1529,15 +1360,11 @@ const Sync = {
 
   sweep() {
     const now = Date.now();
-    // knock entries resolve into presence or the knocker never joined; either
-    // way they must not gate compression forever
     if (this.knockGz.size && !this._knockSweep) this._knockSweep = now;
     if (this._knockSweep && now - this._knockSweep > 30000) { this.knockGz.clear(); this._knockSweep = 0; }
     if (!this.knockGz.size) this._knockSweep = 0;
     let lostHost = false, changed = false;
     for (const [id, p] of this.peers) {
-      // presence beats every 2s; only declare someone gone after ~6 missed beats
-      // so a laggy connection doesn't trigger a phantom "host left".
       if (now - p.lastSeen > this.peerTimeout()) {
         this.peers.delete(id);
         this.cursors.delete(id);
@@ -1551,9 +1378,6 @@ const Sync = {
     if (changed) { this.renderPanel(); this.renderCursors(); }
   },
 
-  // Show the host who bounced and why, with a ready-made sentence they can
-  // paste to the person. Repeats from the same name are folded together so a
-  // client retrying does not spam the room owner.
   noteVersionRefusal(name, theirVer) {
     const who = name || tr('mp_someone', 'Someone');
     const ver = theirVer && /^\d/.test(theirVer) ? theirVer : tr('ver_pre123', 'an older version');
@@ -1587,9 +1411,6 @@ const Sync = {
     });
   },
 
-  // Turned away for being on a different build. Which advice is right depends
-  // on which way the mismatch goes, and on whether the HOST is current: telling
-  // someone to update when the host is the one behind would not help them.
   async showVersionMismatch(hostVer) {
     const mine = App.version;
     const newer = App.cmpVersion(mine, hostVer) > 0;
@@ -1597,7 +1418,6 @@ const Sync = {
     const params = { mine, host: hostVer };
 
     if (newer) {
-      // nothing they did wrong, and there is no "update" that helps
       const go = await App.askChoice({
         title: tr('ver_title', 'Version mismatch!'),
         body: tr('ver_newer', "You're on a newer version of fabu ({mine}) than the host ({host}). This is not your fault! You can download an older version here:", params) + ' ' + App.RELEASES_URL,
@@ -1610,8 +1430,6 @@ const Sync = {
       return;
     }
 
-    // they are behind. If the host is on the latest, "update" is the right
-    // advice; if the host is also behind, they need that exact version.
     const hostIsLatest = latest ? App.cmpVersion(hostVer, latest) >= 0 : true;
     const go = await App.askChoice({
       title: tr('ver_title', 'Version mismatch!'),
@@ -1626,8 +1444,6 @@ const Sync = {
     if (go === 'go') App.openReleases(hostIsLatest ? null : hostVer);
   },
 
-  // Creating a room on an old build strands anyone who is up to date, so say so
-  // before they wonder why nobody can get in.
   async warnIfHostOutdated() {
     const latest = await App.latestVersion();
     if (!latest || App.cmpVersion(App.version, latest) >= 0) return;
@@ -1642,15 +1458,10 @@ const Sync = {
   },
 
   // ---------- host loss & handover ----------
-  // No wheel, no ceremony. The host dropping is a problem, not a game show:
-  // say what happened, wait in case they are just reconnecting, then hand over
-  // quietly to the earliest joiner (deterministic, so every client agrees).
-
+  // took forever to get right, be careful in here
   hostLost() {
     if (!this.admitted || this._electing) return;
 
-    // The host is very likely mid-reconnect, especially on a cold relay. Do not
-    // steal the room out from under them the second their presence goes stale.
     if (Date.now() < this.hostGraceUntil) return;
     if (!this._hostWait) {
       this._hostWait = Date.now();
@@ -1667,7 +1478,6 @@ const Sync = {
     const winner = cands[0];
 
     if (cands.length === 1) {
-      // everyone else is gone too: the room no longer exists
       this._electing = false;
       this.saveRecovery();
       this.disconnect(true);
@@ -1687,14 +1497,12 @@ const Sync = {
     this.renderPanel();
   },
 
-  // the old host came back (or someone re-asserted): stop waiting
   hostSeen() {
     this._hostWait = 0;
     if (this.banner && this.banner.classList.contains('mpb-working')) this.hideBanner();
   },
 
   // ---------- kick ----------
-
   kick(peerId, durationMs) {
     if (!this.isHost) return;
     const p = this.peers.get(peerId);
@@ -1712,9 +1520,6 @@ const Sync = {
     this.renderCursors();
   },
 
-  // rotate the room code: everyone here moves to the new channel, the leaked
-  // code stops admitting anyone new. (Relay stays a dumb broadcaster; members
-  // re-join the new channel on the host's signal.)
   cycleCode() {
     if (!this.isHost) return;
     const newCode = this.generateCode();
@@ -1725,7 +1530,6 @@ const Sync = {
     toast(tr('mp_code_cycled', 'New room code set. The old one no longer works.'), 'green');
   },
 
-  // remove everyone except the given ids (the host is always kept)
   kickAllExcept(keepIds, durationMs) {
     if (!this.isHost) return;
     const keep = new Set(keepIds);
@@ -1764,8 +1568,7 @@ const Sync = {
     wrap.querySelector('button').addEventListener('click', () => wrap.remove());
   },
 
-  // ---------- locks (sliders, clips, notes) ----------
-
+  // ---------- locks ----------
   lockedBy(key) {
     const l = this.locks.get(key);
     return l && l.id !== this.me?.id ? l : null;
@@ -1783,14 +1586,12 @@ const Sync = {
   },
 
   updateLockVisuals() {
-    // sliders
     for (const el of document.querySelectorAll('[data-lk]')) {
       const l = this.lockedBy(el.dataset.lk);
       el.disabled = !!l;
       el.classList.toggle('locked', !!l);
       if (l) el.dataset.tip = tr('mp_locked_by', '{name} is using this', { name: l.name });
     }
-    // clips
     for (const el of document.querySelectorAll('.clip')) {
       const l = this.lockedBy('clip:' + el.dataset.clipId);
       el.classList.toggle('mp-locked', !!l);
@@ -1799,18 +1600,12 @@ const Sync = {
   },
 
   // ---------- live cursors ----------
-
   viewportData() {
     const sc = document.getElementById('tlScroll');
     return { sl: sc ? sc.scrollLeft : 0, st: sc ? sc.scrollTop : 0, zoom: UI.zoom };
   },
 
   // ---------- cursor rate control ----------
-  // The relay fans every message out to everyone else, so cursor traffic is
-  // quadratic: N players each sending at 1/T costs N*(N-1)/T messages per
-  // second server-side. At 100 players and 60ms that is ~165,000/s, which no
-  // instance survives. So instead of a fixed rate, spend a fixed budget: pick
-  // the interval that keeps the relay under CURSOR_BUDGET messages a second.
   CURSOR_BUDGET: 1500,   // relay messages/sec allowed for cursor chatter
   CURSOR_MAX_ROOM: 40,   // past this, cursors cost more than they are worth
 
@@ -1818,21 +1613,16 @@ const Sync = {
     const n = this.peers.size + 1;
     if (n > this.CURSOR_MAX_ROOM) return 0;          // 0 = do not send at all
     let ms = (n * (n - 1)) / this.CURSOR_BUDGET * 1000;
-    // a struggling connection is not the moment to push more packets
     if (this.quality === 'slow') ms *= 2;
     else if (this.quality === 'bad') ms *= 4;
     return clamp(ms, 55, 1000);
   },
 
-  // tell people once why their cursors vanished, instead of letting it look broken
-  // heartbeat every 2s in a small room, easing to 8s in a full one
   presenceInterval() {
     const n = this.peers.size + 1;
     return clamp(2000 * Math.ceil(n / 20), 2000, 8000);
   },
 
-  // how long a peer may go unheard before we treat them as gone. Always a few
-  // heartbeats' worth, or slowing the heartbeat would sweep everybody.
   peerTimeout() { return this.presenceInterval() * 3 + 3000; },
 
   noteCursorsOff() {
@@ -1843,7 +1633,6 @@ const Sync = {
 
   initCursors() {
     let lastC = 0, lastV = 0;
-    // cursors follow the mouse anywhere in the window, not just the timeline
     document.addEventListener('mousemove', (e) => {
       if (!this.admitted) return;
       const iv = this.cursorInterval();
@@ -1853,9 +1642,6 @@ const Sync = {
       lastC = now;
       const r = Timeline.lanes.getBoundingClientRect();
       const overCanvas = e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
-      // Every byte here is multiplied by the number of people in the room, so
-      // this carries only what cannot be worked out at the other end, rounded
-      // to the precision a cursor is actually drawn at.
       const r3 = (v) => Math.round(v * 1000) / 1000;
       const msg = {
         type: 'cursor', id: this.me.id,
@@ -1863,12 +1649,9 @@ const Sync = {
         fx: r3(e.clientX / window.innerWidth), fy: r3(e.clientY / window.innerHeight)
       };
       if (overCanvas) { msg.beat = r3((e.clientX - r.left) / UI.zoom); msg.y = Math.round(e.clientY - r.top); }
-      // viewport data is only used to follow someone's scroll; in a big room
-      // it is dead weight on every single packet
       if (this.peers.size < 12) Object.assign(msg, this.viewportData());
       this.send(msg);
     });
-    // keep followers in sync when we scroll/zoom without moving the mouse
     const sc = document.getElementById('tlScroll');
     if (sc) sc.addEventListener('scroll', () => {
       if (!this.admitted) return;
@@ -1881,10 +1664,6 @@ const Sync = {
     });
   },
 
-
-  // Reuse one element per cursor so the CSS transition can glide it. Canvas
-  // cursors live in #cursorLayer (content coords); cursors over the rest of the
-  // UI live in #cursorLayerWin (fixed, window coords).
   renderCursors() {
     let layer = document.getElementById('cursorLayer');
     if (!layer) { layer = document.createElement('div'); layer.id = 'cursorLayer'; Timeline.lanes.appendChild(layer); }
@@ -1924,13 +1703,9 @@ const Sync = {
     }
   },
 
-  // Everyone's playhead, in their own colour, semi-transparent, while they play.
   sendPlayhead(beat, playing) {
     if (!this.admitted) return;
     const now = performance.now();
-    // a moving playhead is the same quadratic cost as a moving cursor, so it
-    // rides the same budget. Start/stop always goes through: that is a state
-    // change, not a stream, and people need to see it.
     if (playing) {
       const iv = Math.max(80, this.cursorInterval());
       if (!this.cursorInterval()) return;
@@ -1978,8 +1753,7 @@ const Sync = {
     }
   },
 
-  // ---------- state sync (same protocol as before) ----------
-
+  // ---------- state sync ----------
   usedSampleIds() {
     const used = new Set();
     for (const t of S.tracks) for (const c of t.clips) if (c.sampleId) used.add(c.sampleId);
@@ -2012,9 +1786,6 @@ const Sync = {
     this._sizeWarned = false;
     this.rev += 1;
     this.lastSent = stateJson;
-    // Small messages are not worth the header; big ones shrink ~16x. rev is
-    // already claimed synchronously above, so a slower compression finishing
-    // after a newer one is rejected by the receiver's rev check.
     if (json.length > 1024 && this.canGz()) {
       this.gzip(json).then((gz) => {
         if (!this.ws || this.ws.readyState !== 1) return;
@@ -2065,9 +1836,6 @@ const Sync = {
   applyRemote(stateObj, samples) {
     const incoming = JSON.stringify(stateObj);
     const identical = incoming === JSON.stringify(S);
-    // we now hold the room's state, so we're allowed to broadcast; and record it
-    // as "last sent" so we never bounce this exact state back (that echo, times
-    // every peer, was the source of the lag and the disappearing edits).
     this.synced = true;
     this.lastSent = incoming;
     this.applyingRemote = true;
@@ -2075,7 +1843,6 @@ const Sync = {
     try {
       this.applyRemoteState(stateObj, identical);
     } catch (e) {
-      // one bad state from a peer must never take the whole client down
       console.warn('applyRemote failed', e);
     }
     this.applyingRemote = false;
@@ -2106,7 +1873,6 @@ const Sync = {
   },
 
   // ---------- players panel ----------
-
   setStatus(state) {
     const topBtn = document.getElementById('btnJam');
     if (topBtn) topBtn.classList.toggle('rec-on', state === 'online' && this.admitted);
@@ -2147,7 +1913,6 @@ const Sync = {
       return;
     }
 
-    // connected + admitted
     const players = [{ id: this.me.id, name: this.me.name, color: this.me.color, host: this.isHost, me: true }];
     for (const [id, peer] of this.peers) players.push({ id, name: peer.name, color: peer.color, host: peer.host });
     players.sort((a, b) => (b.host ? 1 : 0) - (a.host ? 1 : 0));
@@ -2177,7 +1942,6 @@ const Sync = {
       </div>` : ''}
       <div class="jam-row"><button id="jamLeave" class="fbtn danger" style="flex:1">${tr('jam_disconnect', 'Leave')}</button></div>`;
 
-    // room code: click to reveal, again to copy, again to hide
     const codeBtn = p.querySelector('#jamCode');
     let codeState = 0; // 0 hidden, 1 revealed, 2 copied
     codeBtn.addEventListener('click', () => {
@@ -2188,7 +1952,6 @@ const Sync = {
     const cyc = p.querySelector('#jamCycle');
     if (cyc) cyc.addEventListener('click', () => this.cycleCode());
 
-    // players
     const list = p.querySelector('#jamPlayers');
     if (!this.selPlayers) this.selPlayers = new Set();
     for (const pl of players) {
@@ -2203,7 +1966,6 @@ const Sync = {
         row.dataset.tip = tr('mp_player_tip', 'Shift-click to select, right-click for options');
         row.addEventListener('click', (e) => {
           if (e.target.closest('.jam-kick')) return;
-          // host: shift-click multi-selects players for "kick all except"
           if (e.shiftKey) {
             if (this.selPlayers.has(pl.id)) this.selPlayers.delete(pl.id); else this.selPlayers.add(pl.id);
             this.renderPanel();
@@ -2255,7 +2017,6 @@ const Sync = {
         ? tr('mp_players_tip', 'Players in this room')
         : tr('mp_quality_poor', 'Connection is struggling. Your changes may be delayed.');
     } else if (this.room) {
-      // mid-reconnect: keep the pill visible so the room does not look gone
       pill.classList.remove('hidden');
       pill.innerHTML = `<span class="jam-dot" style="background:var(--red)"></span> …`;
       pill.dataset.tip = tr('mp_reconnecting', 'Connection lost, reconnecting…');
@@ -2290,7 +2051,6 @@ const Sync = {
     window.addEventListener('mousedown', close, true);
   },
 
-  // right-click a player (host): kick-all-except, with shift multi-select
   openPlayerMenu(x, y, id, name) {
     const old = document.getElementById('kickMenu');
     if (old) old.remove();
@@ -2324,7 +2084,6 @@ const Sync = {
   },
 
   // ---------- join requests (host) ----------
-
   openRequests() {
     this.renderRequests(true);
   },
@@ -2350,9 +2109,6 @@ const Sync = {
       </div>`;
     const list = wrap.querySelector('#reqList');
 
-    // Blocked rejoins sit above the ordinary requests. These are people the
-    // room refused because somebody on their connection was removed, which is
-    // usually the right call and occasionally a housemate.
     for (const e of (this.pendingEvades || [])) {
       const row = document.createElement('div');
       row.className = 'req-row req-blocked';
@@ -2395,8 +2151,7 @@ const Sync = {
   }
 };
 
-// ---------- Home-menu multiplayer flow ----------
-
+// ---------- home-menu multiplayer flow ----------
 const MP = {
   openMenu() {
     Auth.require(() => {
@@ -2508,7 +2263,6 @@ const MP = {
   }
 };
 
-// broadcast snappily right after discrete edits (periodic timer covers drags)
 let _syncTimer = null;
 function _wrapUndo(name) {
   const orig = Undo[name].bind(Undo);
@@ -2521,7 +2275,6 @@ function _wrapUndo(name) {
 }
 ['push', 'undo', 'redo'].forEach(_wrapUndo);
 
-// the "session started" flag flips the first time the host plays
 (function wrapPlay() {
   const orig = Engine.play.bind(Engine);
   Engine.play = function (...args) {
@@ -2530,18 +2283,15 @@ function _wrapUndo(name) {
   };
 })();
 
-// pause applying remote updates while the local user is dragging something
 document.addEventListener('mousedown', () => { Sync.busy = true; }, true);
 document.addEventListener('mouseup', () => {
   Sync.busy = false;
-  // if they clicked into a text field, hold the update until they're done typing
   if (Sync.pending && !Sync.typingBusy()) {
     const m = Sync.pending; Sync.pending = null;
     Sync.applyRemote(m.state, m.samples);
   }
 }, true);
 
-// slider locks: any range input carrying data-lk announces while dragged
 document.addEventListener('pointerdown', (e) => {
   const el = e.target;
   if (!el.matches || !el.matches('input[type="range"][data-lk]')) return;
@@ -2555,9 +2305,6 @@ document.addEventListener('pointerdown', (e) => {
 window.addEventListener('beforeunload', () => { if (Sync.connected) Sync.disconnect(true); });
 window.addEventListener('DOMContentLoaded', () => { try { Sync.offerRecovery(); } catch (e) {} });
 
-// The machine losing wifi looks identical to the server dying from inside the
-// socket, but the browser knows the difference, so use it: say the true reason
-// and stop hammering a network that is not there.
 window.addEventListener('offline', () => {
   if (!Sync.room) return;
   Sync.showBanner('offline', 'working');
@@ -2569,8 +2316,6 @@ window.addEventListener('online', () => {
   clearTimeout(Sync.retryTimer); Sync.retryTimer = null;
   Sync.attemptReconnect();
 });
-// coming back from a closed lid or a background tab: verify the socket is
-// really alive rather than trusting readyState
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible' && Sync.connected) Sync.checkHealth();
 });
