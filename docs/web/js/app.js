@@ -1498,18 +1498,112 @@ const App = {
     const found = [...UI.selClipIds].map(getClip).filter(Boolean);
     if (!found.length) return;
     Undo.push(found.length > 1 ? 'Duplicate clips' : 'Duplicate clip');
+    // shift the whole selection by its own span, or a 2 bar block lands on itself
+    const from = Math.min(...found.map(f => f.clip.start));
+    const to = Math.max(...found.map(f => f.clip.start + clipBeats(f.clip)));
+    const off = Math.max(0.25, to - from);
     const newIds = [];
     for (const f of found) {
       const c = JSON.parse(JSON.stringify(f.clip));
       c.id = uid('clip');
       if (c.notes) for (const n of c.notes) n.id = uid('note');
-      c.start = f.clip.start + clipBeats(f.clip);
+      c.start = f.clip.start + off;
       f.track.clips.push(c);
       newIds.push(c.id);
     }
     Timeline.render();
     this.selectClipSet(newIds);
     toast(found.length > 1 ? tr('toast_clips_duplicated', '{n} clips duplicated', { n: found.length }) : tr('toast_clip_duplicated', 'Clip duplicated'));
+  },
+
+  selectAllClips() {
+    const ids = [];
+    for (const t of S.tracks) for (const c of t.clips) ids.push(c.id);
+    if (!ids.length) return false;
+    this.selectClipSet(ids);
+    toast(tr('toast_clips_selected', '{n} patterns selected', { n: ids.length }));
+    return true;
+  },
+
+  // ---------- arrow keys ----------
+  selClips() { return [...UI.selClipIds].map(getClip).filter(Boolean); },
+
+  clipBlocked(track, start, len, skip) {
+    return track.clips.some(c => !skip.has(c) &&
+      start < c.start + clipBeats(c) - 1e-6 && start + len > c.start + 1e-6);
+  },
+
+  // how far it can actually go before it touches something
+  clipRoom(found, dBeat, skip) {
+    let room = dBeat;
+    for (const f of found) {
+      const s = f.clip.start, e = s + clipBeats(f.clip);
+      for (const c of f.track.clips) {
+        if (skip.has(c)) continue;
+        const cs = c.start, ce = c.start + clipBeats(c);
+        if (dBeat > 0 && cs >= e - 1e-6) room = Math.min(room, cs - e);
+        if (dBeat < 0 && ce <= s + 1e-6) room = Math.max(room, ce - s);
+      }
+    }
+    return room;
+  },
+
+  nudgeClips(dBeat) {
+    const found = this.selClips();
+    if (!found.length) return false;
+    if (dBeat < 0) dBeat = Math.max(dBeat, -Math.min(...found.map(f => f.clip.start)));
+    if (!dBeat) return true;
+    const skip = new Set(found.map(f => f.clip));
+    dBeat = this.clipRoom(found, dBeat, skip);   // slide up against it instead of refusing
+    if (Math.abs(dBeat) < 1e-6) return true;
+    if (found.some(f => this.clipBlocked(f.track, f.clip.start + dBeat, clipBeats(f.clip), skip))) return true;
+    Undo.pushBurst('Nudge clips');
+    for (const f of found) f.clip.start = Math.max(0, f.clip.start + dBeat);
+    Timeline.render();
+    Timeline.revealBeat(dBeat > 0
+      ? Math.max(...found.map(f => f.clip.start + clipBeats(f.clip)))
+      : Math.min(...found.map(f => f.clip.start)));
+    return true;
+  },
+
+  moveClipsTrack(dir) {
+    const found = this.selClips();
+    if (!found.length) return false;
+    const moves = [];
+    for (const f of found) {
+      const t = S.tracks[S.tracks.indexOf(f.track) + dir];
+      if (!t || t.kind !== f.track.kind) return true;   // nothing to land on
+      moves.push([f, t]);
+    }
+    const skip = new Set(found.map(f => f.clip));
+    if (moves.some(([f, t]) => this.clipBlocked(t, f.clip.start, clipBeats(f.clip), skip))) return true;
+    Undo.pushBurst('Move clips');
+    for (const [f, t] of moves) {
+      f.track.clips.splice(f.track.clips.indexOf(f.clip), 1);
+      t.clips.push(f.clip);
+    }
+    Timeline.render();
+    return true;
+  },
+
+  handleArrow(code, big, alt, fresh) {
+    const horiz = code === 'ArrowLeft' || code === 'ArrowRight';
+    const dir = (code === 'ArrowRight' || code === 'ArrowDown') ? 1 : -1;
+    const bar = beatsPerBar();
+
+    if (PianoRoll.isOpen() && PianoRoll.selectedNotes().length) {
+      const grid = PianoRoll.snap || 0.25;
+      if (alt) return horiz ? PianoRoll.resizeSelected(dir * grid)
+                            : PianoRoll.nudgeVelocity(-dir * 0.05);
+      if (horiz) return PianoRoll.nudgeSelected(dir * (big ? bar : grid), 0);
+      return PianoRoll.nudgeSelected(0, -dir * (big ? 12 : 1), fresh);
+    }
+    if (UI.selClipIds.size) {
+      if (horiz) return this.nudgeClips(dir * (big ? bar : (S.snap || 1)));
+      return this.moveClipsTrack(dir);
+    }
+    if (horiz) { Engine.seek(Math.max(0, UI.playhead + dir * (big ? bar * 4 : bar))); return true; }
+    return false;
   },
 
   // ---------- groups (compound clips) ----------
@@ -2400,7 +2494,8 @@ const App = {
 
   wireKeys() {
     window.addEventListener('keydown', (e) => {
-      const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName || '');
+      const _ae = document.activeElement;
+      const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(_ae?.tagName || '') || !!_ae?.isContentEditable;
       const mod = e.metaKey || e.ctrlKey;
 
       if (e.key === 'Escape' && !typing && !document.querySelector('.modal-back')) {
@@ -2431,7 +2526,8 @@ const App = {
         if (k === 's') { e.preventDefault(); this.save(); return; }
         if (k === 'o') { e.preventDefault(); this.open(); return; }
         if (k === 'e') { e.preventDefault(); this.export(); return; }
-        if (k === 'd') { e.preventDefault(); this.duplicateClip(); return; }
+        if (k === 'd') { e.preventDefault(); if (!PianoRoll.duplicateSelected()) this.duplicateClip(); return; }
+        if (k === 'a') { e.preventDefault(); if (!PianoRoll.selectAll()) this.selectAllClips(); return; }
         if (k === 'b') { e.preventDefault(); this.splitSelectedClip(); return; }
         if (k === 'g' && !e.shiftKey) { e.preventDefault(); this.groupSelectedClips(); return; }
         if (k === 'g' && e.shiftKey) { e.preventDefault(); const g = [...UI.selClipIds].map(getClip).find(x => x && (x.clip.kind === 'group' || x.clip.bounce)); if (g) this.ungroupClip(g.clip.id); return; }
@@ -2457,12 +2553,25 @@ const App = {
 
       if (typing) return;
 
+      if (/^Arrow/.test(e.code)) {
+        if (this.handleArrow(e.code, e.shiftKey, e.altKey, !e.repeat)) { e.preventDefault(); return; }
+      }
+      if (e.code === 'Home') { e.preventDefault(); Engine.seek(0); Timeline.revealBeat(0); return; }
+      if (e.code === 'End') {
+        e.preventDefault();
+        const end = songEndBeat();
+        Engine.seek(end);
+        Timeline.revealBeat(end);
+        return;
+      }
+
       // --- transport & panels ---
       if (e.code === 'Enter') { e.preventDefault(); this.stop(); return; }
       if (e.code === 'F1') { e.preventDefault(); Windows.toggleHelp(); return; }
       if (e.code === 'Escape') {
         if (typeof Tutor !== 'undefined' && Tutor.active) { Tutor.finish(); return; }
         if (UI.recording) { Engine.stopRecord(); Engine.pause(); return; } // cancel a count-in / recording
+        if (PianoRoll.clearSelection()) return;
         if (KeysPanel.visible) { KeysPanel.toggle(); return; }
         this.selectClip(null);
         return;
@@ -2600,7 +2709,10 @@ const KeysPanel = {
   },
   keyLabel(code) {
     const v = this.layout && this.layout.get(code);
-    return String(v || this.US_LABELS[code] || '').toUpperCase();
+    if (v) return String(v).toUpperCase();
+    if (this.US_LABELS[code]) return this.US_LABELS[code];
+    const m = /^Key([A-Z])$/.exec(code) || /^Digit([0-9])$/.exec(code);
+    return m ? m[1] : '';
   },
   async readLayout() {
     try {

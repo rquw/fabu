@@ -821,10 +821,12 @@ const PianoRoll = {
     const f = this.clip();
     const end = n.start + n.length;
     if (end > f.clip.length) {
-      f.clip.length = Math.ceil(end);
+      f.clip.length = Math.min(Math.ceil(end), maxPatternBeats());
       Timeline.render();
     }
   },
+
+  snapBeat(b) { return this.snap ? Math.round(b / this.snap) * this.snap : b; },
 
   bindKeys() {
     this.keysCv.addEventListener('mousedown', (e) => {
@@ -968,7 +970,7 @@ const PianoRoll = {
     else if (UI.clipboard.type === 'note') notes = [{ ...UI.clipboard.data, start: 0 }];
     else return false;
     Undo.push(notes.length > 1 ? 'Paste notes' : 'Paste note');
-    const at = this.snap ? Math.round((this.selNoteId ? 0 : 0) / this.snap) * this.snap : 0;
+    const at = this.pasteAt();
     const newIds = new Set();
     for (const src of notes) {
       const n = JSON.parse(JSON.stringify(src));
@@ -983,6 +985,150 @@ const PianoRoll = {
     this.redraw();
     Timeline.drawClip(this.clipId);
     toast(notes.length > 1 ? tr('toast_notes_pasted', '{n} notes pasted', { n: notes.length }) : tr('toast_note_pasted', 'Note pasted'));
+    return true;
+  },
+
+  // playhead if its inside this clip, else after the selection, else the start
+  pasteAt() {
+    const f = this.clip();
+    if (!f) return 0;
+    const ph = UI.playhead - f.clip.start;
+    if (ph > 1e-6 && ph < f.clip.length) return this.snapBeat(ph);
+    const sel = this.selectedNotes();
+    if (sel.length) return this.snapBeat(Math.max(...sel.map(n => n.start + n.length)));
+    return 0;
+  },
+
+  duplicateSelected() {
+    if (!this.isOpen()) return false;
+    const f = this.clip();
+    const sel = this.selectedNotes();
+    if (!f || !sel.length) return false;
+    const start = Math.min(...sel.map(n => n.start));
+    const end = Math.max(...sel.map(n => n.start + n.length));
+    const off = Math.max(this.snap || 0.25, this.snapBeat(end - start));
+    if (start + off >= maxPatternBeats()) { toast(tr('toast_pattern_max', 'A pattern tops out at two minutes. Use another one after it.')); return true; }
+    Undo.push(sel.length > 1 ? 'Duplicate notes' : 'Duplicate note');
+    const ids = new Set();
+    for (const src of sel) {
+      const n = JSON.parse(JSON.stringify(src));
+      n.id = uid('note');
+      n.start = src.start + off;
+      f.clip.notes.push(n);
+      this.extendClipIfNeeded(n);
+      ids.add(n.id);
+    }
+    this.selNoteIds = ids;
+    this.selNoteId = [...ids].pop() || null;
+    this.redraw();
+    Timeline.drawClip(this.clipId);
+    toast(sel.length > 1 ? tr('toast_notes_duplicated', '{n} notes duplicated', { n: sel.length }) : tr('toast_note_duplicated', 'Note duplicated'));
+    return true;
+  },
+
+  clearSelection() {
+    if (!this.isOpen() || !this.selNoteIds.size) return false;
+    this.selNoteIds.clear();
+    this.selNoteId = null;
+    this.redraw();
+    return true;
+  },
+
+  selectAll() {
+    if (!this.isOpen()) return false;
+    const f = this.clip();
+    if (!f || !f.clip.notes.length) return false;
+    this.selNoteIds = new Set(f.clip.notes.map(n => n.id));
+    this.selNoteId = f.clip.notes[f.clip.notes.length - 1].id;
+    this.redraw();
+    toast(tr('toast_notes_selected', '{n} notes selected', { n: f.clip.notes.length }));
+    return true;
+  },
+
+  // lowest pitch the grid can actually scroll to, same maths as scrollPitch
+  pitchFloor() {
+    const rows = Math.floor(this.gridH() / this.rowH);
+    return Math.max(0, Math.min(84, 12 + rows) - rows + 1);
+  },
+
+  // drum clips have their own row order, so up/down walks that instead of semitones
+  stepPitch(pitch, d) {
+    if (!this._rowMap) return clamp(pitch + d, this.pitchFloor(), 120);
+    const i = this._rowMap.indexOf(pitch);
+    if (i < 0) return pitch;
+    return this._rowMap[clamp(i - d, 0, this._rowMap.length - 1)];
+  },
+
+  // keep whatever just moved on screen
+  revealPitch(pitch) {
+    if (this._rowMap) return;
+    const rows = Math.floor(this.gridH() / this.rowH);
+    const bottom = this.topPitch - rows + 1;
+    if (pitch > this.topPitch) this.scrollPitch(-(pitch - this.topPitch + 1));
+    else if (pitch < bottom) this.scrollPitch(bottom - pitch + 1);
+  },
+
+  revealBeat(beat) {
+    const w = this.wrap;
+    if (!w || !w.clientWidth) return;
+    const x = beat * this.pxb;
+    const l = w.scrollLeft;
+    if (x < l + 30) w.scrollLeft = Math.max(0, x - 60);
+    else if (x > l + w.clientWidth - 40) w.scrollLeft = Math.max(0, x - w.clientWidth + 100);
+  },
+
+  nudgeSelected(dBeat, dPitch, preview) {
+    if (!this.isOpen()) return false;
+    const f = this.clip();
+    const sel = this.selectedNotes();
+    if (!f || !sel.length) return false;
+    if (dBeat < 0) dBeat = Math.max(dBeat, -Math.min(...sel.map(n => n.start)));
+    if (dBeat > 0) {
+      const room = maxPatternBeats() - Math.max(...sel.map(n => n.start + n.length));
+      dBeat = Math.min(dBeat, Math.max(0, room));
+    }
+    if (!dBeat && !dPitch) return true;
+    Undo.pushBurst(dPitch ? 'Move notes' : 'Nudge notes');
+    for (const n of sel) {
+      if (dBeat) n.start = Math.max(0, n.start + dBeat);
+      if (dPitch) n.pitch = this.stepPitch(n.pitch, dPitch);
+      this.extendClipIfNeeded(n);
+    }
+    if (dPitch) {
+      this.revealPitch(dPitch > 0 ? Math.max(...sel.map(n => n.pitch)) : Math.min(...sel.map(n => n.pitch)));
+      // hear where it landed, but only on a fresh press or a held key machine guns
+      if (preview && sel.length <= 6) for (const n of sel) Engine.previewNote(f.track, n.pitch, 0.35);
+    }
+    if (dBeat) {
+      this.revealBeat(dBeat > 0 ? Math.max(...sel.map(n => n.start + n.length)) : Math.min(...sel.map(n => n.start)));
+    }
+    this.redraw();
+    Timeline.drawClip(this.clipId);
+    return true;
+  },
+
+  nudgeVelocity(d) {
+    if (!this.isOpen()) return false;
+    const sel = this.selectedNotes();
+    if (!sel.length) return false;
+    Undo.pushBurst('Note velocity');
+    for (const n of sel) n.vel = +clamp((n.vel ?? 0.9) + d, 0.05, 1).toFixed(3);
+    this.redraw();
+    return true;
+  },
+
+  resizeSelected(dLen) {
+    if (!this.isOpen()) return false;
+    const sel = this.selectedNotes();
+    if (!sel.length) return false;
+    const min = this.snap || 0.05;
+    Undo.pushBurst('Resize notes');
+    for (const n of sel) {
+      n.length = Math.max(min, n.length + dLen);
+      this.extendClipIfNeeded(n);
+    }
+    this.redraw();
+    Timeline.drawClip(this.clipId);
     return true;
   }
 };

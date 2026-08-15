@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+- Arrow keys move the selected notes or patterns. Shift for a whole bar or an octave.
+- Alt with left and right makes notes longer or shorter, alt with up and down makes them louder or quieter.
+- Arrows with nothing selected move the playhead. Home and End jump to the start and the end.
+- Cmd+D duplicates right after the selection instead of on top of it. Works on notes now, not just patterns.
+- Cmd+A selects every note in the pattern, or every pattern.
+- Pasting notes lands at the playhead. It always went to the start of the pattern before.
+- Patterns slide up against each other when you nudge them instead of refusing to move.
+- The shortcut list shows the letters that are actually on your keyboard.
+
 ## 1.2.6
 - new app icon!
 

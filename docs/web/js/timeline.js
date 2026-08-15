@@ -207,6 +207,16 @@ const Timeline = {
     }
     return { left, right };
   },
+  // scroll just enough to bring a beat into view
+  revealBeat(beat) {
+    const sc = this.scroller;
+    if (!sc || !sc.clientWidth) return;
+    const x = beat * UI.zoom;
+    const l = sc.scrollLeft;
+    if (x < l + 40) sc.scrollLeft = Math.max(0, x - 80);
+    else if (x > l + sc.clientWidth - 60) sc.scrollLeft = Math.max(0, x - sc.clientWidth + 140);
+  },
+
   nearestFreeStart(track, len, desired, ignore) {
     desired = Math.max(0, desired);
     const overlaps = (s) => track.clips.some(c => c !== ignore &&

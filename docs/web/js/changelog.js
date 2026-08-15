@@ -1,6 +1,43 @@
 // generated from CHANGELOG.md, dont edit
 const CHANGELOG = [
  {
+  "version": "Unreleased",
+  "items": [
+   {
+    "title": "",
+    "body": "Arrow keys move the selected notes or patterns. Shift for a whole bar or an octave."
+   },
+   {
+    "title": "",
+    "body": "Alt with left and right makes notes longer or shorter, alt with up and down makes them louder or quieter."
+   },
+   {
+    "title": "",
+    "body": "Arrows with nothing selected move the playhead. Home and End jump to the start and the end."
+   },
+   {
+    "title": "",
+    "body": "Cmd+D duplicates right after the selection instead of on top of it. Works on notes now, not just patterns."
+   },
+   {
+    "title": "",
+    "body": "Cmd+A selects every note in the pattern, or every pattern."
+   },
+   {
+    "title": "",
+    "body": "Pasting notes lands at the playhead. It always went to the start of the pattern before."
+   },
+   {
+    "title": "",
+    "body": "Patterns slide up against each other when you nudge them instead of refusing to move."
+   },
+   {
+    "title": "",
+    "body": "The shortcut list shows the letters that are actually on your keyboard."
+   }
+  ]
+ },
+ {
   "version": "1.2.6",
   "items": [
    {
@@ -190,39 +227,6 @@ const CHANGELOG = [
    {
     "title": "",
     "body": "Click the BPM number and type."
-   }
-  ]
- },
- {
-  "version": "1.2.1",
-  "items": [
-   {
-    "title": "",
-    "body": "\"Restart in 1 minute\" no longer traps you. It counts down in the corner so you can keep working."
-   },
-   {
-    "title": "",
-    "body": "Section markers work again."
-   },
-   {
-    "title": "",
-    "body": "Right-clicking the ruler opens a menu instead of dragging the repeat region."
-   },
-   {
-    "title": "",
-    "body": "You can clear the repeat region."
-   },
-   {
-    "title": "",
-    "body": "The piano roll opens where the instrument lives, so a bass starts low."
-   },
-   {
-    "title": "",
-    "body": "808 Bass stops turning into a whistle up high."
-   },
-   {
-    "title": "",
-    "body": "The shortcut list is up to date."
    }
   ]
  }

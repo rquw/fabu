@@ -288,6 +288,19 @@ const Undo = {
     UI.dirty = true;
     UI.fileDirty = true;
     updateUndoButtons();
+    this._lastAt = Date.now();
+  },
+
+  // for held arrow keys: one undo step per burst, not one per repeat
+  pushBurst(label, ms = 700) {
+    const last = this.undoStack[this.undoStack.length - 1];
+    if (last && last.label === label && Date.now() - (this._lastAt || 0) < ms) {
+      this._lastAt = Date.now();
+      UI.dirty = true;
+      UI.fileDirty = true;
+      return;
+    }
+    this.push(label);
   },
 
   undo() {
