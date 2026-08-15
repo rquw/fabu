@@ -4,14 +4,13 @@
       <stop offset="0" stop-color="#2a231b"/>
       <stop offset="1" stop-color="#151210"/>
     </linearGradient>
+    <linearGradient id="l" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#c9662f"/>
+      <stop offset=".55" stop-color="#e07a3f"/>
+      <stop offset="1" stop-color="#f8b07a"/>
+    </linearGradient>
   </defs>
   <rect width="64" height="64" rx="14" fill="url(#b)"/>
-  <path d="M19.75 16.375 V35.375 a12.25 12.25 0 0 0 24.5 0 V16.375" fill="none"
-        stroke="#e07a3f" stroke-width="6.25" stroke-linecap="round" stroke-linejoin="round"/>
-  <g fill="#f8d0aa">
-    <rect x="25.125" y="30.875" width="2.5" height="8.25" rx="1.25"/>
-    <rect x="28.875" y="25.125" width="2.5" height="14" rx="1.25"/>
-    <rect x="32.625" y="27.875" width="2.5" height="11.25" rx="1.25"/>
-    <rect x="36.375" y="33.125" width="2.5" height="6" rx="1.25"/>
-  </g>
+  <path d="M13 32 C19.75 16.5, 25.75 16.5, 32 32 S44.5 47.5, 51 32"
+        fill="none" stroke="url(#l)" stroke-width="5.5" stroke-linecap="round"/>
 </svg>
