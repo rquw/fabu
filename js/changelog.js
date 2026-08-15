@@ -1,6 +1,15 @@
 // generated from CHANGELOG.md, dont edit
 const CHANGELOG = [
  {
+  "version": "1.2.6",
+  "items": [
+   {
+    "title": "",
+    "body": "new app icon!"
+   }
+  ]
+ },
+ {
   "version": "1.2.5",
   "items": [
    {
@@ -214,27 +223,6 @@ const CHANGELOG = [
    {
     "title": "",
     "body": "The shortcut list is up to date."
-   }
-  ]
- },
- {
-  "version": "1.2.0",
-  "items": [
-   {
-    "title": "",
-    "body": "Multiplayer: the host checks every change coming in, so a modified app can't ignore the rules. Removed means removed."
-   },
-   {
-    "title": "",
-    "body": "The signed-in name updates properly."
-   },
-   {
-    "title": "",
-    "body": "Clearer sign-in messages, with a button straight to registering."
-   },
-   {
-    "title": "",
-    "body": "Usernames are checked against a profanity list."
    }
   ]
  }

@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.2.6
+- new app icon!
+
 ## 1.2.5
 - Works on phones and iPads now. It really didn't before.
 - Piano roll: octave buttons, the keyboard lives inside it, and recording over a pattern adds to that pattern instead of making a new track.
