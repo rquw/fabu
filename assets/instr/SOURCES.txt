@@ -1,0 +1,32 @@
+Where the sampled instruments came from
+=======================================
+
+Trumpet, Flute, Saxophone
+  University of Iowa MIS. See LICENSE-IOWA-MIS.txt for the terms and what was
+  done to them.
+
+Grand Piano, Upright Piano, Vibraphone, Glockenspiel, Harp, Organ
+  Versilian Community Sample Library (VCSL), CC0. See LICENSE-VCSL.txt.
+  https://github.com/sgossner/VCSL
+
+Grand Piano, exactly
+--------------------
+Chordophones/Zithers/Grand Piano, Steinway B/Sus/JHPiano_Sus_Close_C*_vl3_rr1.wav
+Sustain pedal down, close mic, velocity layer 3, round robin 1.
+
+piano_c1 .. piano_c7 are C1 through C7 from that set, one every 12 semitones.
+Roots are the nominal MIDI numbers 24, 36, 48, 60, 72, 84, 96.
+
+Processing, if these ever need regenerating:
+
+  ffmpeg -i JHPiano_Sus_Close_C4_vl3_rr1.wav -ac 1 -ar 32000 mono.wav
+  ffmpeg -i mono.wav -t 9 -af "afade=t=out:st=8.5:d=0.5" -codec:a libmp3lame -b:a 96k piano_c4.mp3
+
+The downmix has to be its own step. Doing it in the same command as the filters
+makes ffmpeg apply a different normalisation and the result comes out louder.
+
+That recipe reproduces the original piano_c4.mp3 at 0.99996 sample correlation
+and the same byte count, which is how the settings above were recovered.
+
+It used to be only C2, C4 and C6, 24 semitones apart. Anything above C5 reached
+for the C6 sample at half speed, which sounded dull and rang for 17 seconds.

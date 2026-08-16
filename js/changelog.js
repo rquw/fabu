@@ -5,7 +5,7 @@ const CHANGELOG = [
   "items": [
    {
     "title": "",
-    "body": "The Grand Piano went dull and rang far too long from C#5 up. It was reaching for the C6 sample and slowing it to half speed."
+    "body": "The Grand Piano has four more samples, so it sounds like itself all the way up. It used to go dull and ring far too long above C5."
    },
    {
     "title": "",

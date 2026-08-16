@@ -24,7 +24,7 @@ const INSTRUMENTS = {
 };
 
 const MELODIC = {
-  rpiano: { name: 'Grand Piano', attack: 0.004, release: 0.18, zones: [{ file: 'piano_c2', root: 36 }, { file: 'piano_c4', root: 60 }, { file: 'piano_c6', root: 84 }] },
+  rpiano: { name: 'Grand Piano', attack: 0.004, release: 0.18, zones: [{ file: 'piano_c1', root: 24 }, { file: 'piano_c2', root: 36 }, { file: 'piano_c3', root: 48 }, { file: 'piano_c4', root: 60 }, { file: 'piano_c5', root: 72 }, { file: 'piano_c6', root: 84 }, { file: 'piano_c7', root: 96 }] },
   rvibes: { name: 'Vibraphone', attack: 0.003, release: 0.4, zones: [{ file: 'vibes_c3', root: 48 }, { file: 'vibes_d4', root: 62 }, { file: 'vibes_a4', root: 69 }, { file: 'vibes_c5', root: 72 }, { file: 'vibes_e5', root: 76 }] },
   rupright: { name: 'Upright Piano', gain: 2.6, attack: 0.004, release: 0.2, zones: [{ file: 'upright_c3', root: 48 }, { file: 'upright_c4', root: 60 }, { file: 'upright_c5', root: 72 }, { file: 'upright_c6', root: 84 }, { file: 'upright_c7', root: 96 }] },
   rglock: { name: 'Glockenspiel', gain: 5.5, attack: 0.002, release: 0.5, zones: [{ file: 'glock_g5', root: 79 }, { file: 'glock_c6', root: 84 }, { file: 'glock_c7', root: 96 }, { file: 'glock_c8', root: 108 }] },
