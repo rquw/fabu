@@ -1546,11 +1546,23 @@ const Engine = {
     });
     return this._melodicLoading;
   },
+  // past half an octave down a sample goes dull and rings far too long: the
+  // grand piano only has C2 C4 C6, so C#5 was the C6 sample at 0.53x, a third
+  // of the brightness of the C5 next to it and 17 seconds of tail
+  MAX_DOWN: 6,
+  pickZone(m, pitch) {
+    let zone = m.zones[0], best = 1e9;
+    for (const z of m.zones) { const d = Math.abs(pitch - z.root); if (d < best) { best = d; zone = z; } }
+    if (pitch - zone.root >= -this.MAX_DOWN) return zone;
+    let up = null;
+    for (const z of m.zones) if (z.root <= pitch && (!up || z.root > up.root)) up = z;
+    return up || zone;
+  },
+
   makeMelodicVoice(ac, dest, instr, pitch, t, vel = 0.9, noAttack = false) {
     const m = MELODIC[instr];
     if (!m) return { stop() {}, kill() {} };
-    let zone = m.zones[0], best = 1e9;
-    for (const z of m.zones) { const d = Math.abs(pitch - z.root); if (d < best) { best = d; zone = z; } }
+    const zone = this.pickZone(m, pitch);
     const buf = this.MELODICBUF[zone.file];
     if (!buf) { this.ensureMelodic(); return { stop() {}, kill() {} }; }
     const g = ac.createGain(); g.connect(dest);

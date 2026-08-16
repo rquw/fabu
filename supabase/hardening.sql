@@ -184,17 +184,41 @@ create index if not exists fabu_feedback_recent on public.fabu_feedback (created
 alter table public.fabu_feedback enable row level security;
 alter table public.fabu_login_guard enable row level security;
 
-create or replace function public.fabu_feedback_send(msg text, contact text, who text, app text)
+-- who sent it, for the cooldown. clearable in the browser, so it is a speed
+-- bump and not a wall. the hourly caps below are the real backstop.
+alter table public.fabu_feedback add column if not exists install text not null default '';
+create index if not exists fabu_feedback_install on public.fabu_feedback (install, created_at desc);
+
+-- the old 4 arg version has to go or a 4 key call is ambiguous against the
+-- defaulted 5 arg one. builds still on 1.2.6 keep working, they just send no iid.
+drop function if exists public.fabu_feedback_send(text, text, text, text);
+
+create or replace function public.fabu_feedback_send(msg text, contact text, who text, app text, iid text default '')
 returns boolean language plpgsql security definer set search_path = public, extensions as $$
-declare n int;
+declare n int; m text; who_id text;
 begin
-  if msg is null or length(trim(msg)) = 0 then return false; end if;
-  if length(msg) > 4000 then return false; end if;
+  m := trim(coalesce(msg, ''));
+  if length(m) < 10 then return false; end if;              -- too short to say anything
+  if length(m) > 4000 then return false; end if;
+
+  who_id := coalesce(nullif(left(iid, 64), ''), nullif(left(who, 40), ''), '');
+  if who_id <> '' then
+    -- one a minute
+    select count(*) into n from public.fabu_feedback
+      where install = who_id and created_at > now() - interval '1 minute';
+    if n > 0 then return false; end if;
+    -- and ten an hour
+    select count(*) into n from public.fabu_feedback
+      where install = who_id and created_at > now() - interval '1 hour';
+    if n >= 10 then return false; end if;
+  end if;
+
   select count(*) into n from public.fabu_feedback where created_at > now() - interval '1 hour';
   if n >= 200 then return false; end if;                    -- the whole table, as a backstop
-  insert into public.fabu_feedback (message, contact, username, app)
-  values (left(msg, 4000), coalesce(left(contact, 200), ''),
-          coalesce(left(who, 40), ''), coalesce(left(app, 40), ''));
+
+  insert into public.fabu_feedback (message, contact, username, app, install)
+  values (left(m, 4000), coalesce(left(contact, 200), ''),
+          coalesce(left(who, 40), ''), coalesce(left(app, 40), ''), who_id);
   return true;
 end; $$;
 
@@ -213,7 +237,7 @@ begin
     'public.fabu_follow(text, text)',
     'public.fabu_loop_report(text, bigint, text)',
     'public.fabu_profile_set(text, text, text)',
-    'public.fabu_feedback_send(text, text, text, text)'
+    'public.fabu_feedback_send(text, text, text, text, text)'
   ] loop
     execute 'revoke all on function ' || fn || ' from public';
     execute 'grant execute on function ' || fn || ' to anon, authenticated';

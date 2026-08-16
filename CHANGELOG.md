@@ -1,6 +1,8 @@
 # Changelog
 
 ## Unreleased
+- The Grand Piano went dull and rang far too long from C#5 up. It was reaching for the C6 sample and slowing it to half speed.
+- The feedback box asks for at least 10 characters, counts them, and holds you to one message a minute.
 - Arrow keys move the selected notes or patterns. Shift for a whole bar or an octave.
 - Alt with left and right makes notes longer or shorter, alt with up and down makes them louder or quieter.
 - Arrows with nothing selected move the playhead. Home and End jump to the start and the end.

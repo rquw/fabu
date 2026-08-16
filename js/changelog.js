@@ -5,6 +5,14 @@ const CHANGELOG = [
   "items": [
    {
     "title": "",
+    "body": "The Grand Piano went dull and rang far too long from C#5 up. It was reaching for the C6 sample and slowing it to half speed."
+   },
+   {
+    "title": "",
+    "body": "The feedback box asks for at least 10 characters, counts them, and holds you to one message a minute."
+   },
+   {
+    "title": "",
     "body": "Arrow keys move the selected notes or patterns. Shift for a whole bar or an octave."
    },
    {

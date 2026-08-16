@@ -633,6 +633,20 @@ const App = {
   },
 
   // ---------- feedback ----------
+  FB_MIN: 10,
+  FB_MAX: 4000,
+  FB_COOL_MS: 60000,
+  FB_LAST_KEY: 'fabu.fbLast',
+
+  // ms still to wait, 0 if free. the server checks this too
+  feedbackWait() {
+    try {
+      const last = +localStorage.getItem(this.FB_LAST_KEY) || 0;
+      const left = this.FB_COOL_MS - (Date.now() - last);
+      return left > 0 && left <= this.FB_COOL_MS ? left : 0;   // a clock jump should not lock it forever
+    } catch (e) { return 0; }
+  },
+
   openFeedback() {
     const old = document.getElementById('fbModal');
     if (old) old.remove();
@@ -643,8 +657,9 @@ const App = {
       <div class="modal-card">
         <div class="modal-title">${tr('feedback_title', 'Tell me what you think')}</div>
         <div class="modal-sub">${tr('feedback_sub', 'What is good, what is broken, what is missing. It goes straight to me.')}</div>
-        <textarea id="fbMsg" maxlength="4000" rows="6" spellcheck="true"
+        <textarea id="fbMsg" maxlength="${this.FB_MAX}" rows="6" spellcheck="true"
           placeholder="${tr('feedback_ph', 'Type away')}"></textarea>
+        <div class="fb-count"><span id="fbHint"></span><span id="fbCount"></span></div>
         <input id="fbContact" type="text" maxlength="200"
           placeholder="${tr('feedback_contact', 'Email or Discord, if you want a reply (optional)')}">
         <div id="fbErr" class="auth-err"></div>
@@ -654,26 +669,63 @@ const App = {
         </div>
       </div>`;
     document.body.appendChild(wrap);
-    const close = () => wrap.remove();
-    wrap.addEventListener('mousedown', (e) => { if (e.target === wrap) close(); });
-    wrap.querySelector('#fbNo').addEventListener('click', close);
+
+    const msgEl = wrap.querySelector('#fbMsg');
     const go = wrap.querySelector('#fbGo');
     const err = wrap.querySelector('#fbErr');
+    const count = wrap.querySelector('#fbCount');
+    const hint = wrap.querySelector('#fbHint');
+
+    let tick = null;
+    const close = () => { clearInterval(tick); wrap.remove(); };
+    wrap.addEventListener('mousedown', (e) => { if (e.target === wrap) close(); });
+    wrap.querySelector('#fbNo').addEventListener('click', close);
+
+    let sending = false;
+    const sync = () => {
+      const n = msgEl.value.trim().length;
+      count.textContent = n + ' / ' + this.FB_MAX;
+      count.classList.toggle('over', n >= this.FB_MAX);
+      const wait = this.feedbackWait();
+      if (sending) return;
+      if (wait > 0) {
+        go.disabled = true;
+        go.textContent = tr('feedback_wait', 'Wait {s}s', { s: Math.ceil(wait / 1000) });
+        hint.textContent = tr('feedback_cooldown', 'One message a minute, sorry.');
+      } else {
+        go.disabled = n < this.FB_MIN;
+        go.textContent = tr('feedback_send', 'Send');
+        hint.textContent = n < this.FB_MIN
+          ? tr('feedback_min', 'At least {n} characters', { n: this.FB_MIN }) : '';
+      }
+    };
+    msgEl.addEventListener('input', sync);
+    tick = setInterval(sync, 500);
+    sync();
+
     go.addEventListener('click', async () => {
-      const msg = wrap.querySelector('#fbMsg').value.trim();
-      if (!msg) { wrap.querySelector('#fbMsg').focus(); return; }
+      const msg = msgEl.value.trim();
+      if (msg.length < this.FB_MIN || this.feedbackWait() > 0) return;
+      sending = true;
       go.disabled = true; err.style.color = ''; err.textContent = tr('auth_working', 'Working…');
       try {
         const ok = await Auth.rpc('fabu_feedback_send', {
           msg, contact: wrap.querySelector('#fbContact').value.trim(),
-          who: (Auth.user || ''), app: (this.version || '')
+          who: (Auth.user || ''), app: (this.version || ''),
+          iid: (typeof Sync !== 'undefined' && Sync.installId) ? Sync.installId() : ''
         });
-        if (ok === true) { close(); toast(tr('feedback_thanks', 'Sent. Thank you, genuinely.'), 'green'); return; }
-        err.textContent = tr('feedback_refused', 'That did not go through. Too long, or too many just now.');
+        if (ok === true) {
+          try { localStorage.setItem(this.FB_LAST_KEY, String(Date.now())); } catch (e) {}
+          close();
+          toast(tr('feedback_thanks', 'Sent. Thank you, genuinely.'), 'green');
+          return;
+        }
+        err.textContent = tr('feedback_refused', 'That did not go through. Too long, too short, or too soon after the last one.');
       } catch (e) { err.textContent = tr('auth_offline', 'Cannot reach the server.'); }
-      go.disabled = false;
+      sending = false;
+      sync();
     });
-    setTimeout(() => wrap.querySelector('#fbMsg').focus(), 50);
+    setTimeout(() => msgEl.focus(), 50);
   },
 
   // ---------- the greeting ----------

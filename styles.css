@@ -2758,6 +2758,14 @@ html, body { overflow-x: hidden; max-width: 100%; }
   font-size: 13px; font-family: inherit; line-height: 1.5;
 }
 #fbModal textarea:focus, #fbModal input:focus { border-color: var(--accent); }
+#fbModal textarea { margin-bottom: 4px; }
+.fb-count {
+  display: flex; justify-content: space-between; gap: 10px;
+  font-size: 11px; color: var(--faint); margin: 0 2px 9px;
+  min-height: 14px;
+}
+.fb-count .over { color: var(--accent); }
+#fbModal .fbtn.accent:disabled { opacity: 0.45; cursor: not-allowed; }
 .samp-item.playing { border-color: var(--accent); }
 .samp-item.playing .samp-play { color: var(--accent); }
 
