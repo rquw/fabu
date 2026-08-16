@@ -2,6 +2,8 @@
 
 ## Unreleased
 - The Grand Piano has four more samples, so it sounds like itself all the way up. It used to go dull and ring far too long above C5.
+- The Upright Piano got its bottom two octaves. They were being stretched down from a sample three octaves higher.
+- The Organ goes up properly now instead of stretching one sample across the top three octaves.
 - The feedback box asks for at least 10 characters, counts them, and holds you to one message a minute.
 - Arrow keys move the selected notes or patterns. Shift for a whole bar or an octave.
 - Alt with left and right makes notes longer or shorter, alt with up and down makes them louder or quieter.

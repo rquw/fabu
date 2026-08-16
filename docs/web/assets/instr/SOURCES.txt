@@ -30,3 +30,33 @@ and the same byte count, which is how the settings above were recovered.
 
 It used to be only C2, C4 and C6, 24 semitones apart. Anything above C5 reached
 for the C6 sample at half speed, which sounded dull and rang for 17 seconds.
+
+Upright Piano, exactly
+----------------------
+Chordophones/Zithers/Upright Piano, Yamaha/Sustains/Upright1_Sus_C*_vl2_rr1.wav
+
+Careful: this set numbers its octaves one lower than the Steinway set does.
+VCSL C3 is fabu's upright_c4. So upright_c2 came from the file called C1.
+
+  ffmpeg -i src.wav -ac 1 -ar 32000 mono.wav
+  ffmpeg -i mono.wav -t 7 -af "afade=t=out:st=6.5:d=0.5" -codec:a libmp3lame -b:a 96k out.mp3
+
+That reproduces upright_c4 at 0.99998 correlation and the same byte count.
+
+upright_as0 is the file VCSL calls C0. It is not C0. Measured across six
+harmonics it is 29.44 Hz, which is A#0, midi 22.18, and that measured value is
+its root. Do not trust that filename.
+
+Organ, exactly
+--------------
+Aerophones/Edge-blown Aerophones/Pipe Organ/Loud/Rode_Man3Open_C*.wav
+Note the Quiet folder next to it numbers its octaves one higher. Loud matches
+fabu's numbering, Quiet does not.
+
+  ffmpeg -ss 1.0 -t 2.6 -i src.wav -ac 1 -ar 44100 \
+    -af "afade=t=in:st=0:d=0.1,afade=t=out:st=2.2:d=0.4" -codec:a libmp3lame -b:a 96k out.mp3
+
+Organ roots are measured, not assumed, same as the Iowa instruments. The source
+C4 and C5 measure 260.95 Hz and 525.00 Hz, matching fabu's existing samples to
+three decimals, which is how this source was confirmed. organ_c6 is 1050.00 Hz,
+so its root is 84.058.

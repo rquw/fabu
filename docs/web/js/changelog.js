@@ -9,6 +9,14 @@ const CHANGELOG = [
    },
    {
     "title": "",
+    "body": "The Upright Piano got its bottom two octaves. They were being stretched down from a sample three octaves higher."
+   },
+   {
+    "title": "",
+    "body": "The Organ goes up properly now instead of stretching one sample across the top three octaves."
+   },
+   {
+    "title": "",
     "body": "The feedback box asks for at least 10 characters, counts them, and holds you to one message a minute."
    },
    {
@@ -42,14 +50,6 @@ const CHANGELOG = [
    {
     "title": "",
     "body": "The shortcut list shows the letters that are actually on your keyboard."
-   },
-   {
-    "title": "",
-    "body": "Turning the MIDI keyboard or the metronome on in Settings threw an error behind the scenes and left the panel stale."
-   },
-   {
-    "title": "",
-    "body": "Recovering a session said the backup could not be opened even though it had just worked."
    }
   ]
  },

@@ -32,7 +32,7 @@ const MELODIC = {
   rtrumpet: { name: 'Trumpet', gain: 0.64, attack: 0.02, release: 0.16, zones: [{ file: 'trumpet_g3', root: 54.936 }, { file: 'trumpet_b3', root: 58.93 }, { file: 'trumpet_e4', root: 63.898 }, { file: 'trumpet_g4', root: 66.892 }, { file: 'trumpet_c5', root: 71.932 }, { file: 'trumpet_g5', root: 79.121 }] },
   rflute: { name: 'Flute', gain: 2.34, attack: 0.03, release: 0.18, zones: [{ file: 'flute_d4', root: 61.923 }, { file: 'flute_g4', root: 67.055 }, { file: 'flute_c5', root: 72.101 }, { file: 'flute_g5', root: 79.053 }, { file: 'flute_c6', root: 84.214 }] },
   rsax: { name: 'Saxophone', gain: 0.93, attack: 0.022, release: 0.17, zones: [{ file: 'sax_cs3', root: 49.136 }, { file: 'sax_g3', root: 55.093 }, { file: 'sax_c4', root: 60.106 }, { file: 'sax_g4', root: 67.228 }, { file: 'sax_c5', root: 72.252 }, { file: 'sax_f5', root: 77.295 }] },
-  organ: { name: 'Organ', gain: 4.28, attack: 0.03, release: 0.12, zones: [{ file: 'organ_c2', root: 36.027 }, { file: 'organ_c3', root: 47.995 }, { file: 'organ_c4', root: 59.985 }, { file: 'organ_c5', root: 71.993 }] },
+  organ: { name: 'Organ', gain: 4.28, attack: 0.03, release: 0.12, zones: [{ file: 'organ_c2', root: 36.027 }, { file: 'organ_c3', root: 47.995 }, { file: 'organ_c4', root: 59.985 }, { file: 'organ_c5', root: 71.993 }, { file: 'organ_c6', root: 84.058 }] },
   rharp: { name: 'Harp', gain: 4.2, attack: 0.003, release: 0.35, zones: [{ file: 'harp_d2', root: 38 }, { file: 'harp_g3', root: 55 }, { file: 'harp_c5', root: 72 }, { file: 'harp_d6', root: 86 }] }
 };
 
