@@ -17,6 +17,9 @@ Sustain pedal down, close mic, velocity layer 3, round robin 1.
 piano_c1 .. piano_c7 are C1 through C7 from that set, one every 12 semitones.
 Roots are the nominal MIDI numbers 24, 36, 48, 60, 72, 84, 96.
 
+piano_c1 is 18 seconds, not 9. A low C rings for ages and 9 seconds cut it
+off well before it died. Use -t 18 and afade st=17.5 for that one.
+
 Processing, if these ever need regenerating:
 
   ffmpeg -i JHPiano_Sus_Close_C4_vl3_rr1.wav -ac 1 -ar 32000 mono.wav
