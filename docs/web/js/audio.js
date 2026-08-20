@@ -24,7 +24,7 @@ const INSTRUMENTS = {
 };
 
 const MELODIC = {
-  rpiano: { name: 'Grand Piano', attack: 0.004, release: 0.18, zones: [{ file: 'piano_c1', root: 24 }, { file: 'piano_c2', root: 36 }, { file: 'piano_c3', root: 48 }, { file: 'piano_c4', root: 60 }, { file: 'piano_c5', root: 72 }, { file: 'piano_c6', root: 84 }, { file: 'piano_c7', root: 96 }] },
+  rpiano: { name: 'Grand Piano', attack: 0.004, release: 0.18, zones: [{ file: 'piano_c2', root: 36 }, { file: 'piano_c4', root: 60 }, { file: 'piano_c5', root: 72 }, { file: 'piano_c6', root: 84 }, { file: 'piano_c7', root: 96 }] },
   rvibes: { name: 'Vibraphone', attack: 0.003, release: 0.4, zones: [{ file: 'vibes_c3', root: 48 }, { file: 'vibes_d4', root: 62 }, { file: 'vibes_a4', root: 69 }, { file: 'vibes_c5', root: 72 }, { file: 'vibes_e5', root: 76 }] },
   // as0 is measured, not assumed: the file VCSL calls C0 is really A#0
   rupright: { name: 'Upright Piano', gain: 2.6, attack: 0.004, release: 0.2, zones: [{ file: 'upright_as0', root: 22.18 }, { file: 'upright_c2', root: 36 }, { file: 'upright_c3', root: 48 }, { file: 'upright_c4', root: 60 }, { file: 'upright_c5', root: 72 }, { file: 'upright_c6', root: 84 }, { file: 'upright_c7', root: 96 }] },
@@ -1547,17 +1547,10 @@ const Engine = {
     });
     return this._melodicLoading;
   },
-  // past half an octave down a sample goes dull and rings far too long: the
-  // grand piano only has C2 C4 C6, so C#5 was the C6 sample at 0.53x, a third
-  // of the brightness of the C5 next to it and 17 seconds of tail
-  MAX_DOWN: 6,
   pickZone(m, pitch) {
     let zone = m.zones[0], best = 1e9;
     for (const z of m.zones) { const d = Math.abs(pitch - z.root); if (d < best) { best = d; zone = z; } }
-    if (pitch - zone.root >= -this.MAX_DOWN) return zone;
-    let up = null;
-    for (const z of m.zones) if (z.root <= pitch && (!up || z.root > up.root)) up = z;
-    return up || zone;
+    return zone;
   },
 
   makeMelodicVoice(ac, dest, instr, pitch, t, vel = 0.9, noAttack = false) {
