@@ -7,6 +7,8 @@ const INSTRUMENTS = {
   strings: 'Strings',
   synth: 'Synth Lead',
   bass:  'Bass',
+  rguitar: 'Acoustic Guitar',
+  reguitar: 'Electric Guitar',
   pluck: 'Pluck',
   bell:  'Bell',
   rpiano: 'Grand Piano',
@@ -33,6 +35,10 @@ const MELODIC = {
   rflute: { name: 'Flute', gain: 2.34, attack: 0.03, release: 0.18, zones: [{ file: 'flute_d4', root: 61.923 }, { file: 'flute_g4', root: 67.055 }, { file: 'flute_c5', root: 72.101 }, { file: 'flute_g5', root: 79.053 }, { file: 'flute_c6', root: 84.214 }] },
   rsax: { name: 'Saxophone', gain: 0.93, attack: 0.022, release: 0.17, zones: [{ file: 'sax_cs3', root: 49.136 }, { file: 'sax_g3', root: 55.093 }, { file: 'sax_c4', root: 60.106 }, { file: 'sax_g4', root: 67.228 }, { file: 'sax_c5', root: 72.252 }, { file: 'sax_f5', root: 77.295 }] },
   organ: { name: 'Organ', gain: 4.28, attack: 0.03, release: 0.12, zones: [{ file: 'organ_c2', root: 36.027 }, { file: 'organ_c3', root: 47.995 }, { file: 'organ_c4', root: 59.985 }, { file: 'organ_c5', root: 71.993 }, { file: 'organ_c6', root: 84.058 }] },
+  // real bass replaces the old synth one. roots measured, not from the filenames
+  bass: { name: 'Bass', gain: 0.5, attack: 0.004, release: 0.12, zones: [{ file: 'bass_e1', root: 28.02 }, { file: 'bass_gs1', root: 32.05 }, { file: 'bass_c2', root: 36.01 }, { file: 'bass_ds2', root: 38.97 }] },
+  rguitar: { name: 'Acoustic Guitar', gain: 0.7, attack: 0.004, release: 0.25, zones: [{ file: 'gtr_c2', root: 36.01 }, { file: 'gtr_c3', root: 48.01 }, { file: 'gtr_c4', root: 60.08 }, { file: 'gtr_c5', root: 72.11 }, { file: 'gtr_c6', root: 84.07 }] },
+  reguitar: { name: 'Electric Guitar', gain: 0.45, attack: 0.005, release: 0.35, zones: [{ file: 'egtr_c2', root: 35.99 }, { file: 'egtr_a2', root: 45.06 }, { file: 'egtr_g3', root: 54.93 }, { file: 'egtr_e4', root: 63.99 }, { file: 'egtr_d5', root: 74.04 }, { file: 'egtr_cs6', root: 84.99 }] },
   rharp: { name: 'Harp', gain: 4.2, attack: 0.003, release: 0.35, zones: [{ file: 'harp_d2', root: 38 }, { file: 'harp_g3', root: 55 }, { file: 'harp_c5', root: 72 }, { file: 'harp_d6', root: 86 }] }
 };
 
@@ -841,6 +847,25 @@ const Engine = {
         const cr = ac.createWaveShaper();
         cr.curve = this.crushCurve(p.amt ?? 50);
         node.connect(cr); node = cr;
+      } else if (fx.type === 'amp') {
+        // guitar amp: tighten the lows first or the distortion turns to mud,
+        // then a speaker style roll off. the curve is static so gain rides the
+        // input into it, which is how a real amp gets dirtier
+        const hp = ac.createBiquadFilter();
+        hp.type = 'highpass'; hp.frequency.value = 95; hp.Q.value = 0.7;
+        const pre = ac.createGain();
+        this.bindFx(pre.gain, fx, 'gain', 62, (v) => 0.7 + clamp(v, 0, 100) / 100 * 6, automCtx);
+        const ws = ac.createWaveShaper();
+        ws.curve = this.distortionCurve(clamp(p.gain ?? 62, 0, 100)); ws.oversample = '4x';
+        const mid = ac.createBiquadFilter();
+        mid.type = 'peaking'; mid.frequency.value = 820; mid.Q.value = 0.9; mid.gain.value = 4.5;
+        const cab = ac.createBiquadFilter();
+        cab.type = 'lowpass'; cab.Q.value = 0.9;
+        this.bindFx(cab.frequency, fx, 'tone', 55, (v) => 1300 + clamp(v, 0, 100) / 100 * 4700, automCtx);
+        const lvl = ac.createGain();
+        this.bindFx(lvl.gain, fx, 'level', 0.7, (v) => clamp(v, 0, 1), automCtx);
+        node.connect(hp); hp.connect(pre); pre.connect(ws); ws.connect(mid); mid.connect(cab); cab.connect(lvl);
+        node = lvl;
       } else if (fx.type === 'dampen') {
         const f = ac.createBiquadFilter();
         f.type = 'lowpass'; f.Q.value = 0.9; this.bindFx(f.frequency, fx, 'freq', 2500, null, automCtx);

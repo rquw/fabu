@@ -34,7 +34,8 @@ const INSTR_CATS = [
   { key: 'cat_strings', label: 'Strings', ids: ['rharp', 'strings'] },
   { key: 'cat_wind', label: 'Wind & Brass', ids: ['rflute', 'rsax', 'rtrumpet'] },
   { key: 'cat_synth', label: 'Synth', ids: ['synth', 'pad', 'pluck'] },
-  { key: 'cat_bass', label: 'Bass', ids: ['sub', 'bass'] },
+  { key: 'cat_guitar', label: 'Guitar', ids: ['reguitar', 'rguitar'] },
+  { key: 'cat_bass', label: 'Bass', ids: ['bass', 'sub'] },
   { key: 'cat_drums', label: 'Drums', ids: ['drums', 'drumkit'] }
 ];
 

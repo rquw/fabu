@@ -1107,5 +1107,12 @@
   "help_arrows_vel": "Make the selected notes louder or quieter",
   "feedback_min": "At least {n} characters",
   "feedback_cooldown": "One message a minute, sorry.",
-  "feedback_wait": "Wait {s}s"
+  "feedback_wait": "Wait {s}s",
+  "cat_guitar": "Guitar",
+  "instr_rguitar": "Acoustic Guitar",
+  "instr_reguitar": "Electric Guitar",
+  "fx_amp": "Amp",
+  "fx_gain": "Gain",
+  "fx_tone": "Tone",
+  "fx_level": "Level"
 }

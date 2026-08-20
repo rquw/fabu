@@ -63,3 +63,21 @@ Organ roots are measured, not assumed, same as the Iowa instruments. The source
 C4 and C5 measure 260.95 Hz and 525.00 Hz, matching fabu's existing samples to
 three decimals, which is how this source was confirmed. organ_c6 is 1050.00 Hz,
 so its root is 84.058.
+
+Guitars and bass
+----------------
+All three are CC0, from FreePats (https://freepats.zenvoid.org). VCSL has no
+guitars or bass at all, which is why these come from somewhere else.
+
+Bass          FingerBassYR, samples/finger/*.wav
+              https://github.com/freepats/electric-bass-YR
+              Only covers E1 to D#2. Anything above that is stretched up.
+Acoustic      Spanish Classical Guitar, nylon strung
+              freepats.zenvoid.org/Guitar/SpanishClassicalGuitar
+Electric      EGuitarFSBS clean, bridge pickup, small set
+              https://github.com/freepats/electric-guitar-FSBS-clean
+              Clean on purpose. The dirt comes from the Amp effect so it can be
+              dialled, and because the distorted set is a 300 MB download.
+
+Every root was measured off the file, not read off its name. Same pipeline as
+the rest: mono, 32 kHz, trimmed, short fade, mp3 96k.

@@ -1107,5 +1107,12 @@
   "help_arrows_vel": "Ausgewählte Noten lauter oder leiser machen",
   "feedback_min": "Mindestens {n} Zeichen",
   "feedback_cooldown": "Eine Nachricht pro Minute, sorry.",
-  "feedback_wait": "Warte {s}s"
+  "feedback_wait": "Warte {s}s",
+  "cat_guitar": "Gitarre",
+  "instr_rguitar": "Akustikgitarre",
+  "instr_reguitar": "E-Gitarre",
+  "fx_amp": "Amp",
+  "fx_gain": "Gain",
+  "fx_tone": "Klang",
+  "fx_level": "Pegel"
 }
