@@ -5,7 +5,19 @@ const CHANGELOG = [
   "items": [
    {
     "title": "",
-    "body": "The Grand Piano has four more samples, so it sounds like itself all the way up. It used to go dull and ring far too long above C5."
+    "body": "Electric Guitar, and an Amp effect to drive it. Gain, tone and level, and you can automate all three."
+   },
+   {
+    "title": "",
+    "body": "Acoustic Guitar."
+   },
+   {
+    "title": "",
+    "body": "Bass is a real bass now instead of a synth."
+   },
+   {
+    "title": "",
+    "body": "The Grand Piano no longer goes dull and rings far too long above C5."
    },
    {
     "title": "",
@@ -38,18 +50,6 @@ const CHANGELOG = [
    {
     "title": "",
     "body": "Cmd+A selects every note in the pattern, or every pattern."
-   },
-   {
-    "title": "",
-    "body": "Pasting notes lands at the playhead. It always went to the start of the pattern before."
-   },
-   {
-    "title": "",
-    "body": "Patterns slide up against each other when you nudge them instead of refusing to move."
-   },
-   {
-    "title": "",
-    "body": "The shortcut list shows the letters that are actually on your keyboard."
    }
   ]
  },

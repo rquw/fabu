@@ -1,7 +1,10 @@
 # Changelog
 
 ## Unreleased
-- The Grand Piano has four more samples, so it sounds like itself all the way up. It used to go dull and ring far too long above C5.
+- Electric Guitar, and an Amp effect to drive it. Gain, tone and level, and you can automate all three.
+- Acoustic Guitar.
+- Bass is a real bass now instead of a synth.
+- The Grand Piano no longer goes dull and rings far too long above C5.
 - The Upright Piano got its bottom two octaves. They were being stretched down from a sample three octaves higher.
 - The Organ goes up properly now instead of stretching one sample across the top three octaves.
 - The feedback box asks for at least 10 characters, counts them, and holds you to one message a minute.
