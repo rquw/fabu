@@ -88,7 +88,7 @@
       <svg id="dlIcon" viewBox="0 0 24 24"><path d="M12 2v14m0 0l-5-5m5 5l5-5M4 20h16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
       <span><span class="big" id="dlText">Free download</span><span class="sub" id="dlSub">for your computer</span></span>
     </a>
-    <div class="dl-alt" id="dlAlt"><a href="https://github.com/rquw/fabu/releases/latest">All downloads →</a></div>
+    <div class="dl-alt" id="dlAlt"><a href="https://github.com/rquw/fabu/releases/latest">All downloads</a></div>
   </div>
   <div id="firstRun"></div>
 
@@ -105,10 +105,10 @@
     </div>
     <div class="card">
       <h3>Everything you need</h3>
-      <p>A piano roll, 17 instruments (real recorded pianos, vibraphone, harp and drums), effects you drag onto clips, automation, a mixer, mic recording, and export to WAV, MP3, OGG or separate stems. No clutter.</p>
+      <p>A piano roll, 21 instruments (real recorded pianos, guitars, bass, vibraphone, harp and drums), effects you drag onto clips, automation, a mixer, mic recording, and export to WAV, MP3, OGG or separate stems. No clutter.</p>
     </div>
     <div class="card wide">
-      <h3>Make music with your friends 🎧</h3>
+      <h3>Make music with your friends</h3>
       <p>Share a room code and build the same song together, live, with up to <span class="em">100 people at once</span>. Everyone hears every change as it happens.</p>
       <p style="margin-top:8px">Streaming it? The host decides who can drop in sounds or use the mic, can listen to any clip before it goes in, and can mute, ban or clear the room in one click. <span class="em">Nobody is ruining your song.</span></p>
     </div>
@@ -124,7 +124,7 @@
   </div>
 
   <footer>
-    <div>fabu is free and <a href="https://github.com/rquw/fabu">open source</a>. &nbsp;·&nbsp; <a href="account.html">Account</a> &nbsp;·&nbsp; <a href="https://ko-fi.com/fabioss">Support on Ko-fi ☕</a></div>
+    <div>fabu is free and <a href="https://github.com/rquw/fabu">open source</a>. &nbsp;&nbsp; <a href="account.html">Account</a> &nbsp;&nbsp; <a href="https://ko-fi.com/fabioss">Support on Ko-fi</a></div>
     <div>Made with the help of Claude (emphasis on the "help of" part. i didn't generate the entire thing)</div>
   </footer>
 </div>
@@ -156,7 +156,7 @@
     });
   }
 
-  var ALL_DL = '<a href="' + RELEASES + '">All downloads →</a>';
+  var ALL_DL = '<a href="' + RELEASES + '">All downloads</a>';
 
   var firstRun = document.getElementById('firstRun');
 
@@ -164,15 +164,15 @@
   if (isWin) {
     setBtns(RELEASES, 'Download for Windows', '', ICON_WIN);
     document.getElementById('dlAlt').innerHTML = ALL_DL;
-    firstRun.innerHTML = 'First time only: Windows may warn it’s from an unknown publisher. Click <b>More info</b> → <b>Run anyway</b>. After that, fabu updates itself.';
+    firstRun.innerHTML = 'First time only: Windows may warn it’s from an unknown publisher. Click <b>More info</b>, then <b>Run anyway</b>. After that, fabu updates itself.';
   } else if (isMac) {
     setBtns(RELEASES, 'Download for Mac', '', ICON_APPLE);
     document.getElementById('dlAlt').innerHTML = ALL_DL;
-    firstRun.innerHTML = 'First time only: macOS will say the developer can’t be verified. <b>Right-click the fabu app → Open → Open</b> (or Open Anyway in System Settings › Privacy &amp; Security). You only do this once, and updates after that are seamless.';
+    firstRun.innerHTML = 'macOS will say the developer can’t be verified when opening for the first time. Open the fabu app after installing, click <b>Cancel</b> (not Move to Trash), go into <b>Privacy &amp; Security</b> in Settings, scroll down and you should see an allow button for fabu. Then open it again. You only have to do this once!';
   } else {
     // iPhone / iPad / Android / Linux / anything else: no installer, use the web app
     setBtns(WEB, 'Use Web-Version', "(you're on an unsupported platform)", ICON_WEB);
-    document.getElementById('dlAlt').innerHTML = '<a href="' + RELEASES + '">Desktop app (Mac &amp; Windows) →</a>';
+    document.getElementById('dlAlt').innerHTML = '<a href="' + RELEASES + '">Desktop app (Mac and Windows)</a>';
   }
 
   // fill in the exact installer link from the latest release
