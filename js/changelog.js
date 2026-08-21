@@ -1,7 +1,7 @@
 // generated from CHANGELOG.md, dont edit
 const CHANGELOG = [
  {
-  "version": "Unreleased",
+  "version": "1.2.7",
   "items": [
    {
     "title": "",

@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.2.7
 - Electric Guitar, and an Amp effect to drive it. Gain, tone and level, and you can automate all three.
 - Acoustic Guitar.
 - Bass is a real bass now instead of a synth.
