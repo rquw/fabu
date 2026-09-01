@@ -1,8 +1,6 @@
 name: Release fabu
 
-# Build the installers and publish them to a single GitHub Release.
-# Trigger it by pushing a version tag, e.g.:  git tag v1.0.0 && git push origin v1.0.0
-# (or run it by hand from the Actions tab).
+# push a v* tag and this builds the installers
 on:
   push:
     tags:
@@ -10,11 +8,10 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write   # needed to create the release and upload the installers
+  contents: write
 
 jobs:
-  # Create the draft release up front so the mac and windows jobs both upload
-  # into the SAME release instead of racing to each create their own.
+  # one draft up front so mac and windows upload into the same release
   prepare:
     runs-on: ubuntu-latest
     steps:
@@ -33,7 +30,7 @@ jobs:
   build:
     needs: prepare
     strategy:
-      fail-fast: false   # a hiccup on one OS must not cancel the other
+      fail-fast: false
       matrix:
         include:
           - os: macos-latest
