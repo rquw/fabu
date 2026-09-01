@@ -738,18 +738,18 @@ const App = {
     { from: 22, key: 'night',     fb: 'Good evening' }
   ],
   GREET_SUBS: {
-    late:      [['Some of the best ideas turn up at this hour.', 'greet_sub_late1'],
-                ['The quiet is good for this.', 'greet_sub_late2']],
-    early:     [['Early music production?', 'greet_sub_early1'],
-                ['You are up before everyone else.', 'greet_sub_early2']],
-    morning:   [['What will you create today?', 'greet_sub_morning1'],
-                ['A good hour to start something.', 'greet_sub_morning2']],
-    afternoon: [['What will you create today?', 'greet_sub_afternoon1'],
-                ['Pick up where you left off, or start fresh.', 'greet_sub_afternoon2']],
-    evening:   [['Time to make something.', 'greet_sub_evening1'],
-                ['The evening is yours.', 'greet_sub_evening2']],
-    night:     [['Winding down, or just getting going?', 'greet_sub_night1'],
-                ['Headphones on.', 'greet_sub_night2']]
+    late:      [['cant sleep?', 'greet_sub_late1'],
+                ['the quiet is good for this', 'greet_sub_late2']],
+    early:     [['early music production?', 'greet_sub_early1'],
+                ['youre up before everyone else', 'greet_sub_early2']],
+    morning:   [['go on then', 'greet_sub_morning1'],
+                ['no rush', 'greet_sub_morning2']],
+    afternoon: [['back again', 'greet_sub_afternoon1'],
+                ['pick up where you left off', 'greet_sub_afternoon2']],
+    evening:   [['good time for this', 'greet_sub_evening1'],
+                ['make something', 'greet_sub_evening2']],
+    night:     [['one more then', 'greet_sub_night1'],
+                ['headphones on', 'greet_sub_night2']]
   },
 
   greetBand(d) {

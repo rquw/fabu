@@ -1,10 +1,5 @@
-// Ad-hoc code-sign the macOS .app after packing.
-//
-// We have no paid Apple Developer ID, so this does NOT remove the "unidentified
-// developer" prompt on first launch (only notarization does). But an ad-hoc
-// signature makes the unsigned build actually launchable, especially on Apple
-// Silicon, where a fully unsigned app is killed as "damaged" instead of showing
-// the bypassable prompt. Best-effort: never fail the build over it.
+// ad-hoc sign the mac app. without this apple silicon kills it as damaged.
+// does not stop the unidentified developer prompt, only notarizing does.
 const { execSync } = require('child_process');
 const path = require('path');
 
