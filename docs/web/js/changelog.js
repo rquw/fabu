@@ -1,6 +1,23 @@
 // generated from CHANGELOG.md, dont edit
 const CHANGELOG = [
  {
+  "version": "Unreleased",
+  "items": [
+   {
+    "title": "",
+    "body": "Looping is gapless. It used to cut every voice dead and leave a hole at the loop point."
+   },
+   {
+    "title": "",
+    "body": "You can add and open patterns on a phone again. Double tap never counted as a double click."
+   },
+   {
+    "title": "",
+    "body": "Deleting your account is on the Profile page now, not buried in Settings."
+   }
+  ]
+ },
+ {
   "version": "1.2.7",
   "items": [
    {
@@ -190,59 +207,6 @@ const CHANGELOG = [
    {
     "title": "",
     "body": "Opening a project from a newer version warns you first."
-   }
-  ]
- },
- {
-  "version": "1.2.2",
-  "items": [
-   {
-    "title": "",
-    "body": "Windows: grab this one from the website. In app updating was broken and the fix is in here, so it can't rescue the update into it. Sorry."
-   },
-   {
-    "title": "",
-    "body": "Drop a MIDI file on the timeline. It becomes real editable patterns, one lane per instrument."
-   },
-   {
-    "title": "",
-    "body": "Sustain pedal. Shift while the keyboard is open, the Sustain button, or a real pedal."
-   },
-   {
-    "title": "",
-    "body": "Time signatures. 3/4, 6/8 and the rest."
-   },
-   {
-    "title": "",
-    "body": "New projects start empty."
-   },
-   {
-    "title": "",
-    "body": "Windows remember their size and place."
-   },
-   {
-    "title": "",
-    "body": "Big songs stopped breaking. It was asking for a canvas bigger than the browser allows."
-   },
-   {
-    "title": "",
-    "body": "Jam rooms hold together while the server wakes up, and put you back if your wifi drops."
-   },
-   {
-    "title": "",
-    "body": "Real error messages instead of guessing whether it's you or the app."
-   },
-   {
-    "title": "",
-    "body": "Rooms use a fraction of the traffic. A hundred people works now."
-   },
-   {
-    "title": "",
-    "body": "The host leaving is no longer a spinning name picker."
-   },
-   {
-    "title": "",
-    "body": "Click the BPM number and type."
    }
   ]
  }

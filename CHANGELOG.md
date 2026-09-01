@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+- Looping is gapless. It used to cut every voice dead and leave a hole at the loop point.
+- You can add and open patterns on a phone again. Double tap never counted as a double click.
+- Deleting your account is on the Profile page now, not buried in Settings.
+
 ## 1.2.7
 - Electric Guitar, and an Amp effect to drive it. Gain, tone and level, and you can automate all three.
 - Acoustic Guitar.

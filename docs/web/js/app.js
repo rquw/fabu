@@ -832,6 +832,21 @@ const App = {
         ? tr('hp_profile_sub', 'How you look to everyone else.')
         : tr('hp_profile_out', 'Not signed in.');
       Gallery.mountProfile(body, Auth.isLoggedIn() ? Auth.user : null);
+      if (Auth.isLoggedIn()) {
+        // people look for "delete my account" here, not in settings
+        const row = document.createElement('div');
+        row.className = 'frow';
+        row.style.cssText = 'margin-top:18px;border-top:1px solid var(--line);padding-top:14px';
+        const lab = document.createElement('label');
+        lab.style.cssText = 'flex:1;width:auto';
+        lab.textContent = tr('set_signed_in', 'Signed in as {name}', { name: Auth.user });
+        const b = document.createElement('button');
+        b.className = 'fbtn';
+        b.textContent = tr('acct_manage', 'Password and account');
+        b.addEventListener('click', () => Auth.openAccount());
+        row.append(lab, b);
+        body.appendChild(row);
+      }
     } else if (name === 'settings') {
       title.textContent = tr('win_settings', 'Settings');
       sub.textContent = tr('hp_settings_sub', 'These apply to fabu itself. Settings for one song live inside that song.');

@@ -1114,5 +1114,6 @@
   "fx_amp": "Amp",
   "fx_gain": "Gain",
   "fx_tone": "Tone",
-  "fx_level": "Level"
+  "fx_level": "Level",
+  "acct_manage": "Password and account"
 }

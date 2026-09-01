@@ -28,6 +28,7 @@ const TouchInput = {
       bubbles: true, cancelable: true, view: window,
       clientX: t.clientX, clientY: t.clientY,
       screenX: t.screenX, screenY: t.screenY,
+      detail: type === 'dblclick' ? 2 : 1,
       button: 0, buttons: type === 'mouseup' ? 0 : 1
     });
   },
@@ -70,7 +71,18 @@ const TouchInput = {
     if (!t) return;
     e.preventDefault();
     window.dispatchEvent(this.mouse('mouseup', t));
-    if (this.target) this.target.dispatchEvent(this.mouse('click', t, this.target));
+    if (this.target) {
+      this.target.dispatchEvent(this.mouse('click', t, this.target));
+      // a tap never becomes a dblclick on its own, and dblclick is what adds a
+      // pattern and opens one, so on a phone neither worked at all
+      const now = Date.now(), L = this._lastTap;
+      if (L && now - L.at < 400 && Math.hypot(t.clientX - L.x, t.clientY - L.y) < 26) {
+        this.target.dispatchEvent(this.mouse('dblclick', t, this.target));
+        this._lastTap = null;
+      } else {
+        this._lastTap = { x: t.clientX, y: t.clientY, at: now };
+      }
+    }
     this.target = null;
   },
 

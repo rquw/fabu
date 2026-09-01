@@ -979,7 +979,13 @@ const Engine = {
   },
   currentBeat() {
     if (!UI.playing) return UI.playhead;
-    return this.startBeat + (this.ctx.currentTime - this.startCtxTime) / this.spb();
+    const t = this.ctx.currentTime;
+    // the loop wrap is queued ahead of time, so until we actually reach it the
+    // old origin is the one that says where the playhead really is
+    if (this._prevOrigin && t < this.startCtxTime) {
+      return this._prevOrigin.beat + (t - this._prevOrigin.time) / this.spb();
+    }
+    return this.startBeat + (t - this.startCtxTime) / this.spb();
   },
 
   collectClipEvents(ev, c, t, fromBeat, futureOnly) {
@@ -1059,6 +1065,7 @@ const Engine = {
     this.scrubEnd(); // release any notes held from a scrub drag
     UI.playing = true;
     this.sounding = new Map();
+    this._prevOrigin = null;
     this.startBeat = UI.playhead;
     if (typeof App !== 'undefined' && App.noteReplay) App.noteReplay(UI.playhead);
     this.startCtxTime = (atTime && atTime > this.ctx.currentTime + 0.005) ? atTime : this.ctx.currentTime + 0.08;
@@ -1074,6 +1081,7 @@ const Engine = {
 
   jumpTo(beat) {
     if (!UI.playing || !this.ctx) return;
+    this._prevOrigin = null;
     for (const v of this.live) v.kill();
     this.live.clear();
     if (this.sounding) this.sounding.clear();
@@ -1088,10 +1096,6 @@ const Engine = {
 
   schedTick() {
     if (!UI.playing) return;
-    if (S.loopOn && S.loopEnd > S.loopStart && this.currentBeat() >= S.loopEnd) {
-      this.jumpTo(S.loopStart);
-      return;
-    }
     if (!S.loopOn && !this._loopHinted && songEndBeat() > 16 && this.currentBeat() > songEndBeat() + 1) {
       this._loopHinted = true;
       toast(tr('hint_loop_key', 'Press L to turn looping on and off'));
@@ -1100,23 +1104,45 @@ const Engine = {
       const t = this.ctx.currentTime;
       for (const [k, r] of this.sounding) if (t >= r.endTime) this.sounding.delete(k);
     }
+    if (this._prevOrigin && this.ctx.currentTime >= this.startCtxTime) this._prevOrigin = null;
+
     const horizon = this.ctx.currentTime + 0.15;
-    const horizonBeat = this.startBeat + (horizon - this.startCtxTime) / this.spb();
-    let evGuard = 0;
-    while (this.evIdx < this.events.length && this.events[this.evIdx].beat < horizonBeat && evGuard++ < 4096) {
-      const e = this.events[this.evIdx++];
-      e.fn(Math.max(this.beatToTime(e.beat), this.ctx.currentTime + 0.005));
-    }
-    if (S.metronome) {
-      let clkGuard = 0;
-      while (this.nextClickBeat < horizonBeat && clkGuard++ < 512) {
-        const t = this.beatToTime(this.nextClickBeat);
-        if (t >= this.ctx.currentTime) {
-          this.click(this.ctx, this.metroGain, t, this.nextClickBeat % beatsPerBar() === 0);
-        }
-        this.nextClickBeat++;
+    let wraps = 0;
+    while (wraps++ < 4) {
+      const horizonBeat = this.startBeat + (horizon - this.startCtxTime) / this.spb();
+      const looping = S.loopOn && S.loopEnd > S.loopStart;
+      const upTo = looping ? Math.min(horizonBeat, S.loopEnd) : horizonBeat;
+
+      let evGuard = 0;
+      while (this.evIdx < this.events.length && this.events[this.evIdx].beat < upTo && evGuard++ < 4096) {
+        const e = this.events[this.evIdx++];
+        e.fn(Math.max(this.beatToTime(e.beat), this.ctx.currentTime + 0.005));
       }
-      if (this.nextClickBeat < horizonBeat) this.nextClickBeat = Math.ceil(horizonBeat); // resync, don't spin
+      if (S.metronome) {
+        let clkGuard = 0;
+        while (this.nextClickBeat < upTo && clkGuard++ < 512) {
+          const t = this.beatToTime(this.nextClickBeat);
+          if (t >= this.ctx.currentTime) {
+            this.click(this.ctx, this.metroGain, t, this.nextClickBeat % beatsPerBar() === 0);
+          }
+          this.nextClickBeat++;
+        }
+        if (this.nextClickBeat < upTo) this.nextClickBeat = Math.ceil(upTo);
+      }
+
+      if (!looping || horizonBeat < S.loopEnd) break;
+
+      // move the origin to the loop end exactly. no kill, no gap: whatever is
+      // still ringing rings out and the next pass is already queued behind it
+      const tEnd = this.beatToTime(S.loopEnd);
+      this._prevOrigin = { beat: this.startBeat, time: this.startCtxTime };
+      this.startBeat = S.loopStart;
+      this.startCtxTime = tEnd;
+      this.events = this.collectEvents(S.loopStart);
+      this.evIdx = 0;
+      this.nextClickBeat = Math.ceil(S.loopStart - 1e-6);
+      this.scheduleAllAutomation(S.loopStart, tEnd);
+      this.scheduleAllSidechain(S.loopStart, tEnd);
     }
   },
 
