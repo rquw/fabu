@@ -1,10 +1,10 @@
 # fabu
 
 A music program. Piano roll, instruments, effects, a mixer, and you can make
-stuff with other people at the same time.
+stuff with up to 100 other people at the same time.
 
 https://rquw.github.io/fabu/
-
+(if you think downloading it is sketchy (i don't blame you) you can [use the web version](https://rquw.github.io/fabu/web))
 ![fabu](docs/icon.png)
 
 ## what it does
