@@ -13,7 +13,7 @@ https://rquw.github.io/fabu/
   instrument out of any audio file
 - effect lanes with keyframes (automation lanes)
 - equalizer
-- record the mic, or record notes live off your keyboard. you can also use a MIDI keyboard but idk if that'll work. i haven't tested it
+- record the mic, or record notes live off your keyboard. you can also use a MIDI keyboard but idk if that'll work. i haven't tested it (because i don't own a damn midi keyboard)
 - multiplayer. same project at the same time. up to 100 concurrent people (could get laggy lol)
 - saves as .fab, exports wav / mp3 / ogg. you can also export as MIDI or the different stems
 - automatic updates (may not work on windows. working on it)
