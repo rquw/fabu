@@ -383,7 +383,7 @@ input[type=range] { width: 100%; accent-color: var(--yellow); }
   .game-top { gap: 8px; }
   .game-top .round { font-size: 14px; }
   .pod { width: 30%; }
-  .stage-frame { border-radius: 12px; margin: 0 -4px; }
+  .stage-frame { border-radius: 12px; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
