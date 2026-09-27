@@ -146,7 +146,10 @@ export class Studio {
     } catch (e) {
       console.error(e);
       this.asrState = 'fail';
-      this.updateAsr('Auto script failed (' + e.message.slice(0, 80) + '). You can type lines by hand.', 0, true);
+      const msg = /fetch|network/i.test(e.message) ? 'couldn\u2019t download the speech model' : e.message.slice(0, 80);
+      this.updateAsr(`Auto script failed (${msg}). Type lines by hand or retry.`, 0, true);
+      const box = $('.asr-status', this.el);
+      if (box && !box.querySelector('button')) box.append(h('button', { class: 'btn tiny', onclick: e2 => { e2.target.remove(); this.runAsr(); } }, 'Retry'));
     }
   }
 

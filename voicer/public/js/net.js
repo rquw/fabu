@@ -12,6 +12,7 @@ export class Net extends EventTarget {
     this.closedByUs = false;
     this.skew = 0;
     this.queue = [];
+    this.opus = true;
   }
   get url() {
     const base = window.CV_SERVER || location.origin;
@@ -26,8 +27,8 @@ export class Net extends EventTarget {
     this.ws = ws;
     ws.onopen = () => {
       this.retry = 0;
-      if (this.code) this.send({ t: 'join', code: this.code, pid: this.pid, token: this.token, name: this.name, face: this.face });
-      else if (this.first) this.send(this.first);
+      if (this.code) this.send({ t: 'join', code: this.code, pid: this.pid, token: this.token, name: this.name, face: this.face, opus: this.opus });
+      else if (this.first) this.send({ ...this.first, opus: this.opus });
       for (const m of this.queue.splice(0)) this.send(m);
       this.emit('open');
     };

@@ -98,7 +98,7 @@ export class Stage {
     if (my !== this.token) return null;
 
     this.mode = opts.record ? 'record' : opts.voice ? 'dub' : 'watch';
-    this.userEnv = [];
+    if (opts.record) this.userEnv = [];
     const dur = clip.end - clip.start;
     const outLat = ac.outputLatency || ac.baseLatency || 0.02;
     const cal = prefs.get('latency', 0) / 1000;
@@ -118,7 +118,7 @@ export class Stage {
         src.buffer = opts.voice;
         src.connect(route.voice);
         route.voice.gain.value = opts.voiceGain ?? 1.4;
-        const when = heard - (M - clip.start) + cal * 0;
+        const when = heard - (M - clip.start);
         const now = ac.currentTime + 0.03;
         if (when >= now) src.start(when);
         else src.start(now, now - when);

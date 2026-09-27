@@ -14,7 +14,7 @@ function resample(pcm, from, to) {
   return out;
 }
 
-async function opusOk() {
+export async function opusOk() {
   if (!window.AudioEncoder || !window.AudioDecoder) return false;
   try {
     const a = await AudioEncoder.isConfigSupported({ codec: 'opus', sampleRate: SR, numberOfChannels: 1, bitrate: 48000 });
@@ -23,8 +23,8 @@ async function opusOk() {
   } catch { return false; }
 }
 
-export async function encodeTake(pcm, sr) {
-  if (await opusOk()) {
+export async function encodeTake(pcm, sr, allowOpus = true) {
+  if (allowOpus && await opusOk()) {
     try { return { fmt: 'cvop', blob: await encodeOpus(resample(pcm, sr, SR)) }; } catch (e) { console.warn('opus failed', e); }
   }
   return { fmt: 'wav', blob: encodeWav(resample(pcm, sr, 24000), 24000) };

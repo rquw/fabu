@@ -140,12 +140,11 @@ input[type=range] { width: 100%; accent-color: var(--yellow); }
 .subs .line { font-weight: 800; letter-spacing: -0.01em; text-shadow: 0 2px 10px rgba(0, 0, 0, 0.9); }
 .subs .line.cur { font-size: clamp(16px, 3.1vw, 34px); line-height: 1.15; }
 .subs .line.next { font-size: clamp(11px, 1.6vw, 17px); color: rgba(255, 255, 255, 0.55); }
+.subs .line.cur { text-shadow: none; filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.95)) drop-shadow(0 0 8px rgba(0, 0, 0, 0.6)); }
 .subs .w {
   --p: 0%;
   background: linear-gradient(90deg, var(--yellow) var(--p), #fff var(--p));
   -webkit-background-clip: text; background-clip: text; color: transparent;
-  -webkit-text-stroke: 0.5px rgba(0, 0, 0, 0.35);
-  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.9));
 }
 .subs.soon .line.cur { opacity: 0.75; }
 .count { position: absolute; inset: 0; display: grid; place-items: center; font-weight: 800; font-size: clamp(80px, 22vw, 220px); color: #fff; opacity: 0; pointer-events: none; text-shadow: 0 0 60px rgba(255, 62, 127, 0.9); background: radial-gradient(circle, rgba(0, 0, 0, 0.45), transparent 70%); }
@@ -214,8 +213,8 @@ input[type=range] { width: 100%; accent-color: var(--yellow); }
 .play-grid { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 18px; align-items: start; }
 .play-main { display: flex; flex-direction: column; gap: 12px; }
 .controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; justify-content: center; }
-.controls.sub { justify-content: space-between; flex-wrap: nowrap; }
-.controls.sub > .btn { flex: none; }
+.controls.navrow { justify-content: space-between; flex-wrap: nowrap; }
+.controls.navrow > .btn { flex: none; }
 .clip-strip { flex: 1; min-width: 0; display: flex; gap: 6px; overflow-x: auto; padding: 4px; scrollbar-width: none; }
 .clip-strip .dot { flex: none; min-width: 36px; height: 36px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel2); cursor: pointer; font-weight: 700; font-size: 13px; padding: 0 6px; }
 .clip-strip .dot.done { background: rgba(61, 220, 151, 0.18); border-color: rgba(61, 220, 151, 0.5); }

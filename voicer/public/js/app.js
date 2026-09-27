@@ -3,7 +3,7 @@ import { audioCtx, mic, listMics } from './audio.js';
 import { Studio } from './studio.js';
 import { Stage } from './stage.js';
 import { refEnvelope, takeEnvelope, scoreTake } from './score.js';
-import { encodeTake, decodeTake } from './codec.js';
+import { encodeTake, decodeTake, opusOk } from './codec.js';
 import { renderReel } from './export.js';
 import { Net } from './net.js';
 import { MODELS } from './asr.js';
@@ -194,7 +194,7 @@ function soloPlay(clips, info, studio) {
       h('div', { class: 'play-main' },
         stage.el,
         h('div', { class: 'controls' }, btnListen, btnRec, btnMine, btnStop, micMeter()),
-        h('div', { class: 'controls sub' }, btnPrev, strip, btnNext)),
+        h('div', { class: 'controls navrow' }, btnPrev, strip, btnNext)),
       h('aside', { class: 'play-side' }, resultBox,
         h('div', { class: 'hint card' },
           h('b', {}, 'How it works'),
@@ -350,6 +350,7 @@ const party = {
 
   boot() {
     const net = new Net();
+    opusOk().then(ok => { net.opus = ok; });
     this.net = net;
     net.on('welcome', () => { sfx.join(); history.replaceState(null, '', `?join=${net.code}`); });
     net.on('state', m => this.onState(m.room));
@@ -635,7 +636,7 @@ const party = {
       const score = scoreTake(refEnvelope(clip), env, `${r.code}:${r.round}:${this.net.pid}`);
       stage.showTake(env);
       this.panel.replaceChildren(h('div', { class: 'phase-card' }, h('h2', {}, 'Sending your take…'), h('div', { class: 'spinner small' })));
-      const enc = await encodeTake(res.pcm, res.sr);
+      const enc = await encodeTake(res.pcm, res.sr, r.players.every(p => p.opus !== false));
       this.takeCache.set(`${r.round}:${this.net.pid}`, makeVoice(res.pcm, res.sr));
       this.myTakes.push({ round: r.round, clip: r.clip, voice: makeVoice(res.pcm, res.sr), score });
       const meta = { total: score.total, rhythm: score.rhythm, duration: score.duration, coverage: score.coverage, judgePts: score.judgePts, judges: score.judges };

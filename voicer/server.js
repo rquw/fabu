@@ -93,7 +93,7 @@ function destroyRoom(room) {
 
 function publicPlayer(p) {
   return {
-    id: p.id, name: p.name, color: p.color, face: p.face, connected: !!p.ws,
+    id: p.id, name: p.name, color: p.color, face: p.face, connected: !!p.ws, opus: p.opus !== false,
     points: p.points, judgePts: p.judgePts, votesGot: p.votesGot, accSum: p.accSum, rounds: p.rounds,
     joinedRound: p.joinedRound,
   };
@@ -268,6 +268,7 @@ function onMessage(ws, msg) {
       try { p.ws.close(4001, 'replaced'); } catch {}
     }
     if (msg.name) p.name = clean(msg.name, 20) || p.name;
+    if (msg.opus != null) p.opus = !!msg.opus;
     p.ws = ws;
     ws.room = room;
     ws.pid = p.id;
