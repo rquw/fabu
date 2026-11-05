@@ -121,7 +121,7 @@ function snapBeat(beat, grid) {
   return Math.max(0, Math.round(beat / grid) * grid);
 }
 
-const TRACK_COLORS = ['#e0894a', '#5cb0a2', '#d8a13a', '#cf6f63', '#88a05c', '#c281a8', '#6f97c4', '#b8895f'];
+const TRACK_COLORS = ['#6f97d6', '#5aa898', '#c9a24e', '#c9706a', '#8aa363', '#a985c4', '#5fa7c2', '#b08a6a'];
 let _colorIdx = 0;
 function nextColor() { return TRACK_COLORS[_colorIdx++ % TRACK_COLORS.length]; }
 

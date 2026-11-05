@@ -1115,5 +1115,16 @@
   "fx_gain": "Gain",
   "fx_tone": "Tone",
   "fx_level": "Level",
-  "acct_manage": "Password and account"
+  "acct_manage": "Password and account",
+  "tip_clipsnap": "Snap clips to each other (N)",
+  "toast_clipsnap_on": "Clips snap to each other",
+  "toast_clipsnap_off": "Clips no longer snap to each other",
+  "mp_sounds_loading": "Getting the project's sounds...",
+  "mp_sounds_ready": "All sounds loaded",
+  "mpf_host_closed_t": "The host ended the session",
+  "mpf_host_closed_b": "You still have your copy of the project open.",
+  "wn_desktop_title": "fabu runs better as an app",
+  "wn_desktop_body": "The download is free and gives you lower latency, saving to real files, and automatic updates.",
+  "wn_get": "Download",
+  "wn_later": "Not now"
 }

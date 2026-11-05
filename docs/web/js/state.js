@@ -97,6 +97,7 @@ function clearPedalRange(clip, from, to) {
 }
 
 const UI = {
+  clipSnap: (() => { try { return localStorage.getItem('fabu.clipSnap') !== 'off'; } catch (e) { return true; } })(),  // clips snap to each other's edges
   playhead: 0,          // beats
   playing: false,
   recording: false,
@@ -141,6 +142,20 @@ function makeTrack(kind) {
     autom: {},   // param -> [{beat, v}] keyframes; empty means use the static value
     clips: []
   };
+}
+
+// An instrument lane with nothing on it turns into an audio lane when a sound lands on it.
+// Returns the track if it can hold audio now, otherwise null.
+function audioLaneFor(track) {
+  if (!track) return null;
+  if (track.kind === 'audio') return track;
+  if (track.kind !== 'midi' || (track.clips && track.clips.length)) return null;
+  if (/^Instrument \d+$/.test(track.name || '')) {
+    track.name = 'Audio ' + (S.tracks.filter(t => t.kind === 'audio').length + 1);
+  }
+  track.kind = 'audio';
+  track.instrument = null;
+  return track;
 }
 
 let LIB = {};

@@ -234,7 +234,7 @@ const Sampler = {
     const i1v = Math.min(data.length, Math.ceil(this.viewEnd * sr));
     const spp = Math.max(1, (i1v - i0v) / W);
     const mid = H / 2;
-    g.fillStyle = 'rgba(224,122,63,0.7)';
+    g.fillStyle = 'rgba(91,140,240,0.7)';
     for (let x = 0; x < W; x++) {
       let mn = 1, mx = -1;
       const a = i0v + Math.floor(x * spp), b = Math.min(i1v, i0v + Math.floor((x + 1) * spp) + 1);

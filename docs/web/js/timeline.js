@@ -269,7 +269,7 @@ const Timeline = {
     this.ruler.style.width = width + 'px';
 
     for (const el of [...this.lanes.children]) {
-      if (el.id !== 'playhead' && el.id !== 'dropGhost' && el.id !== 'cursorLayer' && el.id !== 'remotePhLayer') el.remove();
+      if (el.id !== 'playhead' && el.id !== 'dropGhost' && el.id !== 'clipSnapLine' && el.id !== 'cursorLayer' && el.id !== 'remotePhLayer') el.remove();
     }
 
     const beat = UI.zoom;
@@ -401,7 +401,7 @@ const Timeline = {
     g.lineTo(w, Math.round(yOf((min + max) / 2)) + 0.5); g.stroke();
 
     const pts = (track.autom && track.autom[param]) || [];
-    const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#e07a3f';
+    const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#5b8cf0';
 
     g.beginPath();
     const step = Math.max(1, Math.round(1 / (UI.zoom / 8)));
@@ -421,7 +421,7 @@ const Timeline = {
       g.lineTo(w, h); g.lineTo(0, h); g.closePath();
       g.fillStyle = accent.startsWith('#')
         ? accent + '22'
-        : 'rgba(224,122,63,0.13)';
+        : 'rgba(91,140,240,0.13)';
       g.fill();
     }
 
@@ -599,10 +599,10 @@ const Timeline = {
     if (S.loopEnd > S.loopStart) {
       const lx = S.loopStart * UI.zoom - scrollX;
       const lw = (S.loopEnd - S.loopStart) * UI.zoom;
-      ctx.fillStyle = S.loopOn ? 'rgba(224,122,63,0.30)' : 'rgba(255,255,255,0.07)';
+      ctx.fillStyle = S.loopOn ? 'rgba(91,140,240,0.30)' : 'rgba(255,255,255,0.07)';
       ctx.fillRect(lx, 0, lw, 11);
       ctx.fillStyle = S.loopOn ? 'var(--accent)' : 'rgba(255,255,255,0.28)';
-      ctx.fillStyle = S.loopOn ? '#e07a3f' : 'rgba(255,255,255,0.3)';
+      ctx.fillStyle = S.loopOn ? '#5b8cf0' : 'rgba(255,255,255,0.3)';
       ctx.fillRect(lx, 0, 2, 11);
       ctx.fillRect(lx + lw - 2, 0, 2, 11);
     }
@@ -790,7 +790,7 @@ const Timeline = {
     row.innerHTML = `<span>${tr('color_custom', 'Custom')}</span>`;
     const inp = document.createElement('input');
     inp.type = 'color';
-    inp.value = /^#[0-9a-f]{6}$/i.test(track.color) ? track.color : '#e0894a';
+    inp.value = /^#[0-9a-f]{6}$/i.test(track.color) ? track.color : '#6f97d6';
     inp.addEventListener('input', () => this.setTrackColor(track, inp.value, true));
     inp.addEventListener('change', () => { this.setTrackColor(track, inp.value); m.remove(); });
     row.appendChild(inp);
@@ -1190,6 +1190,57 @@ const Timeline = {
     }
   },
 
+  // Snap a beat to the nearest edge of another clip, if one is within a few pixels.
+  // Returns { beat, edge } or null.
+  clipEdgeSnap(beat, skip) {
+    if (!UI.clipSnap) return null;
+    const reach = 10 / UI.zoom;
+    let best = null;
+    for (const t of S.tracks) for (const o of t.clips) {
+      if (skip.has(o.id)) continue;
+      for (const edge of [o.start, o.start + clipBeats(o)]) {
+        const d = Math.abs(edge - beat);
+        if (d <= reach && (!best || d < best.d)) best = { d, edge };
+      }
+    }
+    return best ? { beat: best.edge, edge: best.edge } : null;
+  },
+
+  showSnapLine(beat) {
+    let line = document.getElementById('clipSnapLine');
+    if (beat == null) { if (line) line.style.display = 'none'; return; }
+    if (!line || !line.isConnected) {
+      line = document.createElement('div');
+      line.id = 'clipSnapLine';
+      this.lanes.appendChild(line);
+    }
+    line.style.display = 'block';
+    line.style.left = (beat * UI.zoom - 1) + 'px';
+    line.style.height = tracksHeight() + 'px';
+  },
+
+  // Dashed outline of where a dragged clip will land (the clip itself leans while it moves).
+  showLanding(spots) {
+    const keep = new Set();
+    for (const s of spots) {
+      const id = 'land-' + s.clipId;
+      keep.add(id);
+      const lane = this.lanes.querySelector(`.lane[data-track-id="${s.trackId}"]`);
+      if (!lane) continue;
+      let g = document.getElementById(id);
+      if (!g || g.parentNode !== lane) {
+        if (g) g.remove();
+        g = document.createElement('div');
+        g.id = id;
+        g.className = 'clip-landing';
+        lane.appendChild(g);
+      }
+      g.style.left = (s.start * UI.zoom) + 'px';
+      g.style.width = Math.max(10, s.len * UI.zoom - 2) + 'px';
+    }
+    for (const g of [...this.lanes.querySelectorAll('.clip-landing')]) if (!keep.has(g.id)) g.remove();
+  },
+
   clipMouseDown(e, clip, track, el) {
     if (e.button !== 0) return;
     e.stopPropagation();
@@ -1220,6 +1271,14 @@ const Timeline = {
       trackIdx: S.tracks.indexOf(track)
     };
     let moved = false;
+    const skipIds = new Set([clip.id, ...group.map(g => g.clip.id)]);
+    let snapEdge = null;
+    // Grid snap, unless an edge of another clip is close: then that wins.
+    const snapTo = (beat) => {
+      const hit = this.clipEdgeSnap(beat, skipIds);
+      if (hit) { snapEdge = hit.edge; return hit.beat; }
+      return snapBeat(beat, S.snap);
+    };
     const snapSeen = new Map();
     let lastSnapKey = null, coached = false;
 
@@ -1231,9 +1290,12 @@ const Timeline = {
       this.drawClipCanvas(cl, cel, cel.querySelector('canvas'));
     };
     const applyVisual = () => {
-      el = this.lanes.querySelector(`[data-clip-id="${clip.id}"]`) || el;
+      const fresh = this.lanes.querySelector(`[data-clip-id="${clip.id}"]`);
+      const rebuilt = fresh && fresh !== el;
+      el = fresh || el;
       drawEl(clip);
       for (const g of group) drawEl(g.clip);
+      if (rebuilt && tilt) applyTilt();   // a lane change re-renders the clip, keep its lean
     };
     const applyGroup = () => {
       if (!group.length) return;
@@ -1249,15 +1311,23 @@ const Timeline = {
     };
 
     let tilt = 0, lastTiltX = startX;
+    // A lean rotates around the middle, so the ends of a long clip swing the furthest.
+    // Cap the angle so neither end moves more than a few pixels up or down.
+    const MAX_TILT = 4, MAX_END_SWING = 7;
+    const tiltFor = (cel) => {
+      const half = Math.max(1, (cel.offsetWidth || 0) / 2);
+      const cap = Math.asin(Math.min(1, MAX_END_SWING / half)) * 180 / Math.PI;
+      return Math.min(MAX_TILT, cap);
+    };
     const applyTilt = () => {
       const els = [el, ...group.map(g => this.lanes.querySelector(`[data-clip-id="${g.clip.id}"]`))];
-      for (const e of els) if (e) e.style.transform = tilt ? `rotate(${tilt}deg)` : '';
+      for (const e of els) if (e) e.style.transform = tilt ? `rotate(${(tilt * tiltFor(e)).toFixed(2)}deg)` : '';
     };
     const nudgeTilt = (clientX) => {
       const dx = clientX - lastTiltX;
       if (Math.abs(dx) < 2) return;          // ignore jitter, keep the current lean
       lastTiltX = clientX;
-      const want = dx > 0 ? 5 : -5;
+      const want = dx > 0 ? 1 : -1;
       if (want === tilt) return;
       tilt = want;
       applyTilt();
@@ -1290,24 +1360,27 @@ const Timeline = {
         Undo.push(mode === 'move' ? 'Move clip' : 'Trim clip');
         moved = true;
       }
+      snapEdge = null;
 
       if (mode === 'right') {
         if (clip.kind === 'midi') {
-          clip.length = clamp(snapBeat(orig.length + dxBeats, S.snap),
+          const hit = this.clipEdgeSnap(orig.start + orig.length + dxBeats, skipIds);
+          if (hit) snapEdge = hit.edge;
+          clip.length = clamp(hit ? hit.beat - clip.start : snapBeat(orig.length + dxBeats, S.snap),
                               S.snap || 0.25, maxPatternBeats());
           if (!group.length) {   // don't grow into the next clip on this track
             const { right } = this.laneBounds(getClip(clip.id).track, clip, orig.start, orig.start + orig.length);
             if (right !== Infinity) clip.length = Math.min(clip.length, Math.max(S.snap || 0.25, right - clip.start));
           }
         } else {
-          const endBeat = snapBeat(orig.start + orig.length + dxBeats, S.snap);
+          const endBeat = snapTo(orig.start + orig.length + dxBeats);
           const lenB = Math.max(0.1, endBeat - clip.start);
           const s = Samples[clip.sampleId];
           const maxDur = s && s.buffer ? s.buffer.duration - clipOffSec(clip) : lenB * spb * rate;
           clip.dur = clamp(lenB * spb * rate, 0.05, maxDur);
         }
       } else if (mode === 'left') {
-        let newStart = snapBeat(orig.start + dxBeats, S.snap);
+        let newStart = snapTo(orig.start + dxBeats);
         if (clip.kind === 'midi') {
           newStart = clamp(newStart, 0, orig.start + orig.length - (S.snap || 0.25));
           const d = newStart - orig.start;
@@ -1326,7 +1399,15 @@ const Timeline = {
           clip.dur = orig.dur - d * spb * rate;
         }
       } else {
-        clip.start = Math.max(0, snapBeat(orig.start + dxBeats, S.snap));
+        const raw = orig.start + dxBeats;
+        const len = orig.length;
+        const byStart = this.clipEdgeSnap(raw, skipIds);
+        const byEnd = this.clipEdgeSnap(raw + len, skipIds);
+        let pick = null;
+        if (byStart && (!byEnd || Math.abs(byStart.beat - raw) <= Math.abs(byEnd.beat - (raw + len)))) pick = { start: byStart.beat, edge: byStart.edge };
+        else if (byEnd) pick = { start: byEnd.beat - len, edge: byEnd.edge };
+        if (pick && pick.start >= 0) { clip.start = pick.start; snapEdge = pick.edge; }
+        else clip.start = Math.max(0, snapBeat(raw, S.snap));
         if (!group.length) {
           const N = S.tracks.length;
           const py = ev.clientY - this.lanes.getBoundingClientRect().top;
@@ -1342,7 +1423,9 @@ const Timeline = {
             const laneIdx = clamp(Math.floor(laneF), 0, N - 1);
             const target = S.tracks[laneIdx];
             const cur = getClip(clip.id).track;
-            if (target && target !== cur && target.kind === cur.kind) {
+            const fits = target && target !== cur &&
+              (target.kind === cur.kind || (clip.kind === 'audio' && target.kind === 'midi' && !target.clips.length));
+            if (fits) {
               cur.clips.splice(cur.clips.indexOf(clip), 1);
               target.clips.push(clip);
               this.render();
@@ -1368,12 +1451,28 @@ const Timeline = {
         }
       }
       applyVisual();
+      this.showSnapLine(snapEdge);
+      if (mode === 'move') {
+        if (this._clipInsertAt != null) this.showLanding([]);
+        else if (!group.length) {
+          const t = getClip(clip.id).track;
+          const len = clipBeats(clip);
+          this.showLanding([{ clipId: clip.id, trackId: t.id, start: this.nearestFreeStart(t, len, clip.start, clip), len }]);
+        } else {
+          this.showLanding([clip, ...group.map(g => g.clip)].map(c => {
+            const f = getClip(c.id);
+            return { clipId: c.id, trackId: f.track.id, start: c.start, len: clipBeats(c) };
+          }));
+        }
+      }
       markLoops(overLoops(ev));
     };
     const up = (ev) => {
       window.removeEventListener('mousemove', move);
       window.removeEventListener('mouseup', up);
       clearTilt();
+      this.showLanding([]);
+      this.showSnapLine(null);
       const intoLoops = loopsArmed && ev && overLoops(ev);
       markLoops(false);
       if (typeof Sync !== 'undefined') Sync.setLock(clipLock, false);
@@ -1397,6 +1496,10 @@ const Timeline = {
         if (!group.length) {
           const track = getClip(clip.id).track;
           clip.start = this.nearestFreeStart(track, clipBeats(clip), clip.start, clip);
+          if (clip.kind === 'audio' && track.kind === 'midi' && audioLaneFor(track)) {
+            Engine.rebuildTracks();
+            KeysPanel.refreshTracks();
+          }
         }
         this.render();
         Windows.refreshAll();

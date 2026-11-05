@@ -6,7 +6,7 @@
 <title>fabu</title>
 <link rel="icon" type="image/svg+xml" href="assets/brand/favicon.svg">
 <link rel="icon" type="image/png" href="assets/brand/favicon.png">
-<link rel="stylesheet" href="styles.css?v=182">
+<link rel="stylesheet" href="styles.css?v=184">
 </head>
 <body>
 
@@ -31,6 +31,7 @@
   <symbol id="i-zoomin" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M15.5 15.5L21 21M8 10.5h5M10.5 8v5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
   <symbol id="i-zoomout" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M15.5 15.5L21 21M8 10.5h5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
   <symbol id="i-magnet" viewBox="0 0 24 24"><path d="M6 4v7a6 6 0 0 0 12 0V4" fill="none" stroke="currentColor" stroke-width="2"/><path d="M6 4h4v5H6zM14 4h4v5h-4z"/></symbol>
+  <symbol id="i-clipsnap" viewBox="0 0 24 24"><rect x="2.5" y="7" width="8" height="10" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="13.5" y="7" width="8" height="10" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 3.5v17" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-dasharray="2 2.5"/></symbol>
   <symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
   <symbol id="i-note" viewBox="0 0 24 24"><path d="M9 18.5V5l10-2v13.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><ellipse cx="6.5" cy="18.5" rx="2.5" ry="2"/><ellipse cx="16.5" cy="16.5" rx="2.5" ry="2"/></symbol>
   <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4.5A1.5 1.5 0 0 1 10.5 3h3A1.5 1.5 0 0 1 15 4.5V7M6.5 7l1 13h9l1-13M10 11v5M14 11v5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></symbol>
@@ -104,6 +105,9 @@
         <option value="0" data-i18n="snap_off">Off</option>
       </select>
     </div>
+
+    <button id="btnClipSnap" class="tbtn toggle" data-tip="Snap clips to each other (N)" data-i18n-tip="tip_clipsnap">
+      <svg class="ic"><use href="#i-clipsnap"/></svg></button>
 
   </div>
 
@@ -274,29 +278,29 @@
 <div id="toasts"></div>
 <div id="tooltip" class="hidden"></div>
 
-<script src="js/vendor/lame.min.js?v=182"></script>
-<script src="js/vendor/WasmMediaEncoder.min.js?v=182"></script>
-<script src="js/vendor/ogg.wasm.js?v=182"></script>
-<script src="js/version.js?v=182"></script>
-<script src="js/changelog.js?v=182"></script>
-<script src="js/util.js?v=182"></script>
-<script src="js/state.js?v=182"></script>
-<script src="js/audio.js?v=182"></script>
-<script src="js/windows.js?v=182"></script>
-<script src="js/timeline.js?v=182"></script>
-<script src="js/pianoroll.js?v=182"></script>
-<script src="js/automation.js?v=182"></script>
-<script src="js/sampler.js?v=182"></script>
-<script src="js/profanity.js?v=182"></script>
-<script src="js/auth.js?v=182"></script>
-<script src="js/app.js?v=182"></script>
-<script src="js/gallery.js?v=182"></script>
-<script src="js/midifile.js?v=182"></script>
-<script src="js/midi.js?v=182"></script>
-<script src="js/tutor.js?v=182"></script>
-<script src="js/loadtest.js?v=182"></script>
-<script src="js/sync.js?v=182"></script>
-<script src="js/touch.js?v=182"></script>
-<script src="js/webnudge.js?v=182"></script>
+<script src="js/vendor/lame.min.js?v=184"></script>
+<script src="js/vendor/WasmMediaEncoder.min.js?v=184"></script>
+<script src="js/vendor/ogg.wasm.js?v=184"></script>
+<script src="js/version.js?v=184"></script>
+<script src="js/changelog.js?v=184"></script>
+<script src="js/util.js?v=184"></script>
+<script src="js/state.js?v=184"></script>
+<script src="js/audio.js?v=184"></script>
+<script src="js/windows.js?v=184"></script>
+<script src="js/timeline.js?v=184"></script>
+<script src="js/pianoroll.js?v=184"></script>
+<script src="js/automation.js?v=184"></script>
+<script src="js/sampler.js?v=184"></script>
+<script src="js/profanity.js?v=184"></script>
+<script src="js/auth.js?v=184"></script>
+<script src="js/app.js?v=184"></script>
+<script src="js/gallery.js?v=184"></script>
+<script src="js/midifile.js?v=184"></script>
+<script src="js/midi.js?v=184"></script>
+<script src="js/tutor.js?v=184"></script>
+<script src="js/loadtest.js?v=184"></script>
+<script src="js/sync.js?v=184"></script>
+<script src="js/touch.js?v=184"></script>
+<script src="js/webnudge.js?v=184"></script>
 </body>
 </html>

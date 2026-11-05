@@ -35,6 +35,9 @@ const Sync = {
   remotePH: new Map(), // id -> { beat, ts, name, color, playing } (other players' playheads)
 
   sharedSamples: new Set(),
+  sampQ: [],          // outgoing sound uploads, sent in small chunks: [{ sid, to, b64, i, n }]
+  sampIn: new Map(),  // incoming sound uploads being put back together: key -> { parts, n, got, name, mime }
+  sampTimer: null,
   lastSent: '',
   bcount: 0,
   periodTimer: null,
@@ -67,6 +70,7 @@ const Sync = {
     host_gone:    ['Host disconnected', 'Waiting a moment in case they come back.'],
     host_lost:    ['Host left the session', '{name} is the host now.'],
     room_gone:    ['The room is gone', 'Everyone else disconnected and the room closed.'],
+    host_closed:  ['The host ended the session', 'You still have your copy of the project open.'],
     kicked_out:   ['You were removed from this room', ''],
     evade_blocked: ['You cannot join this room',
                     'Somebody on this internet connection was removed from it. If that was not you, ask the host to let you in.'],
@@ -251,6 +255,7 @@ const Sync = {
     this.me.color = hashColor(this.me.name);
     this.peers.clear(); this.locks.clear(); this.cursors.clear();
     this.pendingReqs = []; this.pendingAudio = []; this.kicked = new Set(); this.sharedSamples.clear(); this.lastSent = '';
+    this.sampQ = []; this.sampIn.clear();
     this.banInstalls = {}; this.banConns = {}; this.allowInstalls = {};
     this.rev = 0; this.pending = null;
     this.setStatus('connecting');
@@ -615,6 +620,7 @@ const Sync = {
     this.peers.clear(); this.locks.clear(); this.cursors.clear(); this.remotePH.clear(); this.pendingReqs = [];
     this.knockGz.clear();
     this.pendingAudio = []; this.history = [];
+    this.sampQ = []; this.sampIn.clear(); clearInterval(this.sampTimer); this.sampTimer = null; this._sampToast = false;
     for (const id of ['audioReview','histModal','manageModal']) { const el = document.getElementById(id); if (el) el.remove(); }
     this.myLocks.clear();
     this.room = null;
@@ -684,12 +690,26 @@ const Sync = {
           }
         }
         if (isNew) {
-          this.sharedSamples.clear();   // re-send our samples so the newcomer hears everything
           if (this.admitted) toast(tr('mp_joined_room', '{name} joined', { name: m.name }), 'green');
           if (this.isHost) this.pushHistory({ ts: Date.now(), name: m.name, action: 'joined' });
           this.renderPanel();
         }
         break;
+      }
+
+      case 'samp':
+        this.receiveSampleChunk(m);
+        return;
+
+      case 'close': {
+        if (this.isHost || !this.admitted) return;
+        const src = this.peers.get(m.from);
+        if (src && !src.host) return;      // only the host can end the room
+        this._manualClose = true;
+        this.disconnect(true);
+        this.fail('host_closed');
+        Timeline.render();
+        return;
       }
 
       case 'relay_hello':
@@ -816,7 +836,10 @@ const Sync = {
     const peer = from ? this.peers.get(from) : null;
     const name = (peer && peer.name) || m.by;
     if (!name || name === this.me.name) return null;   // our own / unattributable
-    if (m.samples && Object.keys(m.samples).length && this.customAudioRight(name) !== true) return 'audio';
+    if (this.customAudioRight(name) !== true) {
+      if (m.samples && Object.keys(m.samples).some(id => !Samples[id])) return 'audio';
+      for (const id of this.stateSampleIds(m.state)) if (!Samples[id]) return 'audio';
+    }
     return null;
   },
 
@@ -824,7 +847,6 @@ const Sync = {
     const who = ((this.peers.get(m.from) || {}).name) || m.by || '?';
     this.rev = Math.max(this.rev, m.rev || 0) + 1;
     this.lastSent = '';               // force a full resend
-    this.sharedSamples.clear();
     this.broadcast(true);
     this.pushHistory({ ts: Date.now(), name: who, action: 'blocked', what: why });
     const now = Date.now();
@@ -916,9 +938,9 @@ const Sync = {
   admit(id) {
     this.pendingReqs = this.pendingReqs.filter(r => r.id !== id);
     this.send({ type: 'admit', to: id, settings: this.settings, started: this.started });
-    this.sharedSamples.clear();  // next broadcast carries every sample for the newcomer
     this.lastSent = '';
     this.broadcast(true);        // push the full project right away so they sync before they can edit
+    for (const sid of this.usedSampleIds()) this.queueSample(sid, id);   // then every sound, in chunks
     this.renderPanel();
     this.renderRequests();
   },
@@ -1015,7 +1037,7 @@ const Sync = {
     const W = canvas.width, H = canvas.height;
     const ch = buf.getChannelData(0);
     const bars = 130, step = Math.floor(ch.length / bars) || 1;
-    const accent = (getComputedStyle(document.documentElement).getPropertyValue('--accent') || '#e07a3f').trim();
+    const accent = (getComputedStyle(document.documentElement).getPropertyValue('--accent') || '#5b8cf0').trim();
     const drawWave = (progress) => {
       cx.clearRect(0, 0, W, H);
       const bw = W / bars;
@@ -1077,15 +1099,16 @@ const Sync = {
     Samples[id] = { id, name: req.sample.name, buffer: req.buffer, bytes, mime: req.sample.mime };
     Undo.push('Add reviewed sound');
     let track = req.place && req.place.trackId ? getTrack(req.place.trackId) : null;
-    if (!track || track.kind !== 'audio') track = S.tracks.find(t => t.kind === 'audio') || null;
-    if (!track) { track = makeTrack('audio'); S.tracks.push(track); Engine.rebuildTracks(); }
+    track = audioLaneFor(track) || S.tracks.find(t => t.kind === 'audio') || null;
+    if (!track) { track = makeTrack('audio'); S.tracks.push(track); }
+    Engine.rebuildTracks();
     const at = (req.place && req.place.beat != null) ? req.place.beat : 0;
     const clip = { id: uid('clip'), kind: 'audio', name: req.sample.name, by: req.name, start: at, sampleId: id, fadeIn: 0, fadeOut: 0, pitch: 0, gain: 1 };
     clip.start = Timeline.firstFreeStart(track, clipBeats(clip), at, null);
     track.clips.push(clip);
     Timeline.render(); Windows.refreshAll();
-    this.sharedSamples.clear(); this.lastSent = '';
-    this.broadcast(true);
+    this.lastSent = '';
+    this.broadcast(true);         // the new sound is not shared yet, so this sends it
     this.send({ type: 'audiookay', to: req.from, reqId: req.reqId });
     this.pushHistory({ ts: Date.now(), name: req.name, action: 'sound_approved', what: req.sample.name });
     toast(tr('mp_audio_added', 'Added {name} from {who}', { name: req.sample.name, who: req.name }), 'green');
@@ -1373,6 +1396,7 @@ const Sync = {
       }
     }
     for (const [key, l] of this.locks) if (now - l.ts > 15000) this.locks.delete(key);
+    for (const [key, a] of this.sampIn) if (now - a.ts > 60000) this.sampIn.delete(key);   // a sender that went away mid-sound
     if (this.isHost) this.pruneAudioBans();
     if (lostHost) this.hostLost();
     if (changed) { this.renderPanel(); this.renderCursors(); }
@@ -1761,25 +1785,108 @@ const Sync = {
     return used;
   },
 
-  SIZE_LIMIT: 55 * 1024 * 1024,   // relay chokes past ~62 MB, leave a margin
+  stateSampleIds(st) {
+    const ids = new Set();
+    if (!st) return ids;
+    for (const t of st.tracks || []) for (const c of t.clips || []) if (c.sampleId) ids.add(c.sampleId);
+    for (const inst of Object.values(st.instruments || {})) if (inst && inst.sampleId) ids.add(inst.sampleId);
+    return ids;
+  },
+
+  // ---------- sound transfer ----------
+  // The relay caps ordinary messages at 512 KB and each connection at ~6 MB a second,
+  // so a sound is sent as a run of ~380 KB pieces, a few per second.
+  SAMP_CHUNK: 380 * 1024,
+  SAMP_EVERY: 110,
+
+  queueSample(sid, to) {
+    const s = Samples[sid];
+    if (!s || !s.bytes) return;
+    if (this.sampQ.some(q => q.sid === sid && (q.to === to || q.to === null))) return;
+    this.sampQ.push({ sid, to, b64: null, i: 0, n: 0 });
+    if (this.sampTimer) return;
+    this.sampTimer = setInterval(() => this.pumpSamples(), this.SAMP_EVERY);
+  },
+
+  pumpSamples() {
+    const q = this.sampQ[0];
+    if (!q) { clearInterval(this.sampTimer); this.sampTimer = null; return; }
+    if (!this.ws || this.ws.readyState !== 1) return;
+    if (this.ws.bufferedAmount > 2 * this.SAMP_CHUNK) return;   // let the socket drain first
+    const s = Samples[q.sid];
+    if (!s || !s.bytes) { this.sampQ.shift(); return; }
+    if (!q.b64) { q.b64 = bufToB64(s.bytes); q.n = Math.max(1, Math.ceil(q.b64.length / this.SAMP_CHUNK)); }
+    const msg = { type: 'samp', sid: q.sid, from: this.me.id, i: q.i, n: q.n,
+                  d: q.b64.slice(q.i * this.SAMP_CHUNK, (q.i + 1) * this.SAMP_CHUNK) };
+    if (q.i === 0) { msg.name = s.name; msg.mime = s.mime; }
+    if (q.to) msg.to = q.to;
+    if (!this.send(msg)) return;
+    if (++q.i >= q.n) this.sampQ.shift();
+  },
+
+  receiveSampleChunk(m) {
+    if (!this.admitted || !m.sid || typeof m.d !== 'string') return;
+    if (m.to && m.to !== this.me.id) return;
+    if (Samples[m.sid]) return;
+    if (this.isHost) {
+      const p = this.peers.get(m.from);
+      if (!p || this.customAudioRight(p.name) !== true) return;   // not allowed to bring in sounds
+    }
+    const key = m.sid + '|' + m.from;
+    let a = this.sampIn.get(key);
+    if (m.i === 0) {
+      a = { parts: new Array(m.n), n: m.n, got: 0, name: m.name || 'Sound', mime: m.mime, ts: Date.now() };
+      this.sampIn.set(key, a);
+      if (!this._sampToast && !this.isHost) {
+        this._sampToast = true;
+        toast(tr('mp_sounds_loading', 'Getting the project\'s sounds...'));
+      }
+    }
+    if (!a || a.n !== m.n || a.parts[m.i] != null) return;
+    a.parts[m.i] = m.d;
+    a.got++;
+    a.ts = Date.now();
+    if (a.got < a.n) return;
+    this.sampIn.delete(key);
+    const bytes = b64ToBuf(a.parts.join(''));
+    Engine.ensureCtx();
+    Engine.ctx.decodeAudioData(bytes.slice(0)).then((buffer) => {
+      if (Samples[m.sid]) return;
+      Samples[m.sid] = { id: m.sid, name: a.name, buffer, bytes, mime: a.mime };
+      this.sharedSamples.add(m.sid);
+      Timeline.render();
+      Windows.refreshAll();
+      if (typeof Engine.liveEdit === 'function') Engine.liveEdit();
+      if (![...this.sampIn.keys()].length && this._sampToast) {
+        this._sampToast = false;
+        toast(tr('mp_sounds_ready', 'All sounds loaded'), 'green');
+      }
+    }).catch(() => {});
+  },
+
+  // Host only: end the room for everyone instead of handing it to someone else.
+  closeRoom() {
+    if (!this.connected) return;
+    if (this.isHost && this.admitted && this.me) this.send({ type: 'close', from: this.me.id });
+    this.disconnect();
+  },
+
+  SIZE_LIMIT: 5 * 1024 * 1024,    // relay drops states past ~6 MB a second
 
   broadcast(force = false) {
     if (!this.admitted || this.applyingRemote || !this.synced) return;
     const stateJson = JSON.stringify(S);
-    const samples = {};
-    const added = [];
+    // Sounds never ride along with the project: the relay drops anything over a few MB,
+    // so they go out on their own in small chunks (see queueSample).
     for (const id of this.usedSampleIds()) {
       if (this.sharedSamples.has(id)) continue;
       const s = Samples[id];
-      if (s && s.bytes) { samples[id] = { name: s.name, mime: s.mime, data: bufToB64(s.bytes) }; this.sharedSamples.add(id); added.push(id); }
+      if (s && s.bytes) { this.sharedSamples.add(id); this.queueSample(id, null); }
     }
-    const hasSamples = added.length > 0;
-    if (!force && stateJson === this.lastSent && !hasSamples) return;
+    if (!force && stateJson === this.lastSent) return;
     const msg = { type: 'state', room: this.room, rev: this.rev + 1, state: JSON.parse(stateJson), from: this.me && this.me.id, by: this.me && this.me.name };
-    if (hasSamples) msg.samples = samples;
     const json = JSON.stringify(msg);
     if (json.length > this.SIZE_LIMIT) {
-      for (const id of added) this.sharedSamples.delete(id); // retry once the project shrinks
       if (!this._sizeWarned) { this._sizeWarned = true; this.showSizeLimit(); }
       return;
     }
@@ -1986,7 +2093,7 @@ const Sync = {
 
     const reqBtn = p.querySelector('#jamReqBtn');
     if (reqBtn) reqBtn.addEventListener('click', () => this.openRequests());
-    p.querySelector('#jamLeave').addEventListener('click', () => this.disconnect());
+    p.querySelector('#jamLeave').addEventListener('click', () => this.closeRoom());
 
     if (this.isHost) {
       p.querySelector('#jamApprove').addEventListener('change', (e) => { this.settings.approve = e.target.checked; this.sendPresence(); this.renderPanel(); });

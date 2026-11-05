@@ -900,6 +900,11 @@ const App = {
   },
 
   showHome() {
+    // Going home leaves the room. If we host it, the room ends for everyone.
+    if (typeof Sync !== 'undefined') {
+      if (Sync.connected) Sync.closeRoom();
+      else if (Sync.room) Sync.disconnect();
+    }
     this.silenceEverything();
     this.showHomePage('home');
     const home = $('#home');
@@ -1228,6 +1233,14 @@ const App = {
     if (UI.recording) Engine.stopRecord();
     Engine.stop();
     toast(tr('toast_stopped', 'Stopped'));
+  },
+
+  setClipSnap(on) {
+    UI.clipSnap = !!on;
+    try { localStorage.setItem('fabu.clipSnap', on ? 'on' : 'off'); } catch (e) {}
+    const b = document.getElementById('btnClipSnap');
+    if (b) b.classList.toggle('on', UI.clipSnap);
+    toast(UI.clipSnap ? tr('toast_clipsnap_on', 'Clips snap to each other') : tr('toast_clipsnap_off', 'Clips no longer snap to each other'));
   },
 
   setMetronome(v) {
@@ -2030,12 +2043,14 @@ const App = {
     if (!decoded.length) return;
 
     Undo.push(decoded.length > 1 ? 'Add audio files' : 'Add audio file');
-    let track = targetTrack && targetTrack.kind === 'audio' ? targetTrack : null;
-    if (!track) {
+    let track = audioLaneFor(targetTrack);
+    if (track) Engine.rebuildTracks();   // the lane may have just switched to audio
+    else {
       track = makeTrack('audio');
       S.tracks.push(track);
       Engine.rebuildTracks();
     }
+    if (typeof KeysPanel !== 'undefined') KeysPanel.refreshTracks();
     let at = beat;
     for (const d of decoded) {
       const id = uid('smp');
@@ -2478,6 +2493,12 @@ const App = {
     $('#btnHome').addEventListener('click', () => this.goHome());
     $('#btnJam').addEventListener('click', () => Sync.togglePanel());
 
+    const csb = $('#btnClipSnap');
+    if (csb) {
+      csb.classList.toggle('on', UI.clipSnap);
+      csb.addEventListener('click', () => { this.setClipSnap(!UI.clipSnap); csb.blur(); });
+    }
+
     $('#snapSelect').addEventListener('change', (e) => {
       S.snap = parseFloat(e.target.value);
       toast(tr('toast_snap', 'Snap: {v}', { v: snapLabel(S.snap) }));
@@ -2669,6 +2690,7 @@ const App = {
       // --- single letter shortcuts ---
       if (e.repeat) return;
       if (e.code === 'KeyM') { this.setMetronome(!S.metronome); return; }
+      if (e.code === 'KeyN') { this.setClipSnap(!UI.clipSnap); return; }
       if (e.code === 'KeyL') { this.setLoop(!S.loopOn); return; }
       if (e.code === 'KeyR') {
         if (KeysPanel.visible) Engine.toggleMidiRecord();

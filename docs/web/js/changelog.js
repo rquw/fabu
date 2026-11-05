@@ -1,8 +1,40 @@
 // generated from CHANGELOG.md, dont edit
 const CHANGELOG = [
  {
-  "version": "Unreleased",
+  "version": "1.2.8",
   "items": [
+   {
+    "title": "",
+    "body": "New look. The orange glow and the gradients are gone, it's calm grays with one blue accent now."
+   },
+   {
+    "title": "",
+    "body": "Dragging a pattern shows a dashed outline of exactly where it will land."
+   },
+   {
+    "title": "",
+    "body": "Long patterns don't swing around as much while you drag them."
+   },
+   {
+    "title": "",
+    "body": "Patterns snap to the edges of other patterns. Toggle it with N or the new button next to the grid snap."
+   },
+   {
+    "title": "",
+    "body": "Dropping audio onto an empty instrument lane turns it into an audio lane instead of making a new one."
+   },
+   {
+    "title": "",
+    "body": "Multiplayer: when the host goes back home or leaves, the session ends for everyone instead of leaving people stuck in it."
+   },
+   {
+    "title": "",
+    "body": "Multiplayer: projects that already have sounds in them work for everyone who joins. They used to show up empty or not at all."
+   },
+   {
+    "title": "",
+    "body": "The web version now and then suggests getting the app."
+   },
    {
     "title": "",
     "body": "Looping is gapless. It used to cut every voice dead and leave a hole at the loop point."

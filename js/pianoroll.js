@@ -396,7 +396,7 @@ const PianoRoll = {
           g.fillRect(x0, y, ww, rh);
         }
         if (showScale) {
-          if (((p - this.keyRoot) % 12 + 12) % 12 === 0) { g.fillStyle = 'rgba(224,122,63,0.16)'; g.fillRect(x0, y, ww, rh); }
+          if (((p - this.keyRoot) % 12 + 12) % 12 === 0) { g.fillStyle = 'rgba(91,140,240,0.16)'; g.fillRect(x0, y, ww, rh); }
           else if (inScale(p, this.keyRoot, this.keyScale)) { g.fillStyle = 'rgba(86,182,166,0.08)'; g.fillRect(x0, y, ww, rh); }
           else { g.fillStyle = 'rgba(0,0,0,0.28)'; g.fillRect(x0, y, ww, rh); }
         }
@@ -418,7 +418,7 @@ const PianoRoll = {
       const sx = Math.max(endX, x0);
       g.fillStyle = 'rgba(0,0,0,0.34)';
       g.fillRect(sx, 0, x1 - sx, H);
-      if (endX >= x0) { g.fillStyle = 'rgba(224,122,63,0.5)'; g.fillRect(endX, 0, 1, H); }
+      if (endX >= x0) { g.fillStyle = 'rgba(91,140,240,0.5)'; g.fillRect(endX, 0, 1, H); }
     }
 
     for (const n of f.clip.notes) {
@@ -443,9 +443,9 @@ const PianoRoll = {
 
     if (this._marquee) {
       const m = this._marquee;
-      g.fillStyle = 'rgba(224,122,63,0.14)';
+      g.fillStyle = 'rgba(91,140,240,0.14)';
       g.fillRect(m.L, m.T, m.R - m.L, m.B - m.T);
-      g.strokeStyle = 'rgba(224,122,63,0.85)';
+      g.strokeStyle = 'rgba(91,140,240,0.85)';
       g.lineWidth = 1;
       g.strokeRect(m.L + 0.5, m.T + 0.5, m.R - m.L - 1, m.B - m.T - 1);
     }

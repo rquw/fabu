@@ -1115,5 +1115,16 @@
   "fx_gain": "Gain",
   "fx_tone": "Klang",
   "fx_level": "Pegel",
-  "acct_manage": "Passwort und Konto"
+  "acct_manage": "Passwort und Konto",
+  "tip_clipsnap": "Clips aneinander ausrichten (N)",
+  "toast_clipsnap_on": "Clips richten sich aneinander aus",
+  "toast_clipsnap_off": "Clips richten sich nicht mehr aneinander aus",
+  "mp_sounds_loading": "Die Sounds des Projekts werden geladen...",
+  "mp_sounds_ready": "Alle Sounds geladen",
+  "mpf_host_closed_t": "Der Host hat die Session beendet",
+  "mpf_host_closed_b": "Deine Kopie des Projekts bleibt offen.",
+  "wn_desktop_title": "fabu läuft als App besser",
+  "wn_desktop_body": "Der Download ist kostenlos und bringt dir weniger Latenz, Speichern in echte Dateien und automatische Updates.",
+  "wn_get": "Herunterladen",
+  "wn_later": "Nicht jetzt"
 }

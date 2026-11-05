@@ -1,6 +1,14 @@
 # Changelog
 
-## Unreleased
+## 1.2.8
+- New look. The orange glow and the gradients are gone, it's calm grays with one blue accent now.
+- Dragging a pattern shows a dashed outline of exactly where it will land.
+- Long patterns don't swing around as much while you drag them.
+- Patterns snap to the edges of other patterns. Toggle it with N or the new button next to the grid snap.
+- Dropping audio onto an empty instrument lane turns it into an audio lane instead of making a new one.
+- Multiplayer: when the host goes back home or leaves, the session ends for everyone instead of leaving people stuck in it.
+- Multiplayer: projects that already have sounds in them work for everyone who joins. They used to show up empty or not at all.
+- The web version now and then suggests getting the app.
 - Looping is gapless. It used to cut every voice dead and leave a hole at the loop point.
 - You can add and open patterns on a phone again. Double tap never counted as a double click.
 - Deleting your account is on the Profile page now, not buried in Settings.

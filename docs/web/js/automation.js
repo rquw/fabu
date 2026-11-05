@@ -330,7 +330,7 @@ const Automation = {
     }
 
     const pts = this.points();
-    const color = (this.curTrack() && this.curTrack().color) || '#e07a3f';
+    const color = (this.curTrack() && this.curTrack().color) || '#5b8cf0';
 
     if (pts.length) {
       g.strokeStyle = color; g.lineWidth = 2;
