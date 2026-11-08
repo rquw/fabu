@@ -2878,4 +2878,6 @@ const KeysPanel = {
   }
 };
 
-document.addEventListener('DOMContentLoaded', () => App.init());
+document.addEventListener('DOMContentLoaded', () => {
+  (window.fabuNativeReady || Promise.resolve()).then(() => App.init()); // the app may import old settings first
+});

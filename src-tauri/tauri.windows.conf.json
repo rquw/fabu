@@ -1,0 +1,12 @@
+{
+  "bundle": {
+    "fileAssociations": [
+      {
+        "ext": ["fab"],
+        "name": "fabu Project",
+        "description": "fabu Project",
+        "role": "Editor"
+      }
+    ]
+  }
+}

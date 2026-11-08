@@ -1,0 +1,64 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "fabu",
+  "mainBinaryName": "fabu",
+  "version": "../package.json",
+  "identifier": "at.fabio.fabu",
+  "build": {
+    "frontendDist": "../www",
+    "beforeDevCommand": "npm run build:app",
+    "beforeBuildCommand": "npm run build:app"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["app", "dmg", "nsis"],
+    "createUpdaterArtifacts": true,
+    "category": "Music",
+    "copyright": "Copyright © fabu",
+    "shortDescription": "The simplest music creation program out there.",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "resources": {
+      "../languages/": "languages/"
+    },
+    "macOS": {
+      "minimumSystemVersion": "11.0",
+      "signingIdentity": "-",
+      "entitlements": "Entitlements.plist",
+      "files": {
+        "Resources/fabdoc.icns": "icons/fabdoc.icns"
+      },
+      "dmg": {
+        "windowSize": { "width": 540, "height": 380 },
+        "appPosition": { "x": 150, "y": 200 },
+        "applicationFolderPosition": { "x": 390, "y": 200 }
+      }
+    },
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser",
+        "installerIcon": "icons/icon.ico",
+        "installerHooks": "windows/hooks.nsh"
+      }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDdFMjM5OUU2NEM4RTJGQTYKUldTbUw0NU01cGtqZnJZUU1KZXpkZ0ROV2x1aEhzM0ZtZzFtdGhCdWVjL01wMnlVdzZtTHpQUWIK",
+      "endpoints": ["https://github.com/rquw/fabu/releases/latest/download/latest.json"],
+      "windows": { "installMode": "passive" }
+    }
+  }
+}

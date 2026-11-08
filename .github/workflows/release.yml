@@ -1,6 +1,6 @@
 name: Release fabu
 
-# push a v* tag and this builds the installers
+# push a v* tag and this builds the installers into a draft release
 on:
   push:
     tags:
@@ -10,45 +10,97 @@ on:
 permissions:
   contents: write
 
+env:
+  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+  TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+
 jobs:
   # one draft up front so mac and windows upload into the same release
   prepare:
     runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.ver.outputs.tag }}
     steps:
       - uses: actions/checkout@v4
+      - id: ver
+        run: echo "tag=v$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
       - name: Ensure a single draft release exists
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          VER="v$(node -p "require('./package.json').version")"
+          VER="${{ steps.ver.outputs.tag }}"
           if ! gh release view "$VER" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release create "$VER" -R "$GITHUB_REPOSITORY" --draft \
               --title "fabu $VER" \
               --notes "fabu $VER — download the installer for your platform below."
           fi
 
-  build:
+  mac:
     needs: prepare
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: macos-latest
-            name: mac
-          - os: windows-latest
-            name: windows
-    runs-on: ${{ matrix.os }}
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - run: npm ci
+      - name: Build
+        run: npx tauri build --target universal-apple-darwin --bundles app,dmg
+      - name: Upload
+        run: |
+          B=src-tauri/target/universal-apple-darwin/release/bundle
+          mkdir out
+          cp "$B"/dmg/*.dmg out/fabu.dmg
+          cp "$B"/macos/fabu.app.tar.gz out/fabu-mac.app.tar.gz
+          cp "$B"/macos/fabu.app.tar.gz.sig out/fabu-mac.app.tar.gz.sig
+          # the old electron versions update from a zip of the app
+          ditto -c -k --keepParent "$B"/macos/fabu.app out/fabu-mac.zip
+          gh release upload "${{ needs.prepare.outputs.tag }}" out/* --clobber -R "$GITHUB_REPOSITORY"
 
-      - name: Install dependencies
-        run: npm ci || npm install
+  windows:
+    needs: prepare
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - run: npm ci
+      - name: Build
+        run: npx tauri build --bundles nsis
+      - name: Upload
+        run: |
+          B=src-tauri/target/release/bundle/nsis
+          mkdir out
+          cp "$B"/*-setup.exe out/fabu.exe
+          cp "$B"/*-setup.exe.sig out/fabu.exe.sig
+          gh release upload "${{ needs.prepare.outputs.tag }}" out/* --clobber -R "$GITHUB_REPOSITORY"
 
-      - name: Build and publish
-        run: npm run release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  # update manifests need the files from both builds
+  manifests:
+    needs: [prepare, mac, windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Write and upload update manifests
+        run: |
+          TAG="${{ needs.prepare.outputs.tag }}"
+          gh release download "$TAG" -R "$GITHUB_REPOSITORY" -D rel \
+            -p fabu.exe -p fabu.exe.sig -p fabu-mac.zip -p fabu-mac.app.tar.gz.sig
+          node build/release-manifests.js rel
+          gh release upload "$TAG" rel/latest.json rel/latest.yml rel/latest-mac.yml --clobber -R "$GITHUB_REPOSITORY"

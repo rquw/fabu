@@ -7,3 +7,6 @@ npm-debug.log*
 .claude/
 
 supabase/
+www/
+src-tauri/target/
+src-tauri/gen/

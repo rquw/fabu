@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "The main window can listen to events from the app. Everything else goes through fabu's own commands.",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}

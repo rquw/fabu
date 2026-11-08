@@ -1,6 +1,19 @@
 // generated from CHANGELOG.md, dont edit
 const CHANGELOG = [
  {
+  "version": "1.3.0",
+  "items": [
+   {
+    "title": "",
+    "body": "fabu runs on Tauri now instead of Electron. The download is a fraction of the size and it uses a lot less memory. Your projects, settings and login come along."
+   },
+   {
+    "title": "",
+    "body": "MIDI keyboards are read by the app itself now."
+   }
+  ]
+ },
+ {
   "version": "1.2.8",
   "items": [
    {
@@ -194,51 +207,6 @@ const CHANGELOG = [
    {
     "title": "",
     "body": "MIDI exports get useful track names instead of \"Instrument 2\"."
-   }
-  ]
- },
- {
-  "version": "1.2.3",
-  "items": [
-   {
-    "title": "",
-    "body": "Everyone in a room needs the same version. It tells you which one now instead of quietly breaking."
-   },
-   {
-    "title": "",
-    "body": "Trumpet, flute, saxophone and a real organ. Actual recordings."
-   },
-   {
-    "title": "",
-    "body": "The old synth \"Keys\" is gone. Projects using it move to Grand Piano on their own."
-   },
-   {
-    "title": "",
-    "body": "Export MIDI."
-   },
-   {
-    "title": "",
-    "body": "Time signature moved to the bar counter. Click it to change it."
-   },
-   {
-    "title": "",
-    "body": "Settings is split into song and app, and opens from the home screen."
-   },
-   {
-    "title": "",
-    "body": "Rooms are safer. The server refuses messages from people who never joined."
-   },
-   {
-    "title": "",
-    "body": "Big songs and long files stopped breaking."
-   },
-   {
-    "title": "",
-    "body": "Exports could come out silent if you exported straight after opening. Fixed."
-   },
-   {
-    "title": "",
-    "body": "Opening a project from a newer version warns you first."
    }
   ]
  }

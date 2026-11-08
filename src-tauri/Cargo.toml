@@ -1,0 +1,33 @@
+[package]
+name = "fabu"
+version = "0.0.0" # the real version comes from package.json via tauri.conf.json
+description = "The simplest music creation program out there."
+authors = ["Fabio"]
+license = "MIT"
+edition = "2021"
+
+[lib]
+name = "fabu_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+tauri-plugin-opener = "2"
+tauri-plugin-updater = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+base64 = "0.22"
+tokio = { version = "1", features = ["time"] }
+midir = "0.10"
+rusty-leveldb = "3"
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = true

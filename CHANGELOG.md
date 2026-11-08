@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.3.0
+- fabu runs on Tauri now instead of Electron. The download is a fraction of the size and it uses a lot less memory. Your projects, settings and login come along.
+- MIDI keyboards are read by the app itself now.
+
 ## 1.2.8
 - New look. The orange glow and the gradients are gone, it's calm grays with one blue accent now.
 - Dragging a pattern shows a dashed outline of exactly where it will land.
